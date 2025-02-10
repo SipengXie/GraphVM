@@ -24,7 +24,7 @@ use crate::inspector_handle_register;
 use std::sync::Arc;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::LatestSpec;
+use revm_primitives::{address, LatestSpec};
 use revm_ssa::logger::SsaRwSet;
 use revm_ssa::SSALogger;
 use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit, SsaGraph};
@@ -765,7 +765,34 @@ impl Occda {
         println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
         println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
         println!("  seq_exec_size: {}, parallel_exec_size: {}", seq_exec_size, parallel_exec_size);
- 
+        
+        let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
+        let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
+        let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
+        let addr4 = address!("f8e95297dba53ccf8cb62dbd8a28b934580884ee");
+        let addr5 = address!("ff69d3dba117a55ba29a24610d67135b82dc0e58");
+        let account1 = parallel_db.basic_ref(addr1).map_err(|_|());
+        let account2 = parallel_db.basic_ref(addr2).map_err(|_|());
+        let account3 = parallel_db.basic_ref(addr3).map_err(|_|());
+        let account4 = parallel_db.basic_ref(addr4).map_err(|_|());
+        let account5 = parallel_db.basic_ref(addr5).map_err(|_|());
+
+        let contract_addr = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
+        let storage = parallel_db.cache.read().accounts.get(&contract_addr).unwrap().clone().storage;
+        eprintln!("\n===========================================");
+        eprintln!("              ParallelDB State             ");
+        eprintln!("===========================================");
+        eprintln!("\n------------- Normal Accounts -------------");
+        eprintln!("Account 1: {:?}", account1);
+        eprintln!("Account 2: {:?}", account2);
+        eprintln!("Account 3: {:?}", account3); 
+        eprintln!("Account 4: {:?}", account4);
+        eprintln!("Account 5: {:?}", account5);
+
+        eprintln!("\n------------- Contract Storage -------------");
+        eprintln!("Storage Content: {:?}", storage);
+        eprintln!("===========================================\n");
+
         Ok(())
     }
 
