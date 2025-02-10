@@ -90,7 +90,8 @@ macro_rules! resize_memory {
     ($interp:expr, $offset:expr, $len:expr) => {
         $crate::resize_memory!($interp, $offset, $len, ())
     };
-    ($interp:expr, $offset:expr, $len:expr, $ret:expr) => {
+    ($interp:expr, $offset:expr, $len:expr, $ret:expr) => {{
+        let mut resized = false;
         let new_size = $offset.saturating_add($len);
         if new_size > $interp.shared_memory.len() {
             #[cfg(feature = "memory_limit")]
@@ -107,9 +108,11 @@ macro_rules! resize_memory {
             ) {
                 $interp.instruction_result = $crate::InstructionResult::MemoryOOG;
                 return $ret;
-            }
+                }
+            resized = true;
         }
-    };
+        resized
+    }};
 }
 
 /// Pops `Address` values from the stack. Fails the instruction if the stack is too small.

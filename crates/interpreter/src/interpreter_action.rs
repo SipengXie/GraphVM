@@ -3,12 +3,19 @@ mod call_outcome;
 mod create_inputs;
 mod create_outcome;
 mod eof_create_inputs;
+mod ssa_conversion;
 
 pub use call_inputs::{CallInputs, CallScheme, CallValue};
 pub use call_outcome::CallOutcome;
 pub use create_inputs::{CreateInputs, CreateScheme};
 pub use create_outcome::CreateOutcome;
 pub use eof_create_inputs::{EOFCreateInputs, EOFCreateKind};
+pub use ssa_conversion::{
+    convert_call_input, convert_call_outcome, 
+    convert_create_input, convert_create_outcome,
+    convert_interpreter_result,
+};
+
 
 use crate::InterpreterResult;
 use std::boxed::Box;

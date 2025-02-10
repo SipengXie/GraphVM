@@ -1,15 +1,11 @@
 mod call_helpers;
 
-pub use call_helpers::{calc_call_gas, get_memory_input_and_out_ranges, resize_memory};
+pub use call_helpers::{calc_call_gas, get_memory_input_and_out_ranges, resize_memory, get_memory_input_and_out_ranges_whether_new_allocation};
 
 use crate::{
-    gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS},
-    interpreter::Interpreter,
-    primitives::{
+    gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS}, interpreter::Interpreter, opcode::*, primitives::{
         eof::EofHeader, keccak256, Address, BerlinSpec, Bytes, Eof, Spec, SpecId::*, B256, U256,
-    },
-    CallInputs, CallScheme, CallValue, CreateInputs, CreateScheme, EOFCreateInputs, Host,
-    InstructionResult, InterpreterAction, InterpreterResult, MAX_INITCODE_SIZE,
+    }, CallInputs, CallScheme, CallValue, CreateInputs, CreateScheme, EOFCreateInputs, Host, InstructionResult, InterpreterAction, InterpreterResult, MAX_INITCODE_SIZE
 };
 use core::cmp::max;
 use std::boxed::Box;
@@ -340,6 +336,7 @@ pub fn create<const IS_CREATE2: bool, H: Host + ?Sized, SPEC: Spec>(
     let len = as_usize_or_fail!(interpreter, len);
 
     let mut code = Bytes::new();
+    let mut resized = false;
     if len != 0 {
         // EIP-3860: Limit and meter initcode
         if SPEC::enabled(SHANGHAI) {
@@ -358,7 +355,7 @@ pub fn create<const IS_CREATE2: bool, H: Host + ?Sized, SPEC: Spec>(
         }
 
         let code_offset = as_usize_or_fail!(interpreter, code_offset);
-        resize_memory!(interpreter, code_offset, len);
+        resized = resize_memory!(interpreter, code_offset, len);
         code = Bytes::copy_from_slice(interpreter.shared_memory.slice(code_offset, len));
     }
 
@@ -381,6 +378,29 @@ pub fn create<const IS_CREATE2: bool, H: Host + ?Sized, SPEC: Spec>(
         gas_limit -= gas_limit / 64
     }
     gas!(interpreter, gas_limit);
+
+    if let Some(ssa_logger) = interpreter.ssa_logger.as_mut() {
+        let opcode = if IS_CREATE2 { CREATE2 } else { CREATE };
+        let mut salt = None;
+        if IS_CREATE2 {
+            salt = match scheme {
+                CreateScheme::Create2 { salt } => Some(salt),
+                _ => None,
+            };
+        }
+        let code_offset = as_usize_or_fail!(interpreter, code_offset);
+        let code_deps = interpreter.shared_memory.get_shadow_deps(code_offset..code_offset + len);
+        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
+        ssa_logger.log_create(opcode, 
+            value, 
+            code_offset, 
+            len, 
+            salt, 
+            code.clone(), 
+            code_deps, 
+            interpreter.contract.target_address, 
+            mem_length);
+    }
 
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Create {
@@ -408,8 +428,37 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
         return;
     }
 
-    let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
-        return;
+    let (input, return_memory_offset) =
+    if interpreter.ssa_logger.is_some() {
+        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+            return;
+        };
+        let logger = interpreter.ssa_logger.as_mut().unwrap();
+        let in_offset = in_range.start;
+        let in_len = in_range.len();
+        let out_offset = return_memory_offset.start;
+        let out_len = return_memory_offset.len();
+        let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
+        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
+        logger.log_call(CALL, 
+            local_gas_limit,
+            to,
+            value,
+            in_offset,
+            in_len,
+            out_offset,
+            out_len,
+            input.clone(),
+            mem_deps,
+            interpreter.contract.target_address,
+            mem_length
+        );
+        (input, return_memory_offset)
+    } else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+            return;
+        };
+        (input, return_memory_offset)
     };
 
     let Some(account_load) = host.load_account_delegated(to) else {
@@ -454,8 +503,37 @@ pub fn call_code<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
     let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
 
     pop!(interpreter, value);
-    let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
-        return;
+    let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
+        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+            return;
+        };
+        
+        let logger = interpreter.ssa_logger.as_mut().unwrap();
+        let in_offset = in_range.start;
+        let in_len = in_range.len();
+        let out_offset = return_memory_offset.start;
+        let out_len = return_memory_offset.len();
+        let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
+        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
+        logger.log_call_code(CALLCODE, 
+            local_gas_limit,
+            to,
+            value,
+            in_offset,
+            in_len,
+            out_offset,
+            out_len,
+            input.clone(),
+            mem_deps,
+            interpreter.contract.target_address,
+            mem_length
+        );
+        (input, return_memory_offset)
+    } else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+            return;
+        };
+        (input, return_memory_offset)
     };
 
     let Some(mut load) = host.load_account_delegated(to) else {
@@ -502,8 +580,37 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
     // max gas limit is not possible in real ethereum situation.
     let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
 
-    let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
-        return;
+    let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
+        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+            return;
+        };
+        let logger = interpreter.ssa_logger.as_mut().unwrap();
+        let in_offset = in_range.start;
+        let in_len = in_range.len();
+        let out_offset = return_memory_offset.start;
+        let out_len = return_memory_offset.len();
+        let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
+        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
+        logger.log_delegatecall(DELEGATECALL, 
+            local_gas_limit,
+            to,
+            interpreter.contract.call_value,
+            in_offset,
+            in_len,
+            out_offset,
+            out_len,
+            input.clone(),
+            mem_deps,
+            mem_length,
+            interpreter.contract.caller,
+            interpreter.contract.target_address,
+        );
+        (input, return_memory_offset)
+    } else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+            return;
+        };
+        (input, return_memory_offset)
     };
 
     let Some(mut load) = host.load_account_delegated(to) else {
@@ -543,10 +650,38 @@ pub fn static_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     // max gas limit is not possible in real ethereum situation.
     let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
 
-    let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
-        return;
-    };
+    let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
+        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+            return;
+        };
+        
+        let logger = interpreter.ssa_logger.as_mut().unwrap();
+        let in_offset = in_range.start;
+        let in_len = in_range.len();
+        let out_offset = return_memory_offset.start;
+        let out_len = return_memory_offset.len();
 
+        let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
+        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
+        logger.log_staticcall(STATICCALL, 
+            local_gas_limit,
+            to,
+            in_offset,
+            in_len,
+            out_offset,
+            out_len,
+            input.clone(),
+            mem_deps,
+            mem_length,
+            interpreter.contract.target_address,
+        );
+        (input, return_memory_offset)
+    } else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+            return;
+        };
+        (input, return_memory_offset)
+    };
     let Some(mut load) = host.load_account_delegated(to) else {
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;

@@ -6,9 +6,11 @@ mod shared_memory;
 mod stack;
 
 pub use contract::Contract;
+use revm_ssa::SSALogger;
 pub use shared_memory::{num_words, SharedMemory, EMPTY_SHARED_MEMORY};
 pub use stack::{Stack, STACK_LIMIT};
 
+use crate::interpreter_action::{convert_call_outcome, convert_create_outcome};
 use crate::{
     gas, primitives::Bytes, push, push_b256, return_ok, return_revert, CallOutcome, CreateOutcome,
     FunctionStack, Gas, Host, InstructionResult, InterpreterAction,
@@ -60,6 +62,8 @@ pub struct Interpreter {
     /// Set inside CALL or CREATE instructions and RETURN or REVERT instructions. Additionally those instructions will set
     /// InstructionResult to CallOrCreate/Return/Revert so we know the reason.
     pub next_action: InterpreterAction,
+    /// SSA logger
+    pub ssa_logger: Option<SSALogger>,
 }
 
 impl Default for Interpreter {
@@ -90,6 +94,15 @@ impl Interpreter {
             shared_memory: EMPTY_SHARED_MEMORY,
             stack: Stack::new(),
             next_action: InterpreterAction::None,
+            ssa_logger: None,
+        }
+    }
+
+    /// New with ssa_logger
+    pub fn new_with_ssa_logger(contract: Contract, gas_limit: u64, is_static: bool, ssa_logger: SSALogger) -> Self {
+        Self {
+            ssa_logger: Some(ssa_logger),
+            ..Self::new(contract, gas_limit, is_static)
         }
     }
 
@@ -190,6 +203,11 @@ impl Interpreter {
                 push!(self, U256::ZERO);
             }
         }
+
+        // Log the create return operation if we have a logger
+        if let Some(ssa_logger) = self.ssa_logger.as_mut() {
+            ssa_logger.log_insert_create_outcome(convert_create_outcome(&create_outcome));
+        }
     }
 
     pub fn insert_eofcreate_outcome(&mut self, create_outcome: CreateOutcome) {
@@ -259,7 +277,7 @@ impl Interpreter {
         let out_len = call_outcome.memory_length();
         let out_ins_result = *call_outcome.instruction_result();
         let out_gas = call_outcome.gas();
-        self.return_data_buffer = call_outcome.result.output;
+        self.return_data_buffer = call_outcome.result.output.to_owned();
 
         let target_len = min(out_len, self.return_data_buffer.len());
         match out_ins_result {
@@ -302,6 +320,13 @@ impl Interpreter {
                     }
                 );
             }
+        }
+        
+        // Log the call return operation if we have a logger
+        if let Some(ssa_logger) = self.ssa_logger.as_mut() {
+            // println!("{:?}", call_outcome);
+            let lsn = ssa_logger.log_insert_call_outcome(convert_call_outcome(&call_outcome));
+            shared_memory.record_shadow_write(out_offset, target_len, lsn);
         }
     }
 
@@ -405,6 +430,15 @@ impl Interpreter {
     #[must_use]
     pub fn resize_memory(&mut self, new_size: usize) -> bool {
         resize_memory(&mut self.shared_memory, &mut self.gas, new_size)
+    }
+
+    /// Set the SSA logger
+    pub fn set_ssa_logger(&mut self, logger: SSALogger) {
+        self.ssa_logger = Some(logger);
+    }
+
+    pub fn has_ssa_logger(&self) -> bool {
+        self.ssa_logger.is_some()
     }
 }
 

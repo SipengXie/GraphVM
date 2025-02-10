@@ -27,6 +27,7 @@ pub mod profiler;
 #[cfg(feature = "serde-json")]
 pub mod occda;
 pub mod access_tracker;
+pub mod ssa_access_tracker;
 #[cfg(feature = "optimism")]
 pub mod optimism;
 

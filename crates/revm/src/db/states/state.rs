@@ -7,6 +7,8 @@ use revm_interpreter::primitives::{
     db::{Database, DatabaseRef, DatabaseCommit},
     hash_map, Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
 };
+use revm_ssa::{SSAOutput, StorageKey, StorageValue};
+use revm_ssa_graph::SsaDatabaseCommit;
 use std::{
     boxed::Box,
     collections::{btree_map, BTreeMap},
@@ -351,9 +353,56 @@ impl<DB: Database> DatabaseCommit for State<DB> {
     }
 }
 
+impl<DB: Database> SsaDatabaseCommit for State<DB> {
+    fn commit_ssa_storage(&mut self, changes: Vec<SSAOutput>) {
+        for change in changes {
+            if let SSAOutput::Storage{key, value} = change {
+                match key {
+                    StorageKey::Balance(address) => {
+                        let account = self.cache.accounts.entry(address).or_insert_with(||CacheAccount::new_loaded_not_existing());
+                        if let StorageValue::Balance(balance) = value {
+                            account.account.as_mut().unwrap().info.balance = balance;
+                        }
+                    },
+
+                    StorageKey::Nonce(address) => {
+                        let account = self.cache.accounts.entry(address).or_insert_with(||CacheAccount::new_loaded_not_existing());
+                        if let StorageValue::Nonce(nonce) = value {
+                            account.account.as_mut().unwrap().info.nonce = nonce;
+                        }
+                    },
+                    StorageKey::CodeSize(_) => {
+                    },
+                    StorageKey::Code(address) => {
+                        let account = self.cache.accounts.entry(address).or_insert_with(||CacheAccount::new_loaded_not_existing());
+                        if let StorageValue::Code(code) = value {
+                            account.account.as_mut().unwrap().info.code = Some(Bytecode::new_raw(code));
+                        }
+                    },
+                    StorageKey::CodeHash(address) => {
+                        let account = self.cache.accounts.entry(address).or_insert_with(||CacheAccount::new_loaded_not_existing());
+                        if let StorageValue::CodeHash(code_hash) = value {
+                            account.account.as_mut().unwrap().info.code_hash = code_hash.into();
+                        }
+                    },
+                    StorageKey::Slot(address, index) => {
+                        let account = self.cache.accounts.entry(address).or_insert_with(||CacheAccount::new_loaded_not_existing());
+                        if let StorageValue::Slot(slot) = value {
+                            account.account.as_mut().unwrap().storage.insert(index, slot);
+                        }
+
+                    },
+                }
+            }
+        }
+
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::db::{
         states::{reverts::AccountInfoRevert, StorageSlot},
         AccountRevert, AccountStatus, BundleAccount, RevertToSlot,

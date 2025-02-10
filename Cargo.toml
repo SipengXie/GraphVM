@@ -6,6 +6,8 @@ members = [
     "crates/primitives",
     "crates/interpreter",
     "crates/precompile",
+    "crates/revm-ssa",
+    "crates/revm-ssa-graph",
 ]
 resolver = "2"
 default-members = ["crates/revm"]

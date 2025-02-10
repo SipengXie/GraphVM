@@ -1,8 +1,8 @@
+use revm_ssa::SSAInstructionResult;
+
 use super::utility::{read_i16, read_u16};
 use crate::{
-    gas,
-    primitives::{Bytes, Spec, U256},
-    Host, InstructionResult, Interpreter, InterpreterResult,
+    gas, opcode::*, primitives::{Bytes, Spec, U256}, Host, InstructionResult, Interpreter, InterpreterResult
 };
 
 pub fn rjump<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
@@ -56,14 +56,30 @@ pub fn rjumpv<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
 pub fn jump<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::MID);
     pop!(interpreter, target);
+    let current_pc = interpreter.program_counter() - 1;
     jump_inner(interpreter, target);
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        let target_usize = target.as_limbs()[0] as usize;
+        let relative_offset = target_usize as isize - current_pc as isize;
+        logger.log_jump(JUMP, target_usize, current_pc, relative_offset);
+    }
 }
 
 pub fn jumpi<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::HIGH);
     pop!(interpreter, target, cond);
+    let current_pc = interpreter.program_counter() - 1;
     if !cond.is_zero() {
         jump_inner(interpreter, target);
+    }
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        let target_usize = target.as_limbs()[0] as usize;
+        if !cond.is_zero() {        
+            let relative_offset = target_usize as isize - current_pc as isize;
+            logger.log_jumpi(JUMPI, target_usize, cond, current_pc, relative_offset);
+        } else {
+            logger.log_jumpi(JUMPI, target_usize, cond, current_pc, 0);
+        }
     }
 }
 
@@ -151,6 +167,10 @@ pub fn pc<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::BASE);
     // - 1 because we have already advanced the instruction pointer in `Interpreter::step`
     push!(interpreter, U256::from(interpreter.program_counter() - 1));
+    let pc = interpreter.program_counter() - 1;
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pc_operation(PC, pc);
+    }
 }
 
 #[inline]
@@ -161,11 +181,30 @@ fn return_inner(interpreter: &mut Interpreter, instruction_result: InstructionRe
     let len = as_usize_or_fail!(interpreter, len);
     // important: offset must be ignored if len is zeros
     let mut output = Bytes::default();
+    let mut resized = false;
     if len != 0 {
         let offset = as_usize_or_fail!(interpreter, offset);
-        resize_memory!(interpreter, offset, len);
+        resized = resize_memory!(interpreter, offset, len);
 
         output = interpreter.shared_memory.slice(offset, len).to_vec().into()
+    }
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        let (opcode, result) = match instruction_result {
+            InstructionResult::Return => (RETURN, SSAInstructionResult::Ok),
+            InstructionResult::Revert => (REVERT, SSAInstructionResult::Revert),
+            _ => (0xFC, SSAInstructionResult::Error), // UNKNOWN
+        };
+        let offset = as_usize_or_fail!(interpreter, offset);
+        let mem_deps = interpreter.shared_memory.get_shadow_deps(offset..offset + len);
+        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
+        logger.log_return(opcode, 
+            offset, 
+            len, 
+            output.clone(), 
+            mem_deps, 
+            mem_length,
+            result
+        );
     }
     interpreter.instruction_result = instruction_result;
     interpreter.next_action = crate::InterpreterAction::Return {
@@ -176,6 +215,7 @@ fn return_inner(interpreter: &mut Interpreter, instruction_result: InstructionRe
         },
     };
 }
+
 
 pub fn ret<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     return_inner(interpreter, InstructionResult::Return);
@@ -190,16 +230,25 @@ pub fn revert<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host
 /// Stop opcode. This opcode halts the execution.
 pub fn stop<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     interpreter.instruction_result = InstructionResult::Stop;
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_instruction_result_change(STOP, SSAInstructionResult::Ok);
+    }
 }
 
 /// Invalid opcode. This opcode halts the execution.
 pub fn invalid<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     interpreter.instruction_result = InstructionResult::InvalidFEOpcode;
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_instruction_result_change(INVALID, SSAInstructionResult::Error);
+    }
 }
 
 /// Unknown opcode. This opcode halts the execution.
 pub fn unknown<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     interpreter.instruction_result = InstructionResult::OpcodeNotFound;
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_instruction_result_change(INVALID, SSAInstructionResult::Error);
+    }
 }
 
 #[cfg(test)]

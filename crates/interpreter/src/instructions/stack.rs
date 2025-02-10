@@ -1,13 +1,13 @@
 use crate::{
-    gas,
-    primitives::{Spec, U256},
-    Host, Interpreter,
+    gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
 };
 
 pub fn pop<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::BASE);
     if let Err(result) = interpreter.stack.pop() {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_operation(POP);
     }
 }
 
@@ -19,6 +19,8 @@ pub fn push0<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host:
     gas!(interpreter, gas::BASE);
     if let Err(result) = interpreter.stack.push(U256::ZERO) {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_push_operation(PUSH0, &[0x00]);
     }
 }
 
@@ -27,20 +29,26 @@ pub fn push<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, _ho
     // SAFETY: In analysis we append trailing bytes to the bytecode so that this is safe to do
     // without bounds checking.
     let ip = interpreter.instruction_pointer;
+    let slice = unsafe { core::slice::from_raw_parts(ip, N) };
     if let Err(result) = interpreter
         .stack
-        .push_slice(unsafe { core::slice::from_raw_parts(ip, N) })
+        .push_slice(slice)
     {
         interpreter.instruction_result = result;
         return;
     }
     interpreter.instruction_pointer = unsafe { ip.add(N) };
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_push_operation(PUSH1 + N as u8 - 1, slice);
+    }
 }
 
 pub fn dup<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     if let Err(result) = interpreter.stack.dup(N) {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_dup_operation(DUP1 + N as u8 - 1, N);
     }
 }
 
@@ -48,6 +56,8 @@ pub fn swap<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, _ho
     gas!(interpreter, gas::VERYLOW);
     if let Err(result) = interpreter.stack.swap(N) {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_swap_operation(SWAP1 + N as u8 - 1, N);
     }
 }
 
@@ -57,6 +67,8 @@ pub fn dupn<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     let imm = unsafe { *interpreter.instruction_pointer };
     if let Err(result) = interpreter.stack.dup(imm as usize + 1) {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_dup_operation(DUPN, imm as usize + 1);
     }
     interpreter.instruction_pointer = unsafe { interpreter.instruction_pointer.offset(1) };
 }
@@ -67,6 +79,8 @@ pub fn swapn<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     let imm = unsafe { *interpreter.instruction_pointer };
     if let Err(result) = interpreter.stack.swap(imm as usize + 1) {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_swap_operation(SWAPN, imm as usize + 1);
     }
     interpreter.instruction_pointer = unsafe { interpreter.instruction_pointer.offset(1) };
 }
@@ -79,10 +93,13 @@ pub fn exchange<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     let m = (imm & 0x0F) + 1;
     if let Err(result) = interpreter.stack.exchange(n as usize, m as usize) {
         interpreter.instruction_result = result;
+    } else if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_exchange_operation(EXCHANGE, n as usize, m as usize);
     }
 
     interpreter.instruction_pointer = unsafe { interpreter.instruction_pointer.offset(1) };
 }
+
 
 #[cfg(test)]
 mod test {

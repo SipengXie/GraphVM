@@ -1,3 +1,5 @@
+use revm_ssa::SSALogger;
+
 use crate::{
     builder::{EvmBuilder, HandlerStage, SetGenericStage},
     db::{Database, DatabaseCommit, EmptyDB},
@@ -73,12 +75,29 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
         EvmBuilder::new(self)
     }
 
+    /// Recovers the SSA logger from the frame.
+    #[inline]
+    fn recover_ssa_logger_from_frame(&mut self, stack_frame: &mut Frame) {
+        let interpreter = &mut stack_frame.frame_data_mut().interpreter;
+        if interpreter.ssa_logger.is_some() {
+            self.context
+                .evm
+                .recover_ssa_logger_from_interpreter(interpreter);
+        }
+    }
+
+    /// Take ownership of the SSA logger, leaving None in its place
+    #[inline]
+    pub fn take_ssa_logger(&mut self) -> Option<SSALogger> {
+        self.context.evm.ssa_logger.take()
+    }
+
     /// Runs main call loop.
     #[inline]
     pub fn run_the_loop(&mut self, first_frame: Frame) -> Result<FrameResult, EVMError<DB::Error>> {
         let mut call_stack: Vec<Frame> = Vec::with_capacity(1025);
+        let has_ssa_logger = first_frame.interpreter().has_ssa_logger();
         call_stack.push(first_frame);
-
         #[cfg(feature = "memory_limit")]
         let mut shared_memory =
             SharedMemory::new_with_memory_limit(self.context.evm.env.cfg.memory_limit);
@@ -86,6 +105,9 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
         let mut shared_memory = SharedMemory::new();
 
         shared_memory.new_context();
+        if has_ssa_logger {
+            shared_memory.enable_shadow();
+        }
 
         // Peek the last stack frame.
         let mut stack_frame = call_stack.last_mut().unwrap();
@@ -95,6 +117,8 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
             let next_action =
                 self.handler
                     .execute_frame(stack_frame, &mut shared_memory, &mut self.context)?;
+            // ! recover ssa logger from frame if it has one, it will return to the frame we back to the frame logic
+            self.recover_ssa_logger_from_frame(stack_frame);
 
             // Take error and break the loop, if any.
             // This error can be set in the Interpreter when it interacts with the context.
@@ -339,7 +363,31 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         ctx.evm.set_precompiles(precompiles);
 
         // deduce caller balance with its limit.
-        pre_exec.deduct_caller(ctx)?;
+        // ! Add deduct_caller log here and add execute_deduct_caller to the executor handler.
+        if  ctx.evm.inner.ssa_logger.is_some() {
+            let caller_account = ctx
+                .evm
+                .inner
+                .journaled_state
+                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
+            let origin_balance = caller_account.info.balance;
+            let origin_nonce = caller_account.info.nonce;
+
+            pre_exec.deduct_caller(ctx)?;
+
+            let caller_account = ctx
+                .evm
+                .inner
+                .journaled_state
+                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
+            let new_balance = caller_account.info.balance;
+            let pre_deduct = origin_balance - new_balance;
+            let caller = ctx.evm.env.tx.caller;
+            let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
+            logger.log_deduct_caller(caller, origin_balance, origin_nonce, pre_deduct);
+        } else {
+            pre_exec.deduct_caller(ctx)?;
+        }
 
         let gas_limit = ctx.evm.env.tx.gas_limit - initial_gas_spend;
 
@@ -389,10 +437,22 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // calculate final refund and add EIP-7702 refund to gas.
         post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
-        post_exec.reimburse_caller(ctx, result.gas())?;
+        // TODO: Add refund log and add execute_refund to the executor handler.
+        if ctx.evm.inner.ssa_logger.is_some() {
+            // eprintln!("Log Refund Gas");
+            let caller_origin_balance = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?.info.balance;
+            post_exec.reimburse_caller(ctx, result.gas())?;
+            let caller_new_balance = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?.info.balance;
+            let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
+            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, caller_origin_balance, caller_new_balance - caller_origin_balance);
+        } else {
+            post_exec.reimburse_caller(ctx, result.gas())?;
+        }
         // Reward beneficiary
+        // TODO: If needed this should also be logged.
         post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
+
         post_exec.output(ctx, result)
     }
 

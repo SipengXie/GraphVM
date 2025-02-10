@@ -1,116 +1,255 @@
+use revm_ssa::SSAValue;
 use super::i256::i256_cmp;
 use crate::{
-    gas,
-    primitives::{Spec, U256},
-    Host, Interpreter,
+    gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
 };
 use core::cmp::Ordering;
 
 pub fn lt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = U256::from(op1 < *op2);
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            LT,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn gt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = U256::from(op1 > *op2);
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            GT,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn slt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = U256::from(i256_cmp(&op1, op2) == Ordering::Less);
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            SLT,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn sgt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = U256::from(i256_cmp(&op1, op2) == Ordering::Greater);
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            SGT,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn eq<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = U256::from(op1 == *op2);
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            EQ,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn iszero<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1);
+    
+    let orig = *op1;
+    
     *op1 = U256::from(op1.is_zero());
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            ISZERO,
+            vec![SSAValue::U256(orig)],
+            SSAValue::U256(*op1)
+        );
+    }
 }
 
 pub fn bitand<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = op1 & *op2;
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            AND,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn bitor<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = op1 | *op2;
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            OR,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn bitxor<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     *op2 = op1 ^ *op2;
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            XOR,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
 pub fn not<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1);
+    
+    let orig = *op1;
+    
     *op1 = !*op1;
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            NOT,
+            vec![SSAValue::U256(orig)],
+            SSAValue::U256(*op1)
+        );
+    }
 }
 
 pub fn byte<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     let o1 = as_usize_saturated!(op1);
     *op2 = if o1 < 32 {
-        // `31 - o1` because `byte` returns LE, while we want BE
         U256::from(op2.byte(31 - o1))
     } else {
         U256::ZERO
     };
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            BYTE,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
 
-/// EIP-145: Bitwise shifting instructions in EVM
 pub fn shl<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+
     let shift = as_usize_saturated!(op1);
     *op2 = if shift < 256 {
         *op2 << shift
     } else {
         U256::ZERO
+    };
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            SHL,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
     }
 }
 
-/// EIP-145: Bitwise shifting instructions in EVM
 pub fn shr<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     let shift = as_usize_saturated!(op1);
     *op2 = if shift < 256 {
         *op2 >> shift
     } else {
         U256::ZERO
+    };
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            SHR,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
     }
 }
 
-/// EIP-145: Bitwise shifting instructions in EVM
 pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-
+    
+    let (orig1, orig2) = (op1, *op2);
+    
     let shift = as_usize_saturated!(op1);
     *op2 = if shift < 256 {
         op2.arithmetic_shr(shift)
@@ -119,7 +258,16 @@ pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
     } else {
         U256::ZERO
     };
+    
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_pop_top_operation(
+            SAR,
+            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
+            SSAValue::U256(*op2)
+        );
+    }
 }
+
 
 #[cfg(test)]
 mod tests {

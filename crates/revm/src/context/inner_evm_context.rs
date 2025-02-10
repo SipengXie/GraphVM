@@ -1,3 +1,6 @@
+use revm_interpreter::{interpreter_action::convert_interpreter_result, Interpreter};
+use revm_ssa::SSALogger;
+
 use crate::{
     db::Database,
     interpreter::{
@@ -30,6 +33,8 @@ pub struct InnerEvmContext<DB: Database> {
     /// Used as temporary value holder to store L1 block info.
     #[cfg(feature = "optimism")]
     pub l1_block_info: Option<crate::optimism::L1BlockInfo>,
+    /// SSA logger for tracking execution
+    pub ssa_logger: Option<SSALogger>,
 }
 
 impl<DB: Database + Clone> Clone for InnerEvmContext<DB>
@@ -44,6 +49,7 @@ where
             error: self.error.clone(),
             #[cfg(feature = "optimism")]
             l1_block_info: self.l1_block_info.clone(),
+            ssa_logger: self.ssa_logger.clone(),
         }
     }
 }
@@ -57,8 +63,10 @@ impl<DB: Database> InnerEvmContext<DB> {
             error: Ok(()),
             #[cfg(feature = "optimism")]
             l1_block_info: None,
+            ssa_logger: None,
         }
     }
+
 
     /// Creates a new context with the given environment and database.
     #[inline]
@@ -70,6 +78,21 @@ impl<DB: Database> InnerEvmContext<DB> {
             error: Ok(()),
             #[cfg(feature = "optimism")]
             l1_block_info: None,
+            ssa_logger: None,
+        }
+    }
+
+    /// Creates a new context with the given environment and database.
+    #[inline]
+    pub fn new_with_env_and_ssa_logger(db: DB, env: Box<Env>, ssa_logger: SSALogger) -> Self {
+        Self {
+            env,
+            journaled_state: JournaledState::new(SpecId::LATEST, HashSet::default()),
+            db,
+            error: Ok(()),
+            #[cfg(feature = "optimism")]
+            l1_block_info: None,
+            ssa_logger: Some(ssa_logger),
         }
     }
 
@@ -85,10 +108,22 @@ impl<DB: Database> InnerEvmContext<DB> {
             error: Ok(()),
             #[cfg(feature = "optimism")]
             l1_block_info: self.l1_block_info,
+            ssa_logger: self.ssa_logger,
         }
     }
 
+    /// Sets the SSA logger.
+    #[inline]
+    pub fn with_ssa_logger(self, ssa_logger: SSALogger) -> Self {
+        Self {
+            ssa_logger: Some(ssa_logger),
+            ..self
+        }
+    }
+
+
     /// Returns the configured EVM spec ID.
+
     #[inline]
     pub const fn spec_id(&self) -> SpecId {
         self.journaled_state.spec
@@ -360,6 +395,10 @@ impl<DB: Database> InnerEvmContext<DB> {
         interpreter_result: &InterpreterResult,
         journal_checkpoint: JournalCheckpoint,
     ) {
+        // Log the call return, if SSA logger is present.
+        if self.ssa_logger.is_some() {
+            self.ssa_logger.as_mut().unwrap().log_call_return(&convert_interpreter_result(interpreter_result));
+        }
         // revert changes or not.
         if matches!(interpreter_result.result, return_ok!()) {
             self.journaled_state.checkpoint_commit();
@@ -376,6 +415,11 @@ impl<DB: Database> InnerEvmContext<DB> {
         address: Address,
         journal_checkpoint: JournalCheckpoint,
     ) {
+        // Log the create return, if SSA logger is present.
+        if self.ssa_logger.is_some() {
+            self.ssa_logger.as_mut().unwrap().log_create_return::<SPEC>(&convert_interpreter_result(interpreter_result));
+        }
+
         // if return is not ok revert and return.
         if !matches!(interpreter_result.result, return_ok!()) {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
@@ -430,4 +474,22 @@ impl<DB: Database> InnerEvmContext<DB> {
 
         interpreter_result.result = InstructionResult::Return;
     }
+
+    /// Get mutable reference to ssa_logger
+    pub fn ssa_logger_mut(&mut self) -> Option<& mut SSALogger> {
+        self.ssa_logger.as_mut()
+    }
+
+    /// Transfer ssa_logger to interpreter
+    pub fn transfer_ssa_logger_to_interpreter(&mut self, interpreter: &mut Interpreter) {
+        if let Some(logger) = self.ssa_logger.take() {
+            interpreter.set_ssa_logger(logger);
+        }
+    }
+
+    /// Recover ssa_logger from interpreter
+    pub fn recover_ssa_logger_from_interpreter(&mut self, interpreter: &mut Interpreter) {
+        self.ssa_logger = interpreter.ssa_logger.take();
+    }
+
 }

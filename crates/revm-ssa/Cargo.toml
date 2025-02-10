@@ -1,0 +1,21 @@
+[package]
+name = "revm-ssa"
+version = "1.0.0"
+edition = "2021"
+description = "SSA (Static Single Assignment) analysis for REVM"
+license = "MIT"
+
+[dependencies]
+revm-primitives = { path = "../primitives", version = "14.0.0", default-features = false }
+derive-where = { version = "1.2.7", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
+hashbrown = { version = "0.12.3", default-features = false }
+
+[features]
+default = ["std", "serde"]
+
+std = [
+    "serde?/std",
+    "revm-primitives/std",
+]
+serde = ["dep:serde", "revm-primitives/serde"]

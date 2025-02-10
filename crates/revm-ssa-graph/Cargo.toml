@@ -1,0 +1,33 @@
+[package]
+name = "revm-ssa-graph"
+version = "1.0.0"
+edition = "2021"
+description = "Graph execution engine for REVM SSA"
+
+[dependencies]
+revm-ssa = { path = "../revm-ssa", version = "1.0.0", default-features = false }
+revm-primitives = { path = "../primitives", version = "14.0.0", default-features = false }
+revm-interpreter = { path = "../interpreter", version = "14.0.0", default-features = false }
+# revm = { path = "../revm", version = "18.0.0", default-features = false }
+either = "1.9.0"
+
+
+# Basic dependencies
+hashbrown = "0.14"  # High performance hash table
+dashmap = "6.1.0"
+petgraph = "0.6"    # Graph algorithm library
+thiserror = "1.0"   # Error handling
+tracing = "0.1"     # Logging and tracing
+serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
+rayon = "1.7.0"
+metrics =  "0.21"
+metrics-exporter-prometheus = "0.12"
+auto_impl = { version = "1.2", default-features = false }
+
+[dev-dependencies]
+criterion = "0.5"   # Benchmarking
+
+[features]
+default = ["std", "serde"]
+std = ["revm-ssa/std", "revm-primitives/std", "serde?/std"]
+serde = ["dep:serde"]

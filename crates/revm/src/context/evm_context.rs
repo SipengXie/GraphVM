@@ -1,5 +1,7 @@
-use revm_interpreter::CallValue;
+use revm_interpreter::{interpreter_action::{convert_call_input, convert_create_input}, CallValue};
 use revm_precompile::PrecompileErrors;
+use revm_primitives::U256;
+use revm_ssa::SSALogger;
 
 use super::inner_evm_context::InnerEvmContext;
 use crate::{
@@ -86,6 +88,18 @@ impl<DB: Database> EvmContext<DB> {
         }
     }
 
+    /// Creates a new context with the given environment, database, and SSA logger.
+    pub fn new_with_logger(
+        db: DB,
+        env: Box<Env>,
+        ssa_logger: SSALogger,
+    ) -> Self {
+        Self {
+            inner: InnerEvmContext::new_with_env_and_ssa_logger(db, env, ssa_logger),
+            precompiles: ContextPrecompiles::default(),
+        }
+    }
+
     /// Sets the database.
     ///
     /// Note that this will ignore the previous `error` if set.
@@ -97,6 +111,16 @@ impl<DB: Database> EvmContext<DB> {
         }
     }
 
+    /// Sets the SSA logger.
+    #[inline]
+    pub fn with_ssa_logger(self, ssa_logger: SSALogger) -> Self {
+        Self {
+            inner: self.inner.with_ssa_logger(ssa_logger),
+            precompiles: self.precompiles,
+        }
+    }
+
+
     /// Sets precompiles
     #[inline]
     pub fn set_precompiles(&mut self, precompiles: ContextPrecompiles<DB>) {
@@ -106,6 +130,18 @@ impl<DB: Database> EvmContext<DB> {
             .extend(precompiles.addresses_set());
         self.precompiles = precompiles;
     }
+
+    /// Get Option<logger>
+    #[inline]
+    fn get_mut_logger(&mut self) -> Option<&mut SSALogger> {
+        self.inner.ssa_logger_mut()
+    }
+
+    /// Transfer logger to interpreter
+    #[inline]
+    fn transfer_ssa_logger_to_interpreter(&mut self, interpreter: &mut Interpreter) {
+        self.inner.transfer_ssa_logger_to_interpreter(interpreter);
+    } 
 
     /// Call precompile contract
     #[inline]
@@ -181,6 +217,9 @@ impl<DB: Database> EvmContext<DB> {
 
         // Create subroutine checkpoint
         let checkpoint = self.journaled_state.checkpoint();
+        // ! use to record the balance:
+        let mut caller_balance : Option<U256> = None;
+        let mut target_balance : Option<U256> = None;
 
         // Touch address. For "EIP-158 State Clear", this will erase empty accounts.
         match inputs.value {
@@ -192,6 +231,9 @@ impl<DB: Database> EvmContext<DB> {
             CallValue::Transfer(value) => {
                 // Transfer value from caller to called account. As value get transferred
                 // target gets touched.
+                // ! use to record the balance:
+                caller_balance = Some(self.balance(inputs.caller)?.data);
+                target_balance = Some(self.balance(inputs.target_address)?.data);
                 if let Some(result) = self.inner.journaled_state.transfer(
                     &inputs.caller,
                     &inputs.target_address,
@@ -204,7 +246,6 @@ impl<DB: Database> EvmContext<DB> {
             }
             _ => {}
         };
-
         let is_ext_delegate = inputs.scheme.is_ext_delegate_call();
 
         if !is_ext_delegate {
@@ -238,6 +279,10 @@ impl<DB: Database> EvmContext<DB> {
 
         if bytecode.is_empty() {
             self.journaled_state.checkpoint_commit();
+            if let Some(logger) = self.get_mut_logger() {
+                let call_intput = convert_call_input(&inputs);
+                logger.log_make_call_frame(call_intput, caller_balance, target_balance, bytecode.bytes());
+            }
             return return_result(InstructionResult::Stop);
         }
 
@@ -252,13 +297,21 @@ impl<DB: Database> EvmContext<DB> {
                 .unwrap_or_default();
         }
 
+        if let Some(logger) = self.get_mut_logger() {
+            let call_intput = convert_call_input(&inputs);
+            logger.log_make_call_frame(call_intput, caller_balance, target_balance, bytecode.bytes());
+        }
+
         let contract =
             Contract::new_with_context(inputs.input.clone(), bytecode, Some(code_hash), inputs);
+        let mut interpreter = Interpreter::new(contract, gas.limit(), inputs.is_static);
+        self.transfer_ssa_logger_to_interpreter(&mut interpreter);
+
         // Create interpreter and executes call and push new CallStackFrame.
         Ok(FrameOrResult::new_call_frame(
             inputs.return_memory_offset.clone(),
             checkpoint,
-            Interpreter::new(contract, gas.limit(), inputs.is_static),
+            interpreter,
         ))
     }
 
@@ -349,10 +402,18 @@ impl<DB: Database> EvmContext<DB> {
             inputs.value,
         );
 
+        let mut interpreter = Interpreter::new(contract, inputs.gas_limit, false);
+        if let Some(logger) = self.get_mut_logger() {
+            logger.log_make_create_frame(
+                convert_create_input(&inputs), 
+                old_nonce);
+        };
+        self.transfer_ssa_logger_to_interpreter(&mut interpreter);
+
         Ok(FrameOrResult::new_create_frame(
             created_address,
             checkpoint,
-            Interpreter::new(contract, inputs.gas_limit, false),
+            interpreter
         ))
     }
 
@@ -535,9 +596,11 @@ pub(crate) mod test_utils {
                 error: Ok(()),
                 #[cfg(feature = "optimism")]
                 l1_block_info: None,
+                ssa_logger: None,
             },
             precompiles: ContextPrecompiles::default(),
         }
+
     }
 
     /// Returns a new `EvmContext` with an empty journaled state.
@@ -550,9 +613,11 @@ pub(crate) mod test_utils {
                 error: Ok(()),
                 #[cfg(feature = "optimism")]
                 l1_block_info: None,
+                ssa_logger: None,
             },
             precompiles: ContextPrecompiles::default(),
         }
+
     }
 }
 

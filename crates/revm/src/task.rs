@@ -1,115 +1,127 @@
 use core::default::Default;
 
+use revm_ssa::logger::SsaRwSet;
+use revm_ssa::{SSALogEntry, SSAOutput};
+
 use crate::primitives::{ExecutionResult, EvmState, Env, SpecId};
 use crate::journaled_state::ReadWriteSet;
 use std::cmp::Ordering;
 
-pub struct Task<I> {
+#[derive(Default)]
+pub struct Task {
     pub tid: i32,
     pub sid: i32,
     pub gas: u64,
-    pub inspector: Option<I>,
     pub spec_id: SpecId,
     pub env: Box<Env>,
+    /// Notify which lsn is used for re-execution
+    pub to_re_execute: Option<Vec<usize>>,
+    pub logs: Option<Vec<SSALogEntry>>,
 }
 
-impl<I> Task<I> {
-    pub fn new(env: Box<Env>, tid: i32, sid: i32, spec_id: SpecId, inspector: Option<I>) -> Self {
+impl Task {
+    pub fn new(env: Box<Env>, tid: i32, sid: i32, spec_id: SpecId) -> Self {
         Self {
             tid,
             sid,
             gas: env.tx.gas_limit,
-            inspector,
             spec_id,
             env,
+            to_re_execute: None,
+            logs: None,
         }
     }
-
 }
 
-pub struct SidOrderedTask<I>(pub Task<I>);
-pub struct TidOrderedTask<I>(pub Task<I>);
-pub struct GasOrderedTask<I>(pub Task<I>);
 
-impl<I> Ord for SidOrderedTask<I> {
+pub struct SidOrderedTask(pub Task);
+pub struct TidOrderedTask(pub Task);
+pub struct GasOrderedTask(pub Task);
+
+impl Ord for SidOrderedTask {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0.sid.cmp(&other.0.sid)
             .then_with(|| self.0.tid.cmp(&other.0.tid))
     }
 }
 
-impl<I> PartialOrd for SidOrderedTask<I> {
+impl PartialOrd for SidOrderedTask {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<I> PartialEq for SidOrderedTask<I> {
+impl PartialEq for SidOrderedTask {
     fn eq(&self, other: &Self) -> bool {
         self.0.sid == other.0.sid && self.0.tid == other.0.tid
     }
 }
 
-impl<I> Eq for SidOrderedTask<I> {}
+impl Eq for SidOrderedTask {}
 
-impl<I> Ord for TidOrderedTask<I> {
+impl Ord for TidOrderedTask {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0.tid.cmp(&other.0.tid)
     }
 }
 
-impl<I> PartialOrd for TidOrderedTask<I> {
+impl PartialOrd for TidOrderedTask {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<I> PartialEq for TidOrderedTask<I> {
+impl PartialEq for TidOrderedTask {
     fn eq(&self, other: &Self) -> bool {
         self.0.tid == other.0.tid
     }
 }
 
-impl<I> Eq for TidOrderedTask<I> {}
+impl Eq for TidOrderedTask {}
 
-impl<I> Ord for GasOrderedTask<I> {
+impl Ord for GasOrderedTask {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0.gas.cmp(&other.0.gas)
             .then_with(|| self.0.tid.cmp(&other.0.tid))
     }
 }
 
-impl<I> PartialOrd for GasOrderedTask<I> {
+impl PartialOrd for GasOrderedTask {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<I> PartialEq for GasOrderedTask<I> {
+impl PartialEq for GasOrderedTask {
     fn eq(&self, other: &Self) -> bool {
         self.0.gas == other.0.gas && self.0.tid == other.0.tid
     }
 }
 
-impl<I> Eq for GasOrderedTask<I> {}
+impl Eq for GasOrderedTask {}
 
-#[derive(Clone)]
 pub struct TaskResultItem<I> {
-    pub gas: u64,
+    pub gas_limit: u64,
     pub result: Option<ExecutionResult>,
     pub inspector: Option<I>,
     pub read_write_set: Option<ReadWriteSet>,
+    pub ssa_rw_set: Option<SsaRwSet>,
+    pub logs: Option<Vec<SSALogEntry>>,
     pub state: Option<EvmState>,
+    pub ssa_state: Option<Vec<SSAOutput>>,
 }
 
 impl<I> Default for TaskResultItem<I> {
     fn default() -> Self {
         Self {
-            gas: 0,
+            gas_limit: 0,
             result: None,
             inspector: None,
             read_write_set: None,
+            ssa_rw_set: None,
+            logs: None,
             state: None,
+            ssa_state: None,
         }
     }
 }

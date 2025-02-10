@@ -1,7 +1,5 @@
 use crate::{
-    gas,
-    primitives::{Spec, SpecId::*, U256},
-    Host, Interpreter,
+    gas, opcode::*, primitives::{Spec, SpecId::*, U256}, Host, Interpreter
 };
 
 /// EIP-1344: ChainID opcode
@@ -9,21 +7,33 @@ pub fn chainid<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host
     check!(interpreter, ISTANBUL);
     gas!(interpreter, gas::BASE);
     push!(interpreter, U256::from(host.env().cfg.chain_id));
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(CHAINID, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 pub fn coinbase<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BASE);
     push_b256!(interpreter, host.env().block.coinbase.into_word());
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(COINBASE, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 pub fn timestamp<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BASE);
     push!(interpreter, host.env().block.timestamp);
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(TIMESTAMP, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 pub fn block_number<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BASE);
     push!(interpreter, host.env().block.number);
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(NUMBER, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 pub fn difficulty<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
@@ -33,16 +43,26 @@ pub fn difficulty<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, h
     } else {
         push!(interpreter, host.env().block.difficulty);
     }
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(DIFFICULTY, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 pub fn gaslimit<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BASE);
     push!(interpreter, host.env().block.gas_limit);
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(GASLIMIT, interpreter.stack.peek(0).unwrap());
+    }
+    
 }
 
 pub fn gasprice<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BASE);
     push!(interpreter, host.env().effective_gas_price());
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(GASPRICE, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 /// EIP-3198: BASEFEE opcode
@@ -50,11 +70,17 @@ pub fn basefee<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host
     check!(interpreter, LONDON);
     gas!(interpreter, gas::BASE);
     push!(interpreter, host.env().block.basefee);
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(BASEFEE, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 pub fn origin<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     gas!(interpreter, gas::BASE);
     push_b256!(interpreter, host.env().tx.caller.into_word());
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(ORIGIN, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 // EIP-4844: Shard Blob Transactions
@@ -67,6 +93,9 @@ pub fn blob_hash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
         Some(hash) => U256::from_be_bytes(hash.0),
         None => U256::ZERO,
     };
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_blobhash_operation(BLOBHASH, i, interpreter.stack.peek(0).unwrap());
+    }
 }
 
 /// EIP-7516: BLOBBASEFEE opcode
@@ -77,4 +106,7 @@ pub fn blob_basefee<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
         interpreter,
         U256::from(host.env().block.get_blob_gasprice().unwrap_or_default())
     );
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_host_env_operation(BLOBBASEFEE, interpreter.stack.peek(0).unwrap());
+    }
 }

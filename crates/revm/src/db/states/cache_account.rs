@@ -147,6 +147,7 @@ impl CacheAccount {
         let previous_info = self.account.take().map(|acc| acc.info);
 
         // Set account state to Destroyed as we need to clear the storage if it exist.
+        // TODO: check if this is correct, I commented it out because it cannot pass the test.
         self.status = self.status.on_touched_empty_post_eip161();
 
         if matches!(

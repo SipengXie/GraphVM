@@ -1,4 +1,4 @@
-use crate::primitives::{HaltReason, OutOfGasError, SuccessReason};
+use revm_primitives::{HaltReason, OutOfGasError, SuccessReason};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

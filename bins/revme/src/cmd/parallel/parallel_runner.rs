@@ -5,15 +5,7 @@ use crate::cmd::statetest::{
     models::MultiTestSuite,
 };
 use revm::{
-    db::{State, CacheState, DatabaseCommit},
-    occda::Occda,
-    task::Task,
-    task::TaskResultItem,
-    inspectors::NoOpInspector,
-    primitives::{keccak256, Bytes, TxKind, B256, Bytecode, SpecId, AccountInfo, Env, ResultAndState},
-    profiler,
-    inspector_handle_register,
-    Evm
+    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{address, keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, DatabaseRef, Evm
 };
 
 use std::{
@@ -23,8 +15,6 @@ use std::{
 };
 
 use thiserror::Error;
-use parking_lot::RwLock;
-use std::sync::Arc;
 
 #[derive(Debug, Error)]
 #[error("Test {name} failed: {kind}")]
@@ -189,6 +179,20 @@ pub fn run_sequential(
         // println!("run_sequential_idx: {:?}", idx);
     };
     let elapsed = timer.elapsed();
+
+    // let addr1 = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
+    // let addr2 = address!("ffb2aeba702be6e5d0b8d09b28e0196455e41272");
+    // let addr3 = address!("1d9e7ceb63304f68eb5f2f27b21a6a974d691251");
+    // let account1 = state.load_cache_account(addr1).unwrap().clone();
+    // eprintln!("account1:{:?}", account1.account.unwrap().storage);
+    // let account2 = state.basic_ref(addr2).map_err(|_|());
+
+
+    // let account3 = state.basic_ref(addr3).map_err(|_|());
+    // eprintln!("account1:{:?}", account1);
+    // eprintln!("account2:{:?}", account2);
+    // eprintln!("account3:{:?}", account3);
+
     println!("Total time: {:?}", elapsed);
     println!("Execute time: {:?}", execute_time);
     println!("Commit time: {:?}", commit_time);
@@ -200,6 +204,8 @@ pub fn run_sequential(
 
 pub fn run_parallel(
     num_of_threads: usize,
+    enable_ssa: bool,
+    enable_dep_graph: bool,
     path: &PathBuf
 ) -> Result<(), TestError> {
     // println!("path: {:?}", path);
@@ -228,7 +234,7 @@ pub fn run_parallel(
     let mut cache = cache_state.clone();
         cache.set_state_clear_flag(SpecId::enabled(SpecId::CANCUN, SpecId::SPURIOUS_DRAGON));
 
-    let state = State::builder()
+    let mut state = State::builder()
             .with_cached_prestate(cache)
             .with_bundle_update()
             .build();
@@ -248,11 +254,8 @@ pub fn run_parallel(
     env.block.difficulty = unit.env.current_difficulty;
     // after the Merge prevrandao replaces mix_hash field in block and replaced difficulty opcode in EVM.
     env.block.prevrandao = unit.env.current_random;
-    
-    // TODO: commented out, need to fix
-    let mut occda = Occda::new( num_of_threads);
 
-    let mut tasks: Vec<Task<_>> = vec![];
+    let mut tasks: Vec<Task> = vec![];
     let mut idx = 0;
     // post and execution
 
@@ -292,27 +295,25 @@ pub fn run_parallel(
         };
         env.tx.transact_to = to;
 
-        let inspector = NoOpInspector;
-        tasks.push(Task::new(env.clone(), idx, -1, SpecId::CANCUN, Some(inspector)));
+        tasks.push(Task::new(env.clone(), idx, -1, SpecId::CANCUN));
         idx += 1;
     }
 
+    let mut occda = Occda::new( num_of_threads);
+
     let len = tasks.len();
     let mut h_tx = occda.init(tasks, None);
-
-
-    let state_arc = Arc::new(RwLock::new(state));
-    let state_clone = state_arc.clone();
         
     let total_start = std::time::Instant::now();
-    let mut result_store = vec![TaskResultItem::default(); len];
+    let mut result_store = Vec::with_capacity(len);
+    for _ in 0..len {
+        result_store.push(TaskResultItem::default());
+    }
 
-    let _ = occda.main_with_db(&mut h_tx, state_clone, &mut result_store);
+    let _ = occda.main_with_db(&mut h_tx, &mut state, &mut result_store, || NoOpInspector, enable_dep_graph, enable_ssa);
     let after_main = std::time::Instant::now();
     println!("Time after main: {:?}", after_main - total_start);
         
-    let state_read = state_arc.read();
-    println!("\nState root: {:#?}", state_merkle_trie_root(state_read.cache.trie_account()));
-
+    println!("\nState root: {:#?}", state_merkle_trie_root(state.cache.trie_account()));
     Ok(())
 }

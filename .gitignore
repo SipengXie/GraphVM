@@ -22,3 +22,6 @@ burntpix/svgs
 
 # Rust bug report
 rustc-ice-*
+
+tools
+.cursorrules

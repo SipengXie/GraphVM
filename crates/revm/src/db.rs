@@ -9,6 +9,7 @@ pub mod emptydb;
 #[cfg(feature = "ethersdb")]
 mod ethersdb;
 pub mod in_memory_db;
+pub mod parallel_db;
 pub mod states;
 
 pub use crate::primitives::db::*;
