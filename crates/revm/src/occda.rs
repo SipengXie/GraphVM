@@ -22,6 +22,7 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use std::sync::Arc;
+use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
 use revm_primitives::{address, LatestSpec};
@@ -421,7 +422,7 @@ impl Occda {
         result_store: &mut Vec<TaskResultItem<I>>,
         logs_store: &mut Vec<Option<Vec<SSALogEntry>>>,
         to_re_execution_store: &mut Vec<Option<Vec<usize>>>,
-        // dag_store: &mut Vec<OnceCell<SsaGraph>>,
+        dag_store: &mut Vec<RwLock<SsaGraph>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         enable_dep_graph: bool,
         enable_ssa: bool,
@@ -727,6 +728,13 @@ impl Occda {
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
                     // h_tx.push(value);
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
+                    if enable_ssa {
+                        let entries = logs_store[task_idx].as_ref().unwrap();
+                        let guard = &dag_store[task_idx];
+                        tokio::spawn(async move{
+                            build_ssa_graph(entries, &guard).await;
+                        });
+                    }
                 } else {
                     if !enable_ssa {
                         if let Some(state) = task_result.state.clone() {
@@ -973,8 +981,8 @@ impl Occda {
     }
 }
 
-async fn build_ssa_graph(entries: &Vec<SSALogEntry>, cell: &OnceCell<SsaGraph>) {
-    let mut graph = SsaGraph::new();
+async fn build_ssa_graph(entries: &Vec<SSALogEntry>, element: &RwLock<SsaGraph>) {
+    let mut graph = element.write();
     let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
     for entry in entries {
         graph.add_node(entry.clone()).unwrap();
@@ -982,5 +990,4 @@ async fn build_ssa_graph(entries: &Vec<SSALogEntry>, cell: &OnceCell<SsaGraph>) 
     for lsn in lsns {
         graph.add_edges(lsn).unwrap();
     }
-    let _ =cell.set(graph);
 }
