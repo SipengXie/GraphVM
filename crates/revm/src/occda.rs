@@ -22,19 +22,19 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use std::sync::Arc;
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use rayon::ThreadPool;
 use rayon::prelude::*;
 use revm_primitives::{address, LatestSpec};
 use revm_ssa::logger::SsaRwSet;
 use revm_ssa::{SSALogEntry, SSALogger};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit, SsaGraph};
-use tokio::sync::OnceCell;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
 use std::collections::HashSet as StdHashSet;
 use metrics::histogram;
+use once_cell::sync::OnceCell;
 
 /// Main struct for handling parallel execution of EVM transactions
 pub struct Occda {
@@ -116,6 +116,7 @@ impl Occda {
         db: &mut ParallelDB<&DB>,
         result_store: &mut Vec<TaskResultItem<I>>,
         logs_store: &mut Vec<Option<Vec<SSALogEntry>>>,
+        dag_store: &mut Vec<Arc<OnceCell<Arc<SsaGraph>>>>,
         to_re_execution_store: &Vec<Option<Vec<usize>>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         is_prefetch: bool,
@@ -246,22 +247,15 @@ impl Occda {
                         
                         // use ssa to re-execute the transaction
                         if to_re_execution_store[idx].is_some() {
-                            let graph_building_start = std::time::Instant::now();
-                            let entries = logs_store[idx].as_ref().unwrap();
-                            // eprintln!("entries: {:?}", entries);
                             let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
-                            // eprintln!("to_re_execute: {:?}", to_re_execute);
-                            let mut graph = SsaGraph::new();
-                            let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
-                            for entry in entries {
-                                graph.add_node(entry.clone()).unwrap();
+                            let wait_start = std::time::Instant::now();
+                            while dag_store[idx].get().is_none() {
+                                std::thread::yield_now();
                             }
-                            for lsn in lsns {
-                                graph.add_edges(lsn).unwrap();
-                            }
-                            let graph_building_end = std::time::Instant::now();
-                            let graph_building_elapse = graph_building_end - graph_building_start;
-                            histogram!("graph_building",graph_building_elapse);
+                            let wait_end = std::time::Instant::now();
+                            let wait_time = wait_end - wait_start;
+                            histogram!("ssa_graph_wait", wait_time);
+                            let graph = dag_store[idx].get().unwrap().clone();
                             let execution_mode = ExecutionMode::Partial(to_re_execute.clone()); 
                             let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
                             let ssa_execute_start = std::time::Instant::now();
@@ -422,7 +416,7 @@ impl Occda {
         result_store: &mut Vec<TaskResultItem<I>>,
         logs_store: &mut Vec<Option<Vec<SSALogEntry>>>,
         to_re_execution_store: &mut Vec<Option<Vec<usize>>>,
-        dag_store: &mut Vec<RwLock<SsaGraph>>,
+        dag_store: &mut Vec<Arc<OnceCell<Arc<SsaGraph>>>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         enable_dep_graph: bool,
         enable_ssa: bool,
@@ -489,6 +483,7 @@ impl Occda {
                 &mut parallel_db,
                 result_store,
                 logs_store,
+                dag_store,
                 to_re_execution_store,
                 &inspector_setup,
                 true,
@@ -546,28 +541,19 @@ impl Occda {
 
                     // Handle re-execution case (using SSA)
                     if to_re_execution_store[idx].is_some() {
-                        // TODO: 想办法异步建图,并且看看怎么缓存比较合理
-                        // TODO: 比如我们只要一执行完Tx,无论其是否需要重做都建图
-                        // TODO: 或者只在发现其需要re-execution的一瞬间异步建图
-                        let graph_building_start = std::time::Instant::now();
                         let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
-                        let entries = logs_store[idx].as_ref().unwrap();
-                        
-                        let mut graph = SsaGraph::new();
-                        let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
-                        for entry in entries {
-                            graph.add_node(entry.clone()).unwrap();
+                        let wait_start = std::time::Instant::now();
+                        while dag_store[idx].get().is_none() {
+                            std::thread::yield_now();
                         }
-                        for lsn in lsns {
-                            graph.add_edges(lsn).unwrap();
-                        }
-                        let graph_building_end = std::time::Instant::now();
-                        let graph_building_elapse = graph_building_end - graph_building_start;
-                        histogram!("graph_building",graph_building_elapse);
-
+                        let wait_end = std::time::Instant::now();
+                        let wait_time = wait_end - wait_start;
+                        histogram!("ssa_graph_wait", wait_time);
+                        let graph = dag_store[idx].get().unwrap().clone();
                         let execution_mode = ExecutionMode::Partial(to_re_execute.clone());
                         let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
                             .with_mode(execution_mode);
+                        
                         let ssa_execute_start = std::time::Instant::now();
                         match executor.execute() {
                             Ok(()) => {
@@ -661,6 +647,7 @@ impl Occda {
                     &mut parallel_db,
                     result_store,
                     logs_store,
+                    dag_store,
                     to_re_execution_store,
                     &inspector_setup,
                     false,
@@ -726,15 +713,17 @@ impl Occda {
                 if is_conflict {
                     // Conflict detected: update sid and retry
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
-                    // h_tx.push(value);
-                    h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
                     if enable_ssa {
-                        let entries = logs_store[task_idx].as_ref().unwrap();
-                        let guard = &dag_store[task_idx];
-                        tokio::spawn(async move{
-                            build_ssa_graph(entries, &guard).await;
+                        let cell = dag_store[task_idx].clone();
+                        let entries = logs_store[task_idx].take().unwrap();
+                        std::thread::spawn(move || {
+                            // eprintln!("building ssa graph for idx: {}", task_idx);
+                            build_ssa_graph(entries, cell);
+                            // eprintln!("building ssa graph for idx: {} done", task_idx);
                         });
                     }
+                    h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
+                    // eprintln!("Sending task {} to re-execution", task_idx);
                 } else {
                     if !enable_ssa {
                         if let Some(state) = task_result.state.clone() {
@@ -981,13 +970,16 @@ impl Occda {
     }
 }
 
-async fn build_ssa_graph(entries: &Vec<SSALogEntry>, element: &RwLock<SsaGraph>) {
-    let mut graph = element.write();
+fn build_ssa_graph(entries: Vec<SSALogEntry>, cell: Arc<OnceCell<Arc<SsaGraph>>>) {
+    let mut graph = SsaGraph::new();
     let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
     for entry in entries {
-        graph.add_node(entry.clone()).unwrap();
+        graph.add_node(entry).unwrap();
     }
     for lsn in lsns {
         graph.add_edges(lsn).unwrap();
+    }
+    if cell.set(Arc::new(graph)).is_err() {
+        eprintln!("SSA graph was already set");
     }
 }

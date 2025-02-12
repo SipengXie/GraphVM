@@ -4,9 +4,7 @@ use petgraph::algo::toposort;
 use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
 use std::collections::HashSet;
-use std::collections::HashMap;
-use revm_primitives::{Account, Address, Bytecode, EvmStorageSlot};
-use revm_ssa::types::{StorageKey, StorageValue};
+use revm_ssa::types::StorageKey;
 
 /// Dependency graph
 pub struct SsaGraph {

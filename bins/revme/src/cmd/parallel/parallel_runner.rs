@@ -1,4 +1,6 @@
+use once_cell::sync::OnceCell;
 use revm_ssa::SSALogEntry;
+use revm_ssa_graph::SsaGraph;
 use serde_json::{Map, Value};
 use crate::cmd::statetest::{
     merkle_trie::state_merkle_trie_root,
@@ -10,9 +12,7 @@ use revm::{
 };
 
 use std::{
-    fmt::Debug,
-    path::PathBuf,
-    time::{Duration, Instant},
+    fmt::Debug, path::PathBuf, sync::Arc, time::{Duration, Instant}
 };
 
 use thiserror::Error;
@@ -325,10 +325,12 @@ pub fn run_parallel(
     let mut result_store = Vec::with_capacity(len);
     let mut to_re_execution_store = Vec::<Option<Vec<usize>>>::with_capacity(len);
     let mut logs_store = Vec::<Option<Vec<SSALogEntry>>>::with_capacity(len);
+    let mut dag_store = Vec::<Arc<OnceCell<Arc<SsaGraph>>>>::with_capacity(len);
     for _ in 0..len {
         result_store.push(TaskResultItem::default());
         to_re_execution_store.push(None);
         logs_store.push(None);
+        dag_store.push(Arc::new(OnceCell::new()));
     }
 
     let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
@@ -337,7 +339,16 @@ pub fn run_parallel(
         .install()
         .expect("failed to install Prometheus recorder");
 
-    let _ = occda.main_with_db(&mut h_tx, &mut state, &mut result_store, &mut logs_store, &mut to_re_execution_store, || NoOpInspector, enable_dep_graph, enable_ssa);
+    let _ = occda.main_with_db(
+        &mut h_tx, 
+        &mut state,
+         &mut result_store, 
+         &mut logs_store, 
+         &mut to_re_execution_store, 
+         &mut dag_store,
+         || NoOpInspector,
+         enable_dep_graph, 
+         enable_ssa);
     let after_main = std::time::Instant::now();
     println!("Time after main: {:?}", after_main - total_start);
 

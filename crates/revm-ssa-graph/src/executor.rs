@@ -105,7 +105,7 @@ where
     DB::Error: Send + Sync,
     SPEC: Spec + Send + Sync,
 {
-    pub fn new(graph: SsaGraph, db: DB, env: &'a Env, num_threads: Option<usize>) -> Self {
+    pub fn new(graph: Arc<SsaGraph>, db: DB, env: &'a Env, num_threads: Option<usize>) -> Self {
         let thread_pool = if let Some(num_threads) = num_threads {
             Some(rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
@@ -117,7 +117,7 @@ where
         let max_lsn = graph.num_nodes();
         Self {
             context: Arc::new(ExecutionContext::new(env, db)),
-            graph: Arc::new(graph),
+            graph,
             tracer: None,
             mode: ExecutionMode::Full,
             spec: PhantomData,
