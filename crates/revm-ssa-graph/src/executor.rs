@@ -150,7 +150,7 @@ where
 
     /// Execute the entire graph
     pub fn execute(&mut self) -> Result<()> {
-        // let start = std::time::Instant::now();
+        let node_search_start = std::time::Instant::now();
         let nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
@@ -166,6 +166,9 @@ where
                 reachable_nodes
             }
         };
+        let node_search_end = std::time::Instant::now();
+        let node_search_elapse = node_search_end - node_search_start;
+        histogram!("node_search",node_search_elapse);
         // Find nodes with storage write operations
         // eprintln!("Write nodes:");
         // for node in &nodes_to_execute {
@@ -192,10 +195,14 @@ where
         // }
         // histogram!("graph_execution.nodes_to_execute", start.elapsed().as_micros() as f64);
 
+        let execution_nodes_start = std::time::Instant::now();
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
         for node in &nodes_to_execute {
-            Self::execution_node(node, graph, &self.context.clone())?;
+            Self::execution_node(node, graph, &self.context)?;
         }
+        let execution_nodes_end = std::time::Instant::now();
+        let execution_nodes_elapse = execution_nodes_end - execution_nodes_start;
+        histogram!("execution_nodes",execution_nodes_elapse);
 
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
@@ -278,7 +285,7 @@ where
                     break;
                 }
 
-                let exec_result = Self::execution_node(node, graph, &self.context.clone());
+                let exec_result = Self::execution_node(node, graph, &self.context);
                 if exec_result.is_err() {
                     panic!("Execution failed: {:?}", exec_result.err().unwrap());
                 }
@@ -302,14 +309,27 @@ where
 
     pub fn execution_node(node: &SSALogEntry, graph: &mut SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let lsn = node.lsn;
+        let resolve_start = std::time::Instant::now();
         let inputs = Self::resolve_dependencies(graph, &context, &node)?;
+        let resolve_time = resolve_start.elapsed();
+        histogram!("ssa.resolve_dependencies", resolve_time);
+
+        let execute_start = std::time::Instant::now(); 
         let outputs = Self::execute_operation(&context, node.opcode, inputs)?;
+        let execute_time = execute_start.elapsed();
+        histogram!("ssa.execute_operation", execute_time);
 
         if node.opcode == 0x56 || node.opcode == 0x57 {
+            let verify_start = std::time::Instant::now();
             Self::verify_control_flow(node, &outputs)?;
+            let verify_time = verify_start.elapsed();
+            histogram!("ssa.verify_control_flow", verify_time);
         }
 
+        let set_result_start = std::time::Instant::now();
         graph.set_result(lsn, outputs)?;
+        let set_result_time = set_result_start.elapsed();
+        histogram!("ssa.set_result", set_result_time);
         Ok(())
     }
 

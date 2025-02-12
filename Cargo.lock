@@ -3642,6 +3642,7 @@ dependencies = [
  "ethers-providers",
  "hashbrown 0.12.3",
  "indicatif",
+ "metrics",
  "once_cell",
  "parking_lot",
  "rayon",
@@ -3654,6 +3655,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "tokio",
  "zip",
 ]
 
@@ -3770,10 +3772,12 @@ dependencies = [
  "hex",
  "indicatif",
  "k256",
+ "metrics-exporter-prometheus",
  "microbench",
  "parking_lot",
  "plain_hasher",
  "revm",
+ "revm-ssa",
  "serde",
  "serde_json",
  "structopt",

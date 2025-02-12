@@ -1,3 +1,4 @@
+use revm_ssa::SSALogEntry;
 use serde_json::{Map, Value};
 use crate::cmd::statetest::{
     merkle_trie::state_merkle_trie_root,
@@ -180,49 +181,36 @@ pub fn run_sequential(
     };
     let elapsed = timer.elapsed();
 
-    // let addr1 = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
-    // let addr2 = address!("ffb2aeba702be6e5d0b8d09b28e0196455e41272");
-    // let addr3 = address!("1d9e7ceb63304f68eb5f2f27b21a6a974d691251");
-    // let account1 = state.load_cache_account(addr1).unwrap().clone();
-    // eprintln!("account1:{:?}", account1.account.unwrap().storage);
-    // let account2 = state.basic_ref(addr2).map_err(|_|());
-
-
-    // let account3 = state.basic_ref(addr3).map_err(|_|());
-    // eprintln!("account1:{:?}", account1);
-    // eprintln!("account2:{:?}", account2);
-    // eprintln!("account3:{:?}", account3);
-
     println!("Total time: {:?}", elapsed);
     println!("Execute time: {:?}", execute_time);
     println!("Commit time: {:?}", commit_time);
 
-    let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
-    let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
-    let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
-    let addr4 = address!("f8e95297dba53ccf8cb62dbd8a28b934580884ee");
-    let addr5 = address!("ff69d3dba117a55ba29a24610d67135b82dc0e58");
-    let account1 = state.basic_ref(addr1).map_err(|_|());
-    let account2 = state.basic_ref(addr2).map_err(|_|());
-    let account3 = state.basic_ref(addr3).map_err(|_|());
-    let account4 = state.basic_ref(addr4).map_err(|_|());
-    let account5 = state.basic_ref(addr5).map_err(|_|());
+    // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
+    // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
+    // let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
+    // let addr4 = address!("f8e95297dba53ccf8cb62dbd8a28b934580884ee");
+    // let addr5 = address!("ff69d3dba117a55ba29a24610d67135b82dc0e58");
+    // let account1 = state.basic_ref(addr1).map_err(|_|());
+    // let account2 = state.basic_ref(addr2).map_err(|_|());
+    // let account3 = state.basic_ref(addr3).map_err(|_|());
+    // let account4 = state.basic_ref(addr4).map_err(|_|());
+    // let account5 = state.basic_ref(addr5).map_err(|_|());
 
-    let contract_addr = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
-    let storage = state.cache.accounts.get(&contract_addr).unwrap().account.as_ref().unwrap().storage.clone();
-    eprintln!("\n===========================================");
-    eprintln!("              State<DB> State             ");
-    eprintln!("===========================================");
-    eprintln!("\n------------- Normal Accounts -------------");
-    eprintln!("Account 1: {:?}", account1);
-    eprintln!("Account 2: {:?}", account2);
-    eprintln!("Account 3: {:?}", account3); 
-    eprintln!("Account 4: {:?}", account4);
-    eprintln!("Account 5: {:?}", account5);
+    // let contract_addr = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
+    // let storage = state.cache.accounts.get(&contract_addr).unwrap().account.as_ref().unwrap().storage.clone();
+    // eprintln!("\n===========================================");
+    // eprintln!("              State<DB> State             ");
+    // eprintln!("===========================================");
+    // eprintln!("\n------------- Normal Accounts -------------");
+    // eprintln!("Account 1: {:?}", account1);
+    // eprintln!("Account 2: {:?}", account2);
+    // eprintln!("Account 3: {:?}", account3); 
+    // eprintln!("Account 4: {:?}", account4);
+    // eprintln!("Account 5: {:?}", account5);
 
-    eprintln!("\n------------- Contract Storage -------------");
-    eprintln!("Storage Content: {:?}", storage);
-    eprintln!("===========================================\n");
+    // eprintln!("\n------------- Contract Storage -------------");
+    // eprintln!("Storage Content: {:?}", storage);
+    // eprintln!("===========================================\n");
 
 
     println!("\nState root: {:#?}", state_merkle_trie_root(state.cache.trie_account()));
@@ -335,41 +323,56 @@ pub fn run_parallel(
         
     let total_start = std::time::Instant::now();
     let mut result_store = Vec::with_capacity(len);
+    let mut to_re_execution_store = Vec::<Option<Vec<usize>>>::with_capacity(len);
+    let mut logs_store = Vec::<Option<Vec<SSALogEntry>>>::with_capacity(len);
     for _ in 0..len {
         result_store.push(TaskResultItem::default());
+        to_re_execution_store.push(None);
+        logs_store.push(None);
     }
 
-    let _ = occda.main_with_db(&mut h_tx, &mut state, &mut result_store, || NoOpInspector, enable_dep_graph, enable_ssa);
+    let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
+    let _handle = builder
+        .with_http_listener(([127, 0, 0, 1], 9090))
+        .install()
+        .expect("failed to install Prometheus recorder");
+
+    let _ = occda.main_with_db(&mut h_tx, &mut state, &mut result_store, &mut logs_store, &mut to_re_execution_store, || NoOpInspector, enable_dep_graph, enable_ssa);
     let after_main = std::time::Instant::now();
     println!("Time after main: {:?}", after_main - total_start);
 
-    let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
-    let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
-    let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
-    let addr4 = address!("f8e95297dba53ccf8cb62dbd8a28b934580884ee");
-    let addr5 = address!("ff69d3dba117a55ba29a24610d67135b82dc0e58");
-    let account1 = state.basic_ref(addr1).map_err(|_|());
-    let account2 = state.basic_ref(addr2).map_err(|_|());
-    let account3 = state.basic_ref(addr3).map_err(|_|());
-    let account4 = state.basic_ref(addr4).map_err(|_|());
-    let account5 = state.basic_ref(addr5).map_err(|_|());
+    // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
+    // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
+    // let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
+    // let addr4 = address!("f8e95297dba53ccf8cb62dbd8a28b934580884ee");
+    // let addr5 = address!("ff69d3dba117a55ba29a24610d67135b82dc0e58");
+    // let account1 = state.basic_ref(addr1).map_err(|_|());
+    // let account2 = state.basic_ref(addr2).map_err(|_|());
+    // let account3 = state.basic_ref(addr3).map_err(|_|());
+    // let account4 = state.basic_ref(addr4).map_err(|_|());
+    // let account5 = state.basic_ref(addr5).map_err(|_|());
 
-    let contract_addr = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
-    let storage = state.cache.accounts.get(&contract_addr).unwrap().account.as_ref().unwrap().storage.clone();
-    eprintln!("\n===========================================");
-    eprintln!("              State<DB> State             ");
-    eprintln!("===========================================");
-    eprintln!("\n------------- Normal Accounts -------------");
-    eprintln!("Account 1: {:?}", account1);
-    eprintln!("Account 2: {:?}", account2);
-    eprintln!("Account 3: {:?}", account3); 
-    eprintln!("Account 4: {:?}", account4);
-    eprintln!("Account 5: {:?}", account5);
+    // let contract_addr = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
+    // let storage = state.cache.accounts.get(&contract_addr).unwrap().account.as_ref().unwrap().storage.clone();
+    // eprintln!("\n===========================================");
+    // eprintln!("              State<DB> State             ");
+    // eprintln!("===========================================");
+    // eprintln!("\n------------- Normal Accounts -------------");
+    // eprintln!("Account 1: {:?}", account1);
+    // eprintln!("Account 2: {:?}", account2);
+    // eprintln!("Account 3: {:?}", account3); 
+    // eprintln!("Account 4: {:?}", account4);
+    // eprintln!("Account 5: {:?}", account5);
 
-    eprintln!("\n------------- Contract Storage -------------");
-    eprintln!("Storage Content: {:?}", storage);
-    eprintln!("===========================================\n");
+    // eprintln!("\n------------- Contract Storage -------------");
+    // eprintln!("Storage Content: {:?}", storage);
+    // eprintln!("===========================================\n");
 
     println!("\nState root: {:#?}", state_merkle_trie_root(state.cache.trie_account()));
+    println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
+    println!("You can use curl http://127.0.0.1:9090/metrics to view them");
+    println!("The metrics will be in standard Prometheus format");
+    std::thread::sleep(std::time::Duration::from_secs(60));
+
     Ok(())
 }

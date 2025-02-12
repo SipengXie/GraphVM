@@ -14,9 +14,6 @@ pub struct Task {
     pub gas: u64,
     pub spec_id: SpecId,
     pub env: Box<Env>,
-    /// Notify which lsn is used for re-execution
-    pub to_re_execute: Option<Vec<usize>>,
-    pub logs: Option<Vec<SSALogEntry>>,
 }
 
 impl Task {
@@ -27,8 +24,6 @@ impl Task {
             gas: env.tx.gas_limit,
             spec_id,
             env,
-            to_re_execute: None,
-            logs: None,
         }
     }
 }
@@ -106,7 +101,6 @@ pub struct TaskResultItem<I> {
     pub inspector: Option<I>,
     pub read_write_set: Option<ReadWriteSet>,
     pub ssa_rw_set: Option<SsaRwSet>,
-    pub logs: Option<Vec<SSALogEntry>>,
     pub state: Option<EvmState>,
     pub ssa_state: Option<Vec<SSAOutput>>,
 }
@@ -119,7 +113,6 @@ impl<I> Default for TaskResultItem<I> {
             inspector: None,
             read_write_set: None,
             ssa_rw_set: None,
-            logs: None,
             state: None,
             ssa_state: None,
         }

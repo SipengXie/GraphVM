@@ -15,6 +15,7 @@ indicatif = "0.17"
 microbench = "0.5"
 plain_hasher = "0.2"
 revm = { path = "../../crates/revm", features = ["std", "serde", "serde-json"] }
+revm-ssa = { path = "../../crates/revm-ssa", version = "1.0.0", default-features = false }
 alloy-rlp = { version = "0.3", default-features = false, features = [
     "arrayvec",
     "derive",
@@ -28,3 +29,4 @@ walkdir = "2.5"
 k256 = { version = "0.13.3", features = ["ecdsa"] }
 tokio = { version = "1.39.0", features = ["full"] }
 parking_lot = "0.12"
+metrics-exporter-prometheus = "0.12"

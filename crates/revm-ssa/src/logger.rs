@@ -1694,8 +1694,8 @@ impl SSALogger {
         self.stack.exchange(n, m)
     }
 
-    pub fn get_logs(&self) -> &[SSALogEntry] {
-        &self.logs
+    pub fn take_logs(&mut self) -> Vec<SSALogEntry> {
+        std::mem::take(&mut self.logs)
     }
 
     pub fn get_log(&self, lsn: usize) -> &SSALogEntry {

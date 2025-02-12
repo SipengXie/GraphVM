@@ -47,8 +47,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "Fourth operand must be Constant".to_string()
             )),
         };
-        
+        // Print original balance before deduction
+        // eprintln!("Original balance before deduction: {}", origin_balance);
         let new_balance = origin_balance - deduct_balance;
+        // Print new balance after deduction
+        // eprintln!("New balance after deduction: {}", new_balance);
         let new_nonce = origin_nonce + 1;
 
         let outputs = vec![
@@ -91,8 +94,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "Third operand must be Constant".to_string()
             )),
         };
-
+        // Print original balance before reimbursement
+        // eprintln!("Original balance before reimbursement: {}", origin_balance);
         let new_balance = origin_balance + refund_gas;
+        // Print new balance after reimbursement
+        // eprintln!("New balance after reimbursement: {}", new_balance);
         
         let outputs = vec![
             SSAOutput::Storage {
