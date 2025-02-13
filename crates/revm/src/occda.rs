@@ -250,7 +250,7 @@ impl Occda {
                             let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
                             let wait_start = std::time::Instant::now();
                             while dag_store[idx].get().is_none() {
-                                std::thread::yield_now();
+                                std::hint::spin_loop();
                             }
                             let wait_end = std::time::Instant::now();
                             let wait_time = wait_end - wait_start;
@@ -544,7 +544,7 @@ impl Occda {
                         let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
                         let wait_start = std::time::Instant::now();
                         while dag_store[idx].get().is_none() {
-                            std::thread::yield_now();
+                            std::hint::spin_loop();
                         }
                         let wait_end = std::time::Instant::now();
                         let wait_time = wait_end - wait_start;
@@ -971,7 +971,7 @@ impl Occda {
 }
 
 fn build_ssa_graph(entries: Vec<SSALogEntry>, cell: Arc<OnceCell<Arc<SsaGraph>>>) {
-    let mut graph = SsaGraph::new();
+    let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
     for entry in entries {
         graph.add_node(entry).unwrap();

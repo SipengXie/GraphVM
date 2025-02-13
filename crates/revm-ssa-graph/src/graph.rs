@@ -20,9 +20,9 @@ pub struct SsaGraph {
 
 
 impl SsaGraph {
-    pub fn new() -> Self {
+    pub fn new(node_num: usize, edge_num: usize) -> Self {
         Self {
-            graph: DiGraph::new(),
+            graph: DiGraph::with_capacity(node_num, edge_num),
             lsn_to_node: DashMap::new(),
             results: DashMap::new(),
             storage_write: Vec::new(),

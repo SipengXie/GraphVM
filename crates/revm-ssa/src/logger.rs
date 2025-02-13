@@ -2,6 +2,8 @@ use std::cmp::min;
 use std::collections::HashMap;
 use revm_primitives::{Address, Bytes, FixedBytes, HashSet, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
+use smallvec::SmallVec;
+use smallvec::smallvec;
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSAValue, SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
 use crate::{SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
@@ -71,7 +73,7 @@ impl SSALogger {
         Self {
             current_lsn: 0,
             entry_lsn: Vec::new(),
-            logs: Vec::with_capacity(1024),
+            logs: Vec::with_capacity(512),
             stack: ShadowStack::new(),
             latest_writes: HashMap::new(),
             first_reads: HashMap::new(),
@@ -94,7 +96,7 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_operation(&mut self, opcode: u8, inputs: Vec<SSAInput>, outputs: Vec<SSAOutput>) -> usize {
+    pub fn log_operation(&mut self, opcode: u8, inputs: SmallVec<[SSAInput; 8]>, outputs: SmallVec<[SSAOutput; 3]>) -> usize {
         let entry = SSALogEntry {
             lsn: self.current_lsn,
             opcode,
@@ -110,15 +112,16 @@ impl SSALogger {
 
     #[inline]
     pub fn log_deduct_caller(&mut self, caller: Address, origin_balance: U256, origin_nonce: u64, pre_deduct: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn() },
             SSAInput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance), source: self.get_storage_def(StorageKey::Balance(caller))  },
             SSAInput::Storage { key: StorageKey::Nonce(caller), value: StorageValue::Nonce(origin_nonce), source: self.get_storage_def(StorageKey::Nonce(caller))  },
             SSAInput::Constant(pre_deduct),
         ];
-        let ssa_outputs = vec![
-            SSAOutput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance - pre_deduct)},
-            SSAOutput::Storage { key: StorageKey::Nonce(caller), value: StorageValue::Nonce(origin_nonce + 1)},
+
+        let ssa_outputs = smallvec![
+            SSAOutput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance - pre_deduct) },
+            SSAOutput::Storage { key: StorageKey::Nonce(caller), value: StorageValue::Nonce(origin_nonce + 1) },
         ];
 
         let lsn = self.log_operation(0xDA, ssa_inputs, ssa_outputs);
@@ -130,12 +133,12 @@ impl SSALogger {
 
     #[inline]
     pub fn log_refund_gas(&mut self, caller: Address, origin_balance: U256, refund_gas : U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn()  },
             SSAInput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance), source: self.get_storage_def(StorageKey::Balance(caller))  },
             SSAInput::Constant(refund_gas)
         ];
-        let ssa_outputs =  vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance + refund_gas)},
         ];
         let lsn = self.log_operation(0xDB, ssa_inputs, ssa_outputs);
@@ -146,67 +149,62 @@ impl SSALogger {
     #[inline]
     pub fn log_pop_top_operation(&mut self, opcode: u8, operands: Vec<SSAValue>, result: SSAValue) {
         // Collect dependencies for all operands
-        let mut ssa_inputs = vec![];
+        let mut ssa_inputs = smallvec![];
         for operand in operands {
             ssa_inputs.push(SSAInput::Stack {
                 value: operand.as_u256().unwrap(),
                 source: self.pop_stack_def().unwrap(),
             });
         }
-        let ssa_outputs = vec![SSAOutput::Stack(result.as_u256().unwrap())];
+        let ssa_outputs = smallvec![SSAOutput::Stack(result.as_u256().unwrap())];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
     #[inline]
     pub fn log_pop_operation(&mut self, opcode: u8) {
-        self.log_operation(opcode, vec![], vec![]);
+        // self.log_operation(opcode, smallvec![], smallvec![]);
         self.pop_stack_def().unwrap();
     }
 
     #[inline]
     pub fn log_push_operation(&mut self, opcode: u8, result: &[u8]) {
         // No operands, no deps, a vec of result; we should convert result to SSAValue
-        let words = Self::parse_result_to_words(result);
-
-        let mut ssa_outputs = vec![];
-        let mut ssa_inputs = vec![];
-        for word in words {
-            ssa_inputs.push(SSAInput::Constant(word.as_u256().unwrap()));
-            ssa_outputs.push(SSAOutput::Stack(word.as_u256().unwrap()));
-        }
+        let word = Self::parse_result_to_words(result);
+        let ssa_inputs = smallvec![SSAInput::Constant(word)];
+        let ssa_outputs = smallvec![SSAOutput::Stack(word)];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
     #[inline]
     pub fn log_dup_operation(&mut self, opcode: u8, n: usize) {
-        self.log_operation(opcode, vec![], vec![]);
+        // self.log_operation(opcode, smallvec![], smallvec![]);
         self.dup_stack_def(n).unwrap();
     }
 
     #[inline]
     pub fn log_swap_operation(&mut self, opcode: u8, n: usize) {
-        self.log_operation(opcode, vec![], vec![]);
+        // self.log_operation(opcode, smallvec![], smallvec![]);
         self.swap_stack_def(n).unwrap();
     }
 
     #[inline]
     pub fn log_exchange_operation(&mut self, opcode: u8, n: usize, m: usize) {
-        self.log_operation(opcode, vec![], vec![]);
+        self.log_operation(opcode, smallvec![], smallvec![]);
         self.exchange_stack_def(n, m).unwrap();
     }
 
     #[inline]
     pub fn log_jump(&mut self, opcode: u8, target: usize, current_pc: usize, relative_offset: isize) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {       
                 value: U256::from(target),
                 source: self.pop_stack_def().unwrap(),
             },
             SSAInput::Constant(U256::from(current_pc))
         ];
-        let ssa_outputs = vec![SSAOutput::Jump {
+        let ssa_outputs = smallvec![SSAOutput::Jump {
             relative_offset,
         }];
 
@@ -215,7 +213,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_jumpi(&mut self, opcode: u8, target: usize, cond: U256, current_pc: usize, relative_offset: isize) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(target),
                 source: self.pop_stack_def().unwrap(),
@@ -226,7 +224,7 @@ impl SSALogger {
             },
             SSAInput::Constant(U256::from(current_pc)),
         ];
-        let ssa_outputs = vec![SSAOutput::Jump {
+        let ssa_outputs = smallvec![SSAOutput::Jump {
             relative_offset,
         }];
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
@@ -234,15 +232,15 @@ impl SSALogger {
     
     #[inline]
     pub fn log_pc_operation(&mut self, opcode: u8, result: usize) {
-        let ssa_inputs = vec![SSAInput::Constant(U256::from(result))];
-        let ssa_outputs = vec![SSAOutput::Stack(U256::from(result))];
+        let ssa_inputs = smallvec![SSAInput::Constant(U256::from(result))];
+        let ssa_outputs = smallvec![SSAOutput::Stack(U256::from(result))];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
     #[inline]
     pub fn log_mload_operation(&mut self, opcode: u8, offset: usize, result: U256, memory_deps: Vec<MemoryDep>, mem_length: Option<usize>) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(offset),
                 source: self.pop_stack_def().unwrap(),
@@ -253,7 +251,7 @@ impl SSALogger {
             }
 
         ];
-        let mut ssa_outputs = vec![SSAOutput::Stack(result)];
+        let mut ssa_outputs = smallvec![SSAOutput::Stack(result)];
 
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -266,7 +264,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_mstore_operation(&mut self, opcode: u8, offset: usize, value: U256, mem_length: Option<usize>) -> usize {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(offset),
                 source: self.pop_stack_def().unwrap(),
@@ -278,9 +276,9 @@ impl SSALogger {
         ];
 
         let mut ssa_outputs = if opcode == 0x52 {
-            vec![SSAOutput::Memory(value.to_be_bytes::<32>().to_vec().into())]
+            smallvec![SSAOutput::Memory(value.to_be_bytes::<32>().into())]
         } else {
-            vec![SSAOutput::Memory(vec![value.byte(0)].into())]
+            smallvec![SSAOutput::Memory([value.byte(0)].into())]
         };
 
         if let Some(mem_length) = mem_length {
@@ -293,18 +291,18 @@ impl SSALogger {
 
     #[inline]
     pub fn log_msize_operation(&mut self, opcode: u8, mem_length: usize) {
-        let ssa_inputs = vec![SSAInput::MemorySizeChange {
+        let ssa_inputs = smallvec![SSAInput::MemorySizeChange {
             size: mem_length,
             last_memory: self.last_memory,
         }];
-        let ssa_outputs = vec![SSAOutput::Stack(U256::from(mem_length))];
+        let ssa_outputs = smallvec![SSAOutput::Stack(U256::from(mem_length))];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
     #[inline]
     pub fn log_mcopy_operation(&mut self, opcode: u8, dst: usize, src: usize, len: usize, result: Bytes, memory_deps: Vec<MemoryDep>, mem_length: Option<usize>) -> usize {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(dst),
                 source: self.pop_stack_def().unwrap(),
@@ -323,7 +321,7 @@ impl SSALogger {
             }
         ];
         assert_eq!(result.len(), len,"mcopy result len not equal to len");
-        let mut ssa_outputs = vec![SSAOutput::Memory(result.clone())];
+        let mut ssa_outputs = smallvec![SSAOutput::Memory(result.clone())];
 
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -344,7 +342,7 @@ impl SSALogger {
         result: SSAInstructionResult)
     {
 
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(offset),
                 source: self.pop_stack_def().unwrap(),
@@ -359,7 +357,7 @@ impl SSALogger {
             }
         ];
       
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::InterpreterResult(
             SSAInterpreterResult {
                 result: result,
@@ -378,7 +376,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_instruction_result_change(&mut self, opcode: u8, result: SSAInstructionResult) {
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::InterpreterResult(
                 SSAInterpreterResult {
                     result: result,
@@ -387,26 +385,26 @@ impl SSALogger {
             )
         ];
 
-        let lsn = self.log_operation(opcode, vec![], ssa_outputs);
+        let lsn = self.log_operation(opcode, smallvec![], ssa_outputs);
         self.last_interpreter_return = Some(lsn);
     }
 
     #[inline]
     pub fn log_host_env_operation(&mut self, opcode: u8, result: U256) {
-        let ssa_outputs = vec![SSAOutput::Stack(result)];
-        let lsn = self.log_operation(opcode, vec![], ssa_outputs);
+        let ssa_outputs = smallvec![SSAOutput::Stack(result)];
+        let lsn = self.log_operation(opcode, smallvec![], ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
     #[inline]
     pub fn log_blobhash_operation(&mut self, opcode: u8, index: usize, result: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(index),
                 source: self.pop_stack_def().unwrap(),
             }
         ];
-        let ssa_outputs = vec![SSAOutput::Stack(result)];
+        let ssa_outputs = smallvec![SSAOutput::Stack(result)];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
@@ -415,7 +413,7 @@ impl SSALogger {
     pub fn log_system_operation(&mut self, opcode: u8, value: ContractEnv) {
         let ssa_input = SSAInput::ContractEntry{value:value.clone(), entry_lsn: self.get_entry_lsn()};
         let ssa_output = SSAOutput::Stack(value.into());
-        let lsn = self.log_operation(opcode, vec![ssa_input], vec![ssa_output]);
+        let lsn = self.log_operation(opcode, smallvec![ssa_input], smallvec![ssa_output]);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
@@ -427,7 +425,7 @@ impl SSALogger {
             source: self.last_return_data_buffer,  
         };
         let ssa_output = SSAOutput::Stack(U256::from(len));
-        let lsn = self.log_operation(opcode, vec![ssa_input], vec![ssa_output]);
+        let lsn = self.log_operation(opcode, smallvec![ssa_input], smallvec![ssa_output]);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
@@ -439,7 +437,7 @@ impl SSALogger {
         return_data: Bytes, 
         mem_length: Option<usize>) -> usize {
 
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(meme_offset),
                 source: self.pop_stack_def().unwrap(),
@@ -463,7 +461,7 @@ impl SSALogger {
         // Pad return_data_slice to len
         let mut padded_return_data_slice = vec![0u8; len];
         padded_return_data_slice[..return_data_slice.len()].copy_from_slice(&return_data_slice);
-        let mut ssa_outputs = vec![SSAOutput::Memory(padded_return_data_slice.into())];
+        let mut ssa_outputs = smallvec![SSAOutput::Memory(padded_return_data_slice.into())];
         
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -481,7 +479,7 @@ impl SSALogger {
         len: usize, 
         code: Bytes, 
         mem_length: Option<usize>) -> usize {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(memory_offset),
                 source: self.pop_stack_def().unwrap(),
@@ -504,7 +502,7 @@ impl SSALogger {
         // Pad code_slice to len
         let mut padded_code_slice = vec![0u8; len];
         padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
-        let mut ssa_outputs = vec![SSAOutput::Memory(padded_code_slice.into())];
+        let mut ssa_outputs = smallvec![SSAOutput::Memory(padded_code_slice.into())];
 
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -516,7 +514,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_call_data_copy(&mut self, opcode: u8, memory_offset: usize, data_offset: usize, len: usize, data: Bytes, mem_length: Option<usize>) -> usize {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(memory_offset),
                 source: self.pop_stack_def().unwrap(),
@@ -539,7 +537,7 @@ impl SSALogger {
         // Pad data_slice to len
         let mut padded_data_slice = vec![0u8; len];
         padded_data_slice[..data_slice.len()].copy_from_slice(&data_slice);
-        let mut ssa_outputs = vec![SSAOutput::Memory(padded_data_slice.into())];
+        let mut ssa_outputs = smallvec![SSAOutput::Memory(padded_data_slice.into())];
 
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -552,7 +550,7 @@ impl SSALogger {
     #[inline]
     pub fn log_return_data_load(&mut self, opcode: u8, offset: usize, return_data: Bytes) {
 
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(offset),
                 source: self.pop_stack_def().unwrap(),
@@ -573,14 +571,14 @@ impl SSALogger {
             );
         }
 
-        let ssa_outputs = vec![SSAOutput::Stack(B256::from(output).into())];
+        let ssa_outputs = smallvec![SSAOutput::Stack(B256::from(output).into())];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
     #[inline]
     pub fn log_call_data_load(&mut self, opcode: u8, offset: usize, data: Bytes) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(offset),
                 source: self.pop_stack_def().unwrap(),
@@ -597,7 +595,7 @@ impl SSALogger {
             word[..length].copy_from_slice(&data[offset..offset+length]);
         }
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(B256::from_slice(&word).into())
         ];
 
@@ -608,10 +606,10 @@ impl SSALogger {
     #[inline]
     // ! IN SSA, this function is simple!
     pub fn log_gas(&mut self, opcode: u8, gas: u64) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Constant(U256::from(gas))
         ];
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(U256::from(gas))
         ];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
@@ -620,7 +618,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_keccak256(&mut self, opcode: u8, offset: usize, len: usize, data: &[u8], mem_deps: Vec<MemoryDep>, mem_length: Option<usize>) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack {
                 value: U256::from(offset),
                 source: self.pop_stack_def().unwrap(),
@@ -636,7 +634,7 @@ impl SSALogger {
         ];
 
         let hash = revm_primitives::keccak256(data);
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::Stack(hash.into())
         ];
 
@@ -660,7 +658,7 @@ impl SSALogger {
         target: Address, 
         mem_length: Option<usize>) {
         // inputs
-        let mut ssa_inputs = vec![
+        let mut ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: value,
                 source: self.pop_stack_def().unwrap(),
@@ -706,7 +704,7 @@ impl SSALogger {
             target: Address::ZERO,
         };
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::CreateFrame(ssa_create_input)
         ];
 
@@ -730,7 +728,7 @@ impl SSALogger {
         let lsn = self.current_lsn;
         self.entry_lsn.push(lsn);
         let caller = create_input.caller;
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::CreateInput { 
                 input: create_input.clone(), 
                 entry: if lsn == 1 { None } else { Some(lsn - 1) }
@@ -753,7 +751,7 @@ impl SSALogger {
         // inc nonce
         let new_nonce = caller_nonce + 1;
         create_input.target = created_address;
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::CreateFrame(create_input.clone()),
             SSAOutput::Storage {
                 key: StorageKey::Nonce(caller),
@@ -772,7 +770,7 @@ impl SSALogger {
         let opcode = InternalOp::CREATE_RETURN;
         let create_input = self.create_inputs.pop().unwrap();
         let address = create_input.target;
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::InterpreterResult { 
                 result: result.clone(),
                 source: self.last_interpreter_return
@@ -790,7 +788,7 @@ impl SSALogger {
             address: Some(address),
         };
 
-        let mut ssa_outputs = vec![];
+        let mut ssa_outputs = smallvec![];
         if !instruction_result.is_ok() {
             create_outcome.address = None;
             ssa_outputs.push(SSAOutput::CreateOutcome(create_outcome));
@@ -842,14 +840,14 @@ impl SSALogger {
             Bytes::new()
         };
 
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::CreateOutcome { 
                 outcome: create_outcome, 
                 source: Some(lsn - 1)
             },
         ];
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::ReturnDataBuffer(return_data_buffer.clone()),
         ];
         match instruction_result {
@@ -858,8 +856,8 @@ impl SSALogger {
                 ssa_outputs.push(SSAOutput::Stack(address.into_word().into()));
             }
             SSAInstructionResult::Revert => {
-                ssa_outputs.push(SSAOutput::Stack(U256::ZERO.into()));
-            }
+               ssa_outputs.push(SSAOutput::Stack(U256::ZERO.into()));
+            },
             SSAInstructionResult::Error => {
                 panic!("Error in insert_create_outcome");
             }
@@ -884,7 +882,7 @@ impl SSALogger {
         mem_deps: Vec<MemoryDep>, 
         target_address: Address,
         mem_length: Option<usize>) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: U256::from(local_gas_limit), 
                 source: self.pop_stack_def().unwrap() 
@@ -938,7 +936,7 @@ impl SSALogger {
             code: None
         };
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::CallFrame(ssa_call_input)
         ];
         if let Some(mem_length) = mem_length {
@@ -963,7 +961,7 @@ impl SSALogger {
         mem_deps: Vec<MemoryDep>, 
         target_address: Address,
         mem_length: Option<usize>) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: U256::from(local_gas_limit), 
                 source: self.pop_stack_def().unwrap() 
@@ -1016,7 +1014,7 @@ impl SSALogger {
             code: None
         };
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::CallFrame(ssa_call_input)
         ];
         if let Some(mem_length) = mem_length {
@@ -1043,7 +1041,7 @@ impl SSALogger {
         mem_length: Option<usize>,
         contract_caller: Address,
         contract_target: Address) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: U256::from(local_gas_limit), 
                 source: self.pop_stack_def().unwrap() 
@@ -1101,7 +1099,7 @@ impl SSALogger {
             code: None
         };
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::CallFrame(ssa_call_input)
         ];
         if let Some(mem_length) = mem_length {
@@ -1126,7 +1124,7 @@ impl SSALogger {
         mem_deps: Vec<MemoryDep>, 
         mem_length: Option<usize>,
         contract_target: Address ) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: U256::from(local_gas_limit), 
                 source: self.pop_stack_def().unwrap() 
@@ -1176,7 +1174,7 @@ impl SSALogger {
             code: None
         };
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::CallFrame(ssa_call_input)
         ];
         if let Some(mem_length) = mem_length {
@@ -1203,7 +1201,7 @@ impl SSALogger {
         let caller = call_input.caller;
         let target_address = call_input.target_address;
         
-        let mut ssa_inputs = vec![
+        let mut ssa_inputs = smallvec![
             SSAInput::CallInput {
                 input: call_input.clone(),
                 entry: if lsn == 1 {None} else {Some(lsn - 1)}
@@ -1219,7 +1217,7 @@ impl SSALogger {
         let mut new_call_input = call_input.clone();
         new_call_input.code = Some(code);
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
              SSAOutput::CallFrame(new_call_input)
         ];
 
@@ -1267,7 +1265,7 @@ impl SSALogger {
         let call_input = self.call_inputs.pop().unwrap();
         let ret_range = call_input.ret_range.clone();
 
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::InterpreterResult {
                 result: interpreter_result.clone(),
                 source: self.last_interpreter_return,
@@ -1279,7 +1277,7 @@ impl SSALogger {
         ];
         self.entry_lsn.pop();
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::CallOutcome(SSACallOutcome{
                 result: interpreter_result.clone(),
                 ret_range: ret_range,
@@ -1296,14 +1294,14 @@ impl SSALogger {
         let out_result = call_outcome.result.result;
         let return_data_buffer = call_outcome.result.output.clone();
 
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::CallOutcome { 
                 outcome: call_outcome, 
                 source: Some(lsn - 1)
             }
         ];
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::ReturnDataBuffer(return_data_buffer.clone()),
         ];
 
@@ -1333,7 +1331,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_balance_operation(&mut self, opcode: u8, address: Address, value: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: address.into_word().into(), 
                 source: self.pop_stack_def().unwrap() 
@@ -1346,7 +1344,7 @@ impl SSALogger {
         ];
         
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(
                 value
             )
@@ -1359,7 +1357,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_self_balance(&mut self, opcode: u8, address: Address, value: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::ContractEntry { 
                 value: ContractEnv::Caller(address), 
                 entry_lsn: self.get_entry_lsn() 
@@ -1371,7 +1369,7 @@ impl SSALogger {
             }
         ];
         
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(value),
         ];
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
@@ -1381,7 +1379,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_codesize(&mut self, opcode: u8, address: Address, len: usize) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: address.into_word().into(), 
                 source: self.pop_stack_def().unwrap() 
@@ -1393,7 +1391,7 @@ impl SSALogger {
             }
         ];
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(U256::from(len))
         ];
 
@@ -1405,7 +1403,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_codehash(&mut self, opcode: u8, address: Address, code_hash: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: address.into_word().into(), 
                 source: self.pop_stack_def().unwrap() 
@@ -1417,7 +1415,7 @@ impl SSALogger {
             }
         ];
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(code_hash)
         ];
 
@@ -1436,7 +1434,7 @@ impl SSALogger {
         code: Bytes,
         mem_length: Option<usize>
     ) -> usize {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: address.into_word().into(), 
                 source: self.pop_stack_def().unwrap() 
@@ -1465,7 +1463,7 @@ impl SSALogger {
         // pad code_slice to len
         let mut padded_code_slice = vec![0u8; len];
         padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
-        let mut ssa_outputs = vec![SSAOutput::Memory(padded_code_slice.into())];
+        let mut ssa_outputs = smallvec![SSAOutput::Memory(padded_code_slice.into())];
 
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -1479,14 +1477,14 @@ impl SSALogger {
 
     #[inline]
     pub fn log_blockhash_operation(&mut self, opcode: u8, number: u64, hash: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::Stack { 
                 value: U256::from(number), 
                 source: self.pop_stack_def().unwrap() 
             },
         ];
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(hash)
         ];
 
@@ -1496,7 +1494,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_sload(&mut self, opcode: u8, address: Address, index: U256, value: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::ContractEntry { 
                 value: ContractEnv::Target(address), 
                 entry_lsn: self.get_entry_lsn() 
@@ -1512,7 +1510,7 @@ impl SSALogger {
             }
         ];
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Stack(value)
         ];
        
@@ -1523,7 +1521,7 @@ impl SSALogger {
 
     #[inline]
     pub fn log_sstore(&mut self, opcode: u8, address: Address, index: U256, value: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::ContractEntry { 
                 value: ContractEnv::Target(address), 
                 entry_lsn: self.get_entry_lsn() 
@@ -1538,7 +1536,7 @@ impl SSALogger {
             }
         ];
 
-        let ssa_outputs = vec![ 
+        let ssa_outputs = smallvec![ 
             SSAOutput::Storage { 
                 key: StorageKey::Slot(address, index), 
                 value: StorageValue::Slot(value), 
@@ -1560,7 +1558,7 @@ impl SSALogger {
         log: Log,
         mem_length: Option<usize>) 
     {    
-        let mut ssa_inputs = vec![
+        let mut ssa_inputs = smallvec![
             SSAInput::ContractEntry { 
                 value: ContractEnv::Target(address), 
                 entry_lsn: self.get_entry_lsn(), 
@@ -1588,7 +1586,7 @@ impl SSALogger {
             );
         }
 
-        let mut ssa_outputs = vec![
+        let mut ssa_outputs = smallvec![
             SSAOutput::Log(log)
         ];
 
@@ -1605,7 +1603,7 @@ impl SSALogger {
     // TODO: we simplify the selfdestruct logic
     #[inline]
     pub fn log_selfdestruct(&mut self, opcode: u8, caller: Address, caller_balance: U256, target: Address, target_balance: U256) {
-        let ssa_inputs = vec![
+        let ssa_inputs = smallvec![
             SSAInput::ContractEntry { 
                 value: ContractEnv::Caller(caller), 
                 entry_lsn: self.get_entry_lsn() 
@@ -1629,7 +1627,7 @@ impl SSALogger {
         let new_caller_balance = caller_balance.saturating_add(target_balance);
         let new_target_balance = U256::ZERO;
 
-        let ssa_outputs = vec![
+        let ssa_outputs = smallvec![
             SSAOutput::Storage { 
                 key: StorageKey::Balance(caller),
                 value: StorageValue::Balance(new_caller_balance)
@@ -1719,23 +1717,16 @@ impl SSALogger {
     }
 
     #[inline]
-    fn parse_result_to_words(result: &[u8]) -> Vec<SSAValue> {
+    fn parse_result_to_words(result: &[u8]) -> U256 {
         if result.is_empty() {
-            return Vec::new();
+            return U256::ZERO;
         }
-    
-        // Convert bytes to U256 and wrap in SSAValue::Unsigned
-        let mut words = Vec::new();
-        let mut i = 0;
-        while i < result.len() {
-            let mut word = [0u8; 32];
-            let remaining = result.len() - i;
-            let copy_size = std::cmp::min(32, remaining);
-            word[32-copy_size..].copy_from_slice(&result[i..i+copy_size]);
-            words.push(SSAValue::U256(U256::from_be_bytes(word)));
-            i += 32;
-        }
-        words
+
+        assert!(result.len() <= 32, "Result length exceeds U256 size");
+
+        let mut word = [0u8; 32];
+        word[32-result.len()..].copy_from_slice(result);
+        U256::from_be_bytes(word)
     }
 
     /// Get the read and write sets of storage accesses

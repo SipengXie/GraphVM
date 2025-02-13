@@ -1,4 +1,5 @@
 use revm_primitives::{Address, Bytes, Log, U256};
+use smallvec::SmallVec;
 use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -294,8 +295,8 @@ pub enum SSAOutput {
 pub struct SSALogEntry {
     pub lsn: usize,
     pub opcode: u8,
-    pub inputs: Vec<SSAInput>,
-    pub outputs: Vec<SSAOutput>,
+    pub inputs: SmallVec<[SSAInput; 8]>,
+    pub outputs: SmallVec<[SSAOutput; 3]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
