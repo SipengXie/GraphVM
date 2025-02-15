@@ -340,7 +340,8 @@ impl Occda {
                             }
                         } else {
                             let mut read_write_set = evm.get_read_write_set();
-                            read_write_set.add_write(task.env.tx.caller, AccessType::AccountInfo);
+                            read_write_set.add_write(task.env.tx.caller, AccessType::Balance);
+                            read_write_set.add_write(task.env.tx.caller, AccessType::Nonce);
                             task_result.read_write_set = Some(read_write_set);
                         }
 
@@ -614,7 +615,8 @@ impl Occda {
                         }
                     } else {
                         let mut read_write_set = evm.get_read_write_set();
-                        read_write_set.add_write(task.env.tx.caller, AccessType::AccountInfo);
+                        read_write_set.add_write(task.env.tx.caller, AccessType::Balance);
+                        read_write_set.add_write(task.env.tx.caller, AccessType::Nonce);
                         task_result.read_write_set = Some(read_write_set);
                     }
                     drop(evm);

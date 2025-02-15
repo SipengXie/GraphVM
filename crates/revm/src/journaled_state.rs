@@ -14,7 +14,9 @@ use std::vec::Vec;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccessType {
-    AccountInfo,
+    Balance,
+    Nonce,
+    Code,
     AccountStatus,
     StorageSlot(U256),
     TransientSlot(U256),
@@ -229,7 +231,7 @@ impl JournaledState {
     /// Note: Assume account is warm and that hash is calculated from code.
     #[inline]
     pub fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
+        self.read_write_set.add_write(address, AccessType::Code);
         let account = self.state.get_mut(&address).unwrap();
         Self::touch_account(self.journal.last_mut().unwrap(), &address, account);
 
@@ -252,7 +254,7 @@ impl JournaledState {
 
     #[inline]
     pub fn inc_nonce(&mut self, address: Address) -> Option<u64> {
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
+        self.read_write_set.add_write(address, AccessType::Nonce);
         let account = self.state.get_mut(&address).unwrap();
         // Check if nonce is going to overflow.
         if account.info.nonce == u64::MAX {
@@ -278,8 +280,8 @@ impl JournaledState {
         balance: U256,
         db: &mut DB,
     ) -> Result<Option<InstructionResult>, EVMError<DB::Error>> {
-        self.read_write_set.add_write(*from, AccessType::AccountInfo);
-        self.read_write_set.add_write(*to, AccessType::AccountInfo);
+        self.read_write_set.add_write(*from, AccessType::Balance);
+        self.read_write_set.add_write(*to, AccessType::Balance);
         // load accounts
         self.load_account(*from, db)?;
         self.load_account(*to, db)?;
@@ -339,9 +341,10 @@ impl JournaledState {
         balance: U256,
         spec_id: SpecId,
     ) -> Result<JournalCheckpoint, InstructionResult> {
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
+        self.read_write_set.add_write(address, AccessType::Balance);
+        self.read_write_set.add_write(address, AccessType::Nonce);
         self.read_write_set.add_write(address, AccessType::AccountStatus);
-        self.read_write_set.add_write(caller, AccessType::AccountInfo);
+        self.read_write_set.add_write(caller, AccessType::Balance);
         // Enter subroutine
         let checkpoint = self.checkpoint();
 
@@ -567,8 +570,8 @@ impl JournaledState {
         db: &mut DB,
     ) -> Result<StateLoad<SelfDestructResult>, EVMError<DB::Error>> {
         // Track the write access
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
-        self.read_write_set.add_write(target, AccessType::AccountInfo);
+        self.read_write_set.add_write(address, AccessType::Balance);
+        self.read_write_set.add_write(target, AccessType::Balance);
         self.read_write_set.add_write(target, AccessType::AccountStatus);
 
         let spec = self.spec;
@@ -667,7 +670,9 @@ impl JournaledState {
         address: Address,
         db: &mut DB,
     ) -> Result<StateLoad<&mut Account>, EVMError<DB::Error>> {
-        self.read_write_set.add_read(address, AccessType::AccountInfo);
+        self.read_write_set.add_read(address, AccessType::Balance);
+        self.read_write_set.add_read(address, AccessType::Nonce);
+        self.read_write_set.add_read(address, AccessType::Code);
         self.read_write_set.add_read(address, AccessType::AccountStatus);
         let load = match self.state.entry(address) {
             Entry::Occupied(entry) => {
