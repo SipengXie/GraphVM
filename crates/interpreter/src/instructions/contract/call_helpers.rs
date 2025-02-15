@@ -29,7 +29,6 @@ pub fn get_memory_input_and_out_ranges_whether_new_allocation(
     interpreter: &mut Interpreter,
 ) -> Option<(Bytes, Range<usize>, Range<usize>, bool)> {
     pop_ret!(interpreter, in_offset, in_len, out_offset, out_len, None);
-
     let (in_range, in_resized) = resize_memory_whether_new_allocation(interpreter, in_offset, in_len)?;
 
     let mut input = Bytes::new();

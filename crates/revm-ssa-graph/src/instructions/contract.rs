@@ -157,7 +157,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         };
         
         let mut outputs = vec![SSAOutput::CallFrame(ssa_call_input)];
-        let new_size_1 = self.check_memory_size(in_offset, in_len);
+        let new_size_1 = if in_len == 0 {
+            0
+        } else {
+            self.check_memory_size(in_offset, in_len)
+        };
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
         if new_size > self.memory_size() {

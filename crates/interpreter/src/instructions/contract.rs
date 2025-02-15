@@ -1,6 +1,7 @@
 mod call_helpers;
 
 pub use call_helpers::{calc_call_gas, get_memory_input_and_out_ranges, resize_memory, get_memory_input_and_out_ranges_whether_new_allocation};
+use revm_primitives::hex::ToHex;
 
 use crate::{
     gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS}, interpreter::Interpreter, opcode::*, primitives::{
@@ -170,7 +171,7 @@ pub fn extcall_gas_calc<H: Host + ?Sized>(
     let call_cost = gas::call_cost(BerlinSpec::SPEC_ID, transfers_value, account_load);
     gas!(interpreter, call_cost, None);
 
-    // 7. Calculate the gas available to callee as caller’s
+    // 7. Calculate the gas available to callee as caller's
     // remaining gas reduced by max(ceil(gas/64), MIN_RETAINED_GAS) (MIN_RETAINED_GAS is 5000).
     let gas_reduce = max(interpreter.gas.remaining() / 64, 5000);
     let gas_limit = interpreter.gas().remaining().saturating_sub(gas_reduce);
