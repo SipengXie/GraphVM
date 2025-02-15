@@ -1,5 +1,5 @@
 use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::Spec;
 
@@ -45,12 +45,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let value = match &inputs[position - 1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let value = match_ssa_input_stack_or_const!(&inputs[position - 1], format!("Position {}", position).as_str());
 
         Ok(vec![SSAOutput::Stack(*value)])
     }
@@ -65,19 +60,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let top = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-
-        let swap = match &inputs[position] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                format!("Operand at position {} must be Stack value", position + 1).to_string()
-            )),
-        };
+        let top = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let swap = match_ssa_input_stack_or_const!(&inputs[position], format!("Position {}", position + 1).as_str());
 
         Ok(vec![
             SSAOutput::Stack(*swap),

@@ -1,6 +1,6 @@
 use revm_primitives::U256;
 use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 use super::utils::as_usize_saturated;
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::Spec;
@@ -27,12 +27,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let offset = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
+        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
 
         let memory = match &inputs[1] {
             SSAInput::Memory { value, .. } => value,
@@ -40,8 +35,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "Second operand must be Memory value".to_string()
             )),
         };
-        // eprintln!("offset: {:?}", offset);
-        // eprintln!("memory: {:?}", memory);
+
         // Convert 32 bytes of memory value to U256
         let mut value = [0u8; 32];
         let len = memory.len().min(32);
@@ -70,19 +64,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let offset = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-
-        let value = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         let offset = as_usize_saturated(*offset);
         let value_bytes = value.to_be_bytes::<32>();
@@ -108,19 +91,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let offset = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-
-        let value = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         let offset = as_usize_saturated(*offset);
         let value_bytes = vec![value.byte(0)];
@@ -165,26 +137,9 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let dst = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-
-        let src = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
-
-        let len = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Stack value".to_string()
-            )),
-        };
+        let dst = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let src = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
 
         let memory = match &inputs[3] {
             SSAInput::Memory { value, .. } => value,

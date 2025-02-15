@@ -9,7 +9,7 @@ use revm_ssa::{
     SSAInput, SSAInstructionResult, SSAOutput,
     StorageKey, StorageValue,
 };
-use crate::{ExecutionContext, ExecutionError, Result};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 
 use super::as_usize_saturated;
 
@@ -111,55 +111,19 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute call operation
     #[inline]
-
     pub fn execute_call(&mut self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 9 {
             return Err(ExecutionError::ExecutionError(
                 "CALL requires exactly 9 operands (gas, to, value, in_offset, in_len, out_offset, out_len, input)".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack".to_string()
-            )),
-        };
-        let to = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack".to_string()
-            )),
-        };
-        let value = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Stack".to_string()
-            )),
-        };
-        let in_offset = match &inputs[3] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Stack".to_string()
-            )),
-        };
-        let in_len = match &inputs[4] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fifth operand must be Stack".to_string()
-            )),
-        };
-        let out_offset = match &inputs[5] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Sixth operand must be Stack".to_string()
-            )),
-        };
-        let out_len = match &inputs[6] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Seventh operand must be Stack".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let in_offset = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
+        let in_len = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
+        let out_offset = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
+        let out_len = match_ssa_input_stack_or_const!(&inputs[6], "Seventh");
         let input = match &inputs[7] {
             SSAInput::Memory { value, .. } => value,
             _ => return Err(ExecutionError::ExecutionError(
@@ -353,24 +317,9 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "CREATE requires at least 5 operands (value, code_offset, len, code, caller)".to_string()
             ));
         }
-        let value = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack".to_string()
-            )),
-        };
-        let code_offset = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack".to_string()
-            )),
-        };
-        let len = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Stack".to_string()
-            )),
-        };
+        let value = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let code_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
         let code = match &inputs[3] {
             SSAInput::Memory { value, .. } => value,
             _ => return Err(ExecutionError::ExecutionError(
@@ -384,12 +333,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             )),
         };
         let salt = if inputs.len() == 6 {
-            Some(match &inputs[5] {
-                SSAInput::Stack { value, .. } => value,
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Sixth operand must be Stack".to_string()
-                )),
-            })
+            Some(match_ssa_input_stack_or_const!(&inputs[5], "Sixth"))
         } else {
             None
         };
@@ -583,48 +527,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "CALLCODE requires exactly 9 operands (gas, to, value, in_offset, in_len, out_offset, out_len, input)".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack".to_string()
-            )),
-        };
-        let to = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack".to_string()
-            )),
-        };
-        let value = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Stack".to_string()
-            )),
-        };
-        let in_offset = match &inputs[3] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Stack".to_string()
-            )),
-        };
-        let in_len = match &inputs[4] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fifth operand must be Stack".to_string()
-            )),
-        };
-        let out_offset = match &inputs[5] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Sixth operand must be Stack".to_string()
-            )),
-        };
-        let out_len = match &inputs[6] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Seventh operand must be Stack".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let in_offset = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
+        let in_len = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
+        let out_offset = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
+        let out_len = match_ssa_input_stack_or_const!(&inputs[6], "Seventh");
         let input = match &inputs[7] {
             SSAInput::Memory { value, .. } => value,
             _ => return Err(ExecutionError::ExecutionError(
@@ -677,48 +586,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "DELEGATECALL requires exactly 10 operands (gas, to, in_offset, in_len, out_offset, out_len, input, value, caller, target)".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack".to_string()
-            )),
-        };
-        let to = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack".to_string()
-            )),
-        };
-        let value = match &inputs[2] {
-            SSAInput::ContractEntry { value, .. } => value.as_call_value().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be ContractEntry".to_string()
-            )),
-        };
-        let in_offset = match &inputs[3] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Stack".to_string()
-            )),
-        };
-        let in_len = match &inputs[4] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fifth operand must be Stack".to_string()
-            )),
-        };
-        let out_offset = match &inputs[5] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Sixth operand must be Stack".to_string()
-            )),
-        };
-        let out_len = match &inputs[6] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Seventh operand must be Stack".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let in_offset = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
+        let in_len = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
+        let out_offset = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
+        let out_len = match_ssa_input_stack_or_const!(&inputs[6], "Seventh");
         let input = match &inputs[7] {
             SSAInput::Memory { value, .. } => value,
             _ => return Err(ExecutionError::ExecutionError(
@@ -746,7 +619,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             target_address: target,
             bytecode_address: Address::from_word(B256::from(*to)),
             caller: caller,
-            value: value,
+            value: match &inputs[2] {
+                SSAInput::ContractEntry { value, .. } => value.as_call_value().unwrap(),
+                _ => return Err(ExecutionError::ExecutionError(
+                    "Third operand must be ContractEntry".to_string()
+                )),
+            },
             scheme: match opcode {
                 0xF4 => SSACallScheme::DelegateCall,
                 _ => return Err(ExecutionError::ExecutionError(
@@ -777,42 +655,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "STATICCALL requires exactly 8 operands (gas, to, in_offset, in_len, out_offset, out_len, input, target)".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack".to_string()
-            )),
-        };
-        let to = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack".to_string()
-            )),
-        };
-        let in_offset = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Stack".to_string()
-            )),
-        };
-        let in_len = match &inputs[3] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Stack".to_string()
-            )),
-        };
-        let out_offset = match &inputs[4] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fifth operand must be Stack".to_string()
-            )),
-        };
-        let out_len = match &inputs[5] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Sixth operand must be Stack".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let in_offset = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let in_len = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
+        let out_offset = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
+        let out_len = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
         let input = match &inputs[6] {
             SSAInput::Memory { value, .. } => value,
             _ => return Err(ExecutionError::ExecutionError(

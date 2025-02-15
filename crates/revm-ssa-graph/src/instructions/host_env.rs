@@ -1,8 +1,7 @@
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{Spec, U256};
 use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result};
-
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 
 use super::as_usize_saturated;
 
@@ -60,12 +59,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 format!("opcode 0x{:x} requires 1 operand", opcode)
             ));
         }
-        let index = match inputs[0] {   
-            SSAInput::Stack { value, .. } => as_usize_saturated(value),
-            _ => return Err(ExecutionError::ExecutionError(
-                format!("opcode 0x{:x} requires 1 operand", opcode)
-            )),
-        };
+        let value = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let index = as_usize_saturated(*value);
         let tx = &self.env().tx;
         let value = match tx.blob_hashes.get(index) {
             Some(hash) => U256::from_be_bytes(hash.0),

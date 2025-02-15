@@ -21,6 +21,20 @@ pub fn as_u64_saturated(value: U256) -> u64 {
     }
 }
 
+/// Macro for matching SSAInput to extract value, supporting both Stack and Constant variants
+#[macro_export]
+macro_rules! match_ssa_input_stack_or_const {
+    ($input:expr, $ordinal:expr) => {
+        match $input {
+            SSAInput::Stack { value, .. } => value,
+            SSAInput::Constant(value) => value,
+            _ => return Err(ExecutionError::ExecutionError(
+                format!("{} operand must be Stack or Constant value", $ordinal)
+            )),
+        }
+    };
+}
+
 // /// Pad memory data to multiples of 32 bytes, if data length is less than 32 bytes, left pad with zeros to 32 bytes
 // pub fn pad_memory_to_word(data: Bytes) -> Bytes {
 //     let len = data.len();

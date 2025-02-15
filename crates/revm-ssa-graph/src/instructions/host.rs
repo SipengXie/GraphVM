@@ -8,7 +8,7 @@ use revm_ssa::{
     SSAInput, SSAOutput, StorageKey, StorageValue,
     SSAInstructionResult, SSAInterpreterResult
 };
-use crate::{ExecutionContext, ExecutionError, Result};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 
 use super::{as_u64_saturated, as_usize_saturated};
 
@@ -48,19 +48,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             )),
         };
 
-        let index = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
-
-        let value = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let index = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
 
         Ok(vec![SSAOutput::Storage {
             key: StorageKey::Slot(address, *index),
@@ -76,12 +65,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "BALANCE requires exactly 1 operand".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
         let balance = match &inputs[1] {
             SSAInput::Storage {value, .. } => value.as_balance().unwrap(),
             _ => return Err(ExecutionError::ExecutionError(
@@ -123,12 +107,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "EXTCODESIZE requires exactly 1 operand".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
         let code_size = match &inputs[1] {
             SSAInput::Storage {value, .. } => value.as_code_size().unwrap(),
             _ => return Err(ExecutionError::ExecutionError(
@@ -146,12 +125,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "EXTCODEHASH requires exactly 1 operand".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
         let code_hash = match &inputs[1] {
             SSAInput::Storage {value, .. } => value.as_code_hash().unwrap(),
             _ => return Err(ExecutionError::ExecutionError(
@@ -169,30 +143,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "CODECOPY requires exactly 4 operands".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
-        let mem_offset = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
-        let code_offset = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
-        let len = match &inputs[3] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let mem_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let code_offset = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let len = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
         let code = match &inputs[4] {
             SSAInput::Storage {value, .. } => value.as_code().unwrap(),
             _ => return Err(ExecutionError::ExecutionError(
@@ -226,12 +180,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let number = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let number = match_ssa_input_stack_or_const!(&inputs[0], "First");
         let number = as_u64_saturated(*number);
         let blockhash = self.get_blockhash(number);
         Ok(vec![SSAOutput::Stack(blockhash)])
@@ -251,18 +200,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "Operand must be ContractEntry".to_string()
             )),
         };
-        let _ = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
-        let _ = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let _ = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let _ = match_ssa_input_stack_or_const!(&inputs[2], "Third");
 
         let memory = match &inputs[3] {
             SSAInput::Memory { value, .. } => value,
@@ -273,12 +212,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         let mut topics: Vec<FixedBytes<32>> = vec![];
         for i in 4..inputs.len() {
-            let topic = match &inputs[i] {
-                SSAInput::Stack { value, .. } => value,
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Operand must be Stack value".to_string()
-                )),
-            };
+            let topic = match_ssa_input_stack_or_const!(&inputs[i], format!("Topic {}", i-3).as_str());
             topics.push(topic.to_be_bytes::<32>().into());
         }
 
@@ -310,12 +244,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "Operand must be Storage value".to_string()
             )),
         };
-        let target = match &inputs[2] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let target = match_ssa_input_stack_or_const!(&inputs[2], "Third");
         let target_balance = match &inputs[3] {
             SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
             _ => return Err(ExecutionError::ExecutionError(
@@ -325,7 +254,6 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         let new_caller_balance = caller_balance.saturating_add(target_balance);
         let new_target_balance = U256::ZERO;
-
 
         Ok(vec![SSAOutput::Storage { 
             key: StorageKey::Balance(caller),
@@ -340,6 +268,5 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             output: Bytes::default(),
         })] )
     }
-
 }
 

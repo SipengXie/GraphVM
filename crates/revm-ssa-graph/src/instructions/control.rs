@@ -4,7 +4,7 @@ use revm_ssa::{
     SSAInput, SSAOutput,
     SSAInstructionResult, SSAInterpreterResult,
 };
-use crate::{ExecutionContext, ExecutionError, Result};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute JUMP operation
@@ -16,17 +16,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let target = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let target = match_ssa_input_stack_or_const!(&inputs[0], "First");
 
         let current_pc = match &inputs[1] {
             SSAInput::Constant(value) => value,
             _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Constant value".to_string()
+                "Second operand must be Constant value".to_string()
             )),
         };
         // Calculate relative offset
@@ -47,19 +42,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let target = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-
-        let condition = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let target = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let condition = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         let current_pc = match &inputs[2] {
             SSAInput::Constant(value) => value,
@@ -112,19 +96,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let offset = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-
-        let length = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let length = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         let output = match &inputs[2] {
             SSAInput::Memory { value, .. } => value.clone(),
@@ -168,5 +141,4 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             })
         ])
     }
-
 }

@@ -3,7 +3,7 @@ use revm_primitives::db::DatabaseRef;
 use super::i256::i256_cmp;
 use revm_primitives::{Spec, U256};
 use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
 use super::utils::as_usize_saturated;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
@@ -16,18 +16,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(U256::from(a < b))])
     }
@@ -41,18 +31,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(U256::from(a > b))])
     }
@@ -66,18 +46,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(U256::from(i256_cmp(a, b) == Ordering::Less))])
     }
@@ -91,18 +61,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(U256::from(i256_cmp(a, b) == Ordering::Greater))])
     }
@@ -116,18 +76,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(U256::from(a == b))])
     }
@@ -141,12 +91,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "");
 
         Ok(vec![SSAOutput::Stack(U256::from(a.is_zero()))])
     }
@@ -160,18 +105,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(a & b)])
     }
@@ -185,18 +120,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(a | b)])
     }
@@ -210,18 +135,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let b = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(a ^ b)])
     }
@@ -235,12 +150,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let a = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
+        let a = match_ssa_input_stack_or_const!(&inputs[0], "");
 
         Ok(vec![SSAOutput::Stack(!a)])
     }
@@ -254,18 +164,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let index = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be Stack value".to_string()
-            )),
-        };
-        let word = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Stack value".to_string()
-            )),
-        };
+        let index = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let word = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         let index = as_usize_saturated(*index);
         let result = if index < 32 {
@@ -286,18 +186,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let shift = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand (shift) must be Stack value".to_string()
-            )),
-        };
-        let value = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand (value) must be Stack value".to_string()
-            )),
-        };
+        let shift = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         if *shift >= U256::from(256) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -316,18 +206,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
 
-        let shift = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand (shift) must be Stack value".to_string()
-            )),
-        };
-        let value = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand (value) must be Stack value".to_string()
-            )),
-        };
+        let shift = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
 
         if *shift >= U256::from(256) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -346,18 +226,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
     
-        let shift = match &inputs[0] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand (shift) must be Stack value".to_string()
-            )),
-        };
-        let value = match &inputs[1] {
-            SSAInput::Stack { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand (value) must be Stack value".to_string()
-            )),
-        };
+        let shift = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
     
         let shift_amount = as_usize_saturated(*shift);
         let result = if shift_amount < 256 {
