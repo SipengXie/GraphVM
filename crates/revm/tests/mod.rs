@@ -2188,15 +2188,14 @@ mod erc20_tests {
 
     #[test]
     fn test_push_and_log_entry_size() {
-        use smallvec::SmallVec;
         let start = Instant::now();
         let mut log_entry = vec![];
         for _ in 0..1400000 {
             log_entry.push(SSALogEntry{
                 lsn:0,
                 opcode:0,
-                inputs: SmallVec::new(),
-                outputs: SmallVec::new(),
+                inputs: Vec::new(),
+                outputs: Vec::new(),
             });
         }
         let duration = start.elapsed();

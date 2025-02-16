@@ -295,8 +295,8 @@ pub enum SSAOutput {
 pub struct SSALogEntry {
     pub lsn: usize,
     pub opcode: u8,
-    pub inputs: SmallVec<[SSAInput; 2]>,
-    pub outputs: SmallVec<[SSAOutput; 1]>,
+    pub inputs: Vec<SSAInput>,
+    pub outputs: Vec<SSAOutput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
