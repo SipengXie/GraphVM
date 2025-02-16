@@ -112,7 +112,7 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_operation(&mut self, opcode: u8, inputs: SmallVec<[SSAInput; 8]>, outputs: SmallVec<[SSAOutput; 3]>) -> usize {
+    pub fn log_operation(&mut self, opcode: u8, inputs: SmallVec<[SSAInput; 2]>, outputs: SmallVec<[SSAOutput; 1]>) -> usize {
         let entry = SSALogEntry {
             lsn: self.current_lsn,
             opcode,
@@ -130,14 +130,14 @@ impl SSALogger {
     pub fn log_deduct_caller(&mut self, caller: Address, origin_balance: U256, origin_nonce: u64, pre_deduct: U256) {
         let ssa_inputs = smallvec![
             SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn() },
-            SSAInput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance), source: self.get_storage_def(StorageKey::Balance(caller))  },
-            SSAInput::Storage { key: StorageKey::Nonce(caller), value: StorageValue::Nonce(origin_nonce), source: self.get_storage_def(StorageKey::Nonce(caller))  },
+            SSAInput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance)), source: self.get_storage_def(StorageKey::Balance(caller))  },
+            SSAInput::Storage { key: Box::new(StorageKey::Nonce(caller)), value: Box::new(StorageValue::Nonce(origin_nonce)), source: self.get_storage_def(StorageKey::Nonce(caller))  },
             SSAInput::Constant(pre_deduct),
         ];
 
         let ssa_outputs = smallvec![
-            SSAOutput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance - pre_deduct) },
-            SSAOutput::Storage { key: StorageKey::Nonce(caller), value: StorageValue::Nonce(origin_nonce + 1) },
+            SSAOutput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance - pre_deduct)) },
+            SSAOutput::Storage { key: Box::new(StorageKey::Nonce(caller)), value: Box::new(StorageValue::Nonce(origin_nonce + 1)) },
         ];
 
         let lsn = self.log_operation(0xDA, ssa_inputs, ssa_outputs);
@@ -151,11 +151,11 @@ impl SSALogger {
     pub fn log_refund_gas(&mut self, caller: Address, origin_balance: U256, refund_gas : U256) {
         let ssa_inputs = smallvec![
             SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn()  },
-            SSAInput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance), source: self.get_storage_def(StorageKey::Balance(caller))  },
+            SSAInput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance)), source: self.get_storage_def(StorageKey::Balance(caller))  },
             SSAInput::Constant(refund_gas)
         ];
         let ssa_outputs = smallvec![
-            SSAOutput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(origin_balance + refund_gas)},
+            SSAOutput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance + refund_gas))},
         ];
         let lsn = self.log_operation(0xDB, ssa_inputs, ssa_outputs);
         self.log_storage_read(StorageKey::Balance(caller), lsn);
@@ -633,7 +633,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = smallvec![
-            SSAOutput::CreateFrame(ssa_create_input)
+            SSAOutput::CreateFrame(Box::new(ssa_create_input))
         ];
 
         if let Some(mem_length) = mem_length {
@@ -658,12 +658,12 @@ impl SSALogger {
         let caller = create_input.caller;
         let ssa_inputs = smallvec![
             SSAInput::CreateInput { 
-                input: create_input.clone(), 
+                input: Box::new(create_input.clone()), 
                 entry: if lsn == 1 { None } else { Some(lsn - 1) }
             },
             SSAInput::Storage {
-                key: StorageKey::Nonce(caller),
-                value: StorageValue::Nonce(caller_nonce),
+                key: Box::new(StorageKey::Nonce(caller)),
+                value: Box::new(StorageValue::Nonce(caller_nonce)),
                 source: self.get_storage_def(StorageKey::Nonce(caller)),
             },
         ];
@@ -680,10 +680,10 @@ impl SSALogger {
         let new_nonce = caller_nonce + 1;
         create_input.target = created_address;
         let ssa_outputs = smallvec![
-            SSAOutput::CreateFrame(create_input.clone()),
+            SSAOutput::CreateFrame(Box::new(create_input.clone())),
             SSAOutput::Storage {
-                key: StorageKey::Nonce(caller),
-                value: StorageValue::Nonce(new_nonce),
+                key: Box::new(StorageKey::Nonce(caller)),
+                value: Box::new(StorageValue::Nonce(new_nonce)),
             }
         ];
 
@@ -704,7 +704,7 @@ impl SSALogger {
                 source: self.last_interpreter_return
             },
             SSAInput::CreateInput { 
-                input: create_input,
+                input: Box::new(create_input),
                 entry: self.get_entry_lsn() 
             },
         ];
@@ -719,7 +719,7 @@ impl SSALogger {
         let mut ssa_outputs = smallvec![];
         if !instruction_result.is_ok() {
             create_outcome.address = None;
-            ssa_outputs.push(SSAOutput::CreateOutcome(create_outcome));
+            ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
             self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
             return;
         }
@@ -727,7 +727,7 @@ impl SSALogger {
         if SPEC::enabled(LONDON) && result.output.first() == Some(&0xEF) {
             create_outcome.address = None;
             create_outcome.result.result = SSAInstructionResult::Error;
-            ssa_outputs.push(SSAOutput::CreateOutcome(create_outcome));
+            ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
             self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
             return;
         }
@@ -739,7 +739,7 @@ impl SSALogger {
         {
             create_outcome.address = None;
             create_outcome.result.result = SSAInstructionResult::Error;
-            ssa_outputs.push(SSAOutput::CreateOutcome(create_outcome));
+            ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
             self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
             return;
         }
@@ -747,10 +747,10 @@ impl SSALogger {
         // TODO: gas_meters
 
         // return
-        ssa_outputs.push(SSAOutput::CreateOutcome(create_outcome));
+        ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
         ssa_outputs.push(SSAOutput::Storage { 
-            key: StorageKey::Code(address), 
-            value: StorageValue::Code(result.output.clone()) 
+            key: Box::new(StorageKey::Code(address)), 
+            value: Box::new(StorageValue::Code(result.output.clone())) 
         });
         let lsn = self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
         self.log_storage_write(StorageKey::Code(address), lsn);
@@ -770,7 +770,7 @@ impl SSALogger {
 
         let ssa_inputs = smallvec![
             SSAInput::CreateOutcome { 
-                outcome: create_outcome, 
+                outcome: Box::new(create_outcome), 
                 source: Some(lsn - 1)
             },
         ];
@@ -844,7 +844,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = smallvec![
-            SSAOutput::CallFrame(ssa_call_input)
+            SSAOutput::CallFrame(Box::new(ssa_call_input))
         ];
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(
@@ -901,7 +901,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = smallvec![
-            SSAOutput::CallFrame(ssa_call_input)
+            SSAOutput::CallFrame(Box::new(ssa_call_input))
         ];
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(
@@ -968,7 +968,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = smallvec![
-            SSAOutput::CallFrame(ssa_call_input)
+            SSAOutput::CallFrame(Box::new(ssa_call_input))
         ];
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(
@@ -1025,7 +1025,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = smallvec![
-            SSAOutput::CallFrame(ssa_call_input)
+            SSAOutput::CallFrame(Box::new(ssa_call_input))
         ];
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(
@@ -1053,12 +1053,12 @@ impl SSALogger {
         
         let mut ssa_inputs = smallvec![
             SSAInput::CallInput {
-                input: call_input.clone(),
+                input: Box::new(call_input.clone()),
                 entry: if lsn == 1 {None} else {Some(lsn - 1)}
             },
             SSAInput::Storage { 
-                key: StorageKey::Code(target_address), 
-                value: StorageValue::Code(code.clone()), 
+                key: Box::new(StorageKey::Code(target_address)), 
+                value: Box::new(StorageValue::Code(code.clone())), 
                 source: self.get_storage_def(StorageKey::Code(target_address)) 
             },
         ];
@@ -1068,22 +1068,22 @@ impl SSALogger {
         new_call_input.code = Some(code);
 
         let mut ssa_outputs = smallvec![
-             SSAOutput::CallFrame(new_call_input)
+             SSAOutput::CallFrame(Box::new(new_call_input))
         ];
 
         if !value.is_zero() {
             ssa_inputs.push(
                 SSAInput::Storage { 
-                    key: StorageKey::Balance(caller), 
-                    value: StorageValue::Balance(caller_balance.unwrap()), 
+                    key: Box::new(StorageKey::Balance(caller)), 
+                    value: Box::new(StorageValue::Balance(caller_balance.unwrap())), 
                     source: self.get_storage_def(StorageKey::Balance(caller)) 
                 }
             );
             self.log_storage_read(StorageKey::Balance(caller), lsn);
             ssa_inputs.push(
                 SSAInput::Storage { 
-                    key: StorageKey::Balance(target_address), 
-                    value: StorageValue::Balance(target_balance.unwrap()), 
+                    key: Box::new(StorageKey::Balance(target_address)), 
+                    value: Box::new(StorageValue::Balance(target_balance.unwrap())), 
                     source: self.get_storage_def(StorageKey::Balance(target_address))
                 }
             );
@@ -1092,14 +1092,14 @@ impl SSALogger {
       
             ssa_outputs.push(
                 SSAOutput::Storage { 
-                    key: StorageKey::Balance(caller), 
-                    value: StorageValue::Balance(new_caller_balance), 
+                    key: Box::new(StorageKey::Balance(caller)), 
+                    value: Box::new(StorageValue::Balance(new_caller_balance)), 
                 }
             );
             ssa_outputs.push(
                 SSAOutput::Storage { 
-                    key: StorageKey::Balance(target_address), 
-                    value: StorageValue::Balance(new_target_balance), 
+                    key: Box::new(StorageKey::Balance(target_address)), 
+                    value: Box::new(StorageValue::Balance(new_target_balance)), 
                 }
             );
             self.log_storage_write(StorageKey::Balance(caller), lsn);
@@ -1121,17 +1121,17 @@ impl SSALogger {
                 source: self.last_interpreter_return,
             },
             SSAInput::CallInput {
-                input: call_input,
+                input: Box::new(call_input),
                 entry: self.get_entry_lsn()
             }
         ];
         self.entry_lsn.pop();
 
         let ssa_outputs = smallvec![
-            SSAOutput::CallOutcome(SSACallOutcome{
+            SSAOutput::CallOutcome(Box::new(SSACallOutcome{
                 result: interpreter_result.clone(),
                 ret_range: ret_range,
-            })
+            }))
         ];
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
@@ -1146,7 +1146,7 @@ impl SSALogger {
 
         let ssa_inputs = smallvec![
             SSAInput::CallOutcome { 
-                outcome: call_outcome, 
+                outcome: Box::new(call_outcome), 
                 source: Some(lsn - 1)
             }
         ];
@@ -1184,8 +1184,8 @@ impl SSALogger {
         let ssa_inputs = smallvec![
             pop_stack_or_const!(self, address.into_word().into()),
             SSAInput::Storage { 
-                key: StorageKey::Balance(address), 
-                value: StorageValue::Balance(value), 
+                key: Box::new(StorageKey::Balance(address)), 
+                value: Box::new(StorageValue::Balance(value)), 
                 source: self.get_storage_def(StorageKey::Balance(address)) 
             }
         ];
@@ -1210,8 +1210,8 @@ impl SSALogger {
                 entry_lsn: self.get_entry_lsn() 
             },
             SSAInput::Storage { 
-                key: StorageKey::Balance(address), 
-                value: StorageValue::Balance(value), 
+                key: Box::new(StorageKey::Balance(address)), 
+                value: Box::new(StorageValue::Balance(value)), 
                 source: self.get_storage_def(StorageKey::Balance(address)) 
             }
         ];
@@ -1229,8 +1229,8 @@ impl SSALogger {
         let ssa_inputs = smallvec![
             pop_stack_or_const!(self, address.into_word().into()),
             SSAInput::Storage { 
-                key: StorageKey::CodeSize(address), 
-                value: StorageValue::CodeSize(len as u64), 
+                key: Box::new(StorageKey::CodeSize(address)), 
+                value: Box::new(StorageValue::CodeSize(len as u64)), 
                 source: self.get_storage_def(StorageKey::CodeSize(address)) 
             }
         ];
@@ -1250,8 +1250,8 @@ impl SSALogger {
         let ssa_inputs = smallvec![
             pop_stack_or_const!(self, address.into_word().into()),
             SSAInput::Storage { 
-                key: StorageKey::CodeHash(address), 
-                value: StorageValue::CodeHash(code_hash), 
+                key: Box::new(StorageKey::CodeHash(address)), 
+                value: Box::new(StorageValue::CodeHash(code_hash)), 
                 source: self.get_storage_def(StorageKey::CodeHash(address)) 
             }
         ];
@@ -1281,8 +1281,8 @@ impl SSALogger {
             pop_stack_or_const!(self, U256::from(code_offset)),
             pop_stack_or_const!(self, U256::from(len)),
             SSAInput::Storage { 
-                key: StorageKey::Code(address), 
-                value: StorageValue::Code(code.clone()), 
+                key: Box::new(StorageKey::Code(address)), 
+                value: Box::new(StorageValue::Code(code.clone())), 
                 source: self.get_storage_def(StorageKey::Code(address)) 
             }
         ];
@@ -1324,8 +1324,8 @@ impl SSALogger {
             SSAInput::ContractEntry { value: ContractEnv::Target(address), entry_lsn: self.get_entry_lsn() },
             pop_stack_or_const!(self, U256::from(index)),
             SSAInput::Storage { 
-                key: StorageKey::Slot(address, index), 
-                value: StorageValue::Slot(value), 
+                key: Box::new(StorageKey::Slot(address, index)), 
+                value: Box::new(StorageValue::Slot(value)), 
                 source: self.get_storage_def(StorageKey::Slot(address, index)) 
             }
         ];
@@ -1346,8 +1346,8 @@ impl SSALogger {
 
         let ssa_outputs = smallvec![ 
             SSAOutput::Storage { 
-                key: StorageKey::Slot(address, index), 
-                value: StorageValue::Slot(value), 
+                key: Box::new(StorageKey::Slot(address, index)), 
+                value: Box::new(StorageValue::Slot(value)), 
             }
         ];
 
@@ -1384,7 +1384,7 @@ impl SSALogger {
         }
 
         let mut ssa_outputs = smallvec![
-            SSAOutput::Log(log)
+            SSAOutput::Log(Box::new(log))
         ];
 
         if let Some(mem_length) = mem_length {
@@ -1400,9 +1400,9 @@ impl SSALogger {
     pub fn log_selfdestruct(&mut self, opcode: u8, caller: Address, caller_balance: U256, target: Address, target_balance: U256) {
         let ssa_inputs = smallvec![
             SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn() },
-            SSAInput::Storage { key: StorageKey::Balance(caller), value: StorageValue::Balance(caller_balance), source: self.get_storage_def(StorageKey::Balance(caller)) },
+            SSAInput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(caller_balance)), source: self.get_storage_def(StorageKey::Balance(caller)) },
             pop_stack_or_const!(self, target.into_word().into()),
-            SSAInput::Storage { key: StorageKey::Balance(target), value: StorageValue::Balance(target_balance), source: self.get_storage_def(StorageKey::Balance(target)) }
+            SSAInput::Storage { key: Box::new(StorageKey::Balance(target)), value: Box::new(StorageValue::Balance(target_balance)), source: self.get_storage_def(StorageKey::Balance(target)) }
         ];
         
         let new_caller_balance = caller_balance.saturating_add(target_balance);
@@ -1410,12 +1410,12 @@ impl SSALogger {
 
         let ssa_outputs = smallvec![
             SSAOutput::Storage { 
-                key: StorageKey::Balance(caller),
-                value: StorageValue::Balance(new_caller_balance)
+                key: Box::new(StorageKey::Balance(caller)),
+                value: Box::new(StorageValue::Balance(new_caller_balance))
             },
             SSAOutput::Storage { 
-                key: StorageKey::Balance(target), 
-                value: StorageValue::Balance(new_target_balance)
+                key: Box::new(StorageKey::Balance(target)), 
+                value: Box::new(StorageValue::Balance(new_target_balance))
             },
             SSAOutput::InterpreterResult(SSAInterpreterResult{
                 result: SSAInstructionResult::Ok,

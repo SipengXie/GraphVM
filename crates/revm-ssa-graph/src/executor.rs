@@ -262,7 +262,6 @@ where
 
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
         let thread_pool = self.thread_pool.as_ref().unwrap();
-        let start = std::time::Instant::now();
         
         thread_pool.install(|| {
             nodes_with_masks.into_iter().for_each(|(node, deps_mask)| {
@@ -607,8 +606,8 @@ where
                 let context = unsafe { Self::get_mut_context(context) };
                 let value = context.get_storage_value(key);
                 Ok(SSAInput::Storage {
-                    key: key.clone(),
-                    value,
+                    key: Box::new(key.clone()),
+                    value: Box::new(value),
                     source: None
                 })
             }
@@ -739,7 +738,7 @@ where
                 })
             }
             None => Ok(SSAInput::CreateInput {
-                input: input.clone(),
+                input: Box::new(input.clone()),
                 entry: None
             })
         };
@@ -775,7 +774,7 @@ where
                 })
             }
             None => Ok(SSAInput::CallInput {
-                input: input.clone(),
+                input: Box::new(input.clone()),
                 entry: None
             })
         };
@@ -916,7 +915,7 @@ where
     }
 
     /// Get call/create input from frame results
-    fn get_frame_input(graph: &SsaGraph, entry_lsn: usize) -> Result<Either<SSACallInput, SSACreateInput>> {
+    fn get_frame_input(graph: &SsaGraph, entry_lsn: usize) -> Result<Either<Box<SSACallInput>, Box<SSACreateInput>>> {
         // Try to get CallFrame
         if let Some(call_input) = graph.get_result(entry_lsn, |results| {
             results.iter().find_map(|output| {
@@ -957,7 +956,7 @@ where
     /// * `Result<SSAInput>` - The resolved contract entry input
     fn resolve_contract_entry(
         value: &ContractEnv,
-        frame_input: Either<SSACallInput, SSACreateInput>,
+        frame_input: Either<Box<SSACallInput>, Box<SSACreateInput>>,
         lsn: usize
     ) -> Result<SSAInput> {
         use ContractEnv::*;
@@ -970,7 +969,7 @@ where
         };
 
         // Helper to handle code-related operations for call and create frames
-        let handle_code_operation = |input: &Either<SSACallInput, SSACreateInput>, is_size: bool| {
+        let handle_code_operation = |input: &Either<Box<SSACallInput>, Box<SSACreateInput>>, is_size: bool| {
             match input {
                 Either::Left(call) => {
                     call.code

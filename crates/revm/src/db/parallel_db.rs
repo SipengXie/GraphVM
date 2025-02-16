@@ -353,14 +353,14 @@ impl<DB> SsaDatabaseCommit for ParallelDB<DB> {
         let mut cache = self.cache.write();
         for change in changes {
             if let SSAOutput::Storage{key, value} = change {
-                match key {
+                match *key {
                     StorageKey::Balance(address) => {
                         let account = cache.accounts.entry(address).or_insert_with(|| {
                             let mut account = DbAccount::default();
                             account.account_state = AccountState::Touched;
                             account
                         });
-                        if let StorageValue::Balance(balance) = value {
+                        if let StorageValue::Balance(balance) = *value {
                             account.info.balance = balance;
                         }
                     },
@@ -370,7 +370,7 @@ impl<DB> SsaDatabaseCommit for ParallelDB<DB> {
                             account.account_state = AccountState::Touched;
                             account
                         });
-                        if let StorageValue::Nonce(nonce) = value {
+                        if let StorageValue::Nonce(nonce) = *value {
                             account.info.nonce = nonce;
                         }
                     },
@@ -382,7 +382,7 @@ impl<DB> SsaDatabaseCommit for ParallelDB<DB> {
                             account.account_state = AccountState::Touched;
                             account
                         });
-                        if let StorageValue::Code(code) = value {
+                        if let StorageValue::Code(code) = *value {
                             account.info.code = Some(Bytecode::new_raw(code));
                         }
                     },
@@ -393,7 +393,7 @@ impl<DB> SsaDatabaseCommit for ParallelDB<DB> {
                             account.account_state = AccountState::Touched;
                             account
                         });
-                        if let StorageValue::CodeHash(code_hash) = value {
+                        if let StorageValue::CodeHash(code_hash) = *value {
                             account.info.code_hash = code_hash.into();
                         }
                     },
@@ -403,7 +403,7 @@ impl<DB> SsaDatabaseCommit for ParallelDB<DB> {
                             account.account_state = AccountState::Touched;
                             account
                         });
-                        if let StorageValue::Slot(slot) = value {
+                        if let StorageValue::Slot(slot) = *value {
                             account.storage.insert(index, slot);
                         }
                     },

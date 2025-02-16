@@ -234,7 +234,7 @@ impl SsaGraph {
                 outputs.iter()
                     .filter_map(|o| {
                         if let SSAOutput::Storage { key, value } = o {
-                            storage_keys.insert(key.clone());
+                            storage_keys.insert(**key);
                             Some(SSAOutput::Storage {
                                 key: key.clone(),
                                 value: value.clone()

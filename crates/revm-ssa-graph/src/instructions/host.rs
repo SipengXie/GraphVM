@@ -52,8 +52,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
 
         Ok(vec![SSAOutput::Storage {
-            key: StorageKey::Slot(address, *index),
-            value: StorageValue::Slot(*value),
+            key: Box::new(StorageKey::Slot(address, *index)),
+            value: Box::new(StorageValue::Slot(*value)),
         }])
     }
 
@@ -221,7 +221,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             data: LogData::new(topics, memory.clone()).expect("LogData should have <=4 topics"),
         };
 
-        Ok(vec![SSAOutput::Log(log)])
+        Ok(vec![SSAOutput::Log(Box::new(log))])
     }
 
     /// Execute SELFDESTRUCT operation
@@ -256,12 +256,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let new_target_balance = U256::ZERO;
 
         Ok(vec![SSAOutput::Storage { 
-            key: StorageKey::Balance(caller),
-            value: StorageValue::Balance(new_caller_balance)
+            key: Box::new(StorageKey::Balance(caller)),
+            value: Box::new(StorageValue::Balance(new_caller_balance))
         },
         SSAOutput::Storage { 
-            key: StorageKey::Balance(Address::from_word(B256::from(*target))), 
-            value: StorageValue::Balance(new_target_balance)
+            key: Box::new(StorageKey::Balance(Address::from_word(B256::from(*target)))), 
+            value: Box::new(StorageValue::Balance(new_target_balance))
         },
         SSAOutput::InterpreterResult(SSAInterpreterResult{
             result: SSAInstructionResult::Ok,

@@ -56,12 +56,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         let outputs = vec![
             SSAOutput::Storage {
-                key: StorageKey::Balance(caller),
-                value: StorageValue::Balance(new_balance),
+                key: Box::new(StorageKey::Balance(caller)),
+                value: Box::new(StorageValue::Balance(new_balance)),
             },
             SSAOutput::Storage {
-                key: StorageKey::Nonce(caller),
-                value: StorageValue::Nonce(new_nonce),
+                key: Box::new(StorageKey::Nonce(caller)),
+                value: Box::new(StorageValue::Nonce(new_nonce)),
             },
         ];
 
@@ -102,8 +102,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         
         let outputs = vec![
             SSAOutput::Storage {
-                key: StorageKey::Balance(caller),
-                value: StorageValue::Balance(new_balance),
+                key: Box::new(StorageKey::Balance(caller)),
+                value: Box::new(StorageValue::Balance(new_balance)),
             },
         ];
         Ok(outputs)
@@ -156,7 +156,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: None
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(ssa_call_input)];
+        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
         let new_size_1 = if in_len == 0 {
             0
         } else {
@@ -225,12 +225,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             let new_target_balance = old_target_balance + call_input.value;
 
             outputs.push(SSAOutput::Storage { 
-                key: StorageKey::Balance(call_input.caller), 
-                value: StorageValue::Balance(new_caller_balance), 
+                key: Box::new(StorageKey::Balance(call_input.caller)), 
+                value: Box::new(StorageValue::Balance(new_caller_balance)), 
             });
             outputs.push(SSAOutput::Storage { 
-                key: StorageKey::Balance(call_input.target_address), 
-                value: StorageValue::Balance(new_target_balance), 
+                key: Box::new(StorageKey::Balance(call_input.target_address)), 
+                value: Box::new(StorageValue::Balance(new_target_balance)), 
             });
         }
 
@@ -263,10 +263,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let ret_range = call_input.ret_range.clone();
 
         Ok(vec![
-            SSAOutput::CallOutcome(SSACallOutcome {
+            SSAOutput::CallOutcome(Box::new(SSACallOutcome {
                 result: interpreter_result.clone(),
                 ret_range: ret_range,
-            })
+            }))
         ])
     }
 
@@ -358,7 +358,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             },
             target: Address::ZERO,
         };
-        let mut outputs = vec![SSAOutput::CreateFrame(ssa_create_input)];
+        let mut outputs = vec![SSAOutput::CreateFrame(Box::new(ssa_create_input))];
 
         let new_size = self.check_memory_size(as_usize_saturated(*code_offset), len);
         if new_size > self.memory_size() {
@@ -406,8 +406,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(vec![
             SSAOutput::CreateFrame(create_input),
             SSAOutput::Storage {
-                key: StorageKey::Nonce(caller),
-                value: StorageValue::Nonce(nonce+1),
+                key: Box::new(StorageKey::Nonce(caller)),
+                value: Box::new(StorageValue::Nonce(nonce+1)),
             }
         ])
     }
@@ -447,7 +447,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         // Handle basic error cases
         if !instruction_result.is_ok() {
             create_outcome.address = None;
-            outputs.push(SSAOutput::CreateOutcome(create_outcome));
+            outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
             return Ok(outputs);
         }
 
@@ -455,7 +455,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         if SPEC::enabled(LONDON) && interpreter_result.output.first() == Some(&0xEF) {
             create_outcome.address = None;
             create_outcome.result.result = SSAInstructionResult::Error;
-            outputs.push(SSAOutput::CreateOutcome(create_outcome));
+            outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
             return Ok(outputs);
         }
 
@@ -463,15 +463,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         if SPEC::enabled(SPURIOUS_DRAGON) && interpreter_result.output.len() > 0x6000 {
             create_outcome.address = None;
             create_outcome.result.result = SSAInstructionResult::Error;
-            outputs.push(SSAOutput::CreateOutcome(create_outcome));
+            outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
             return Ok(outputs);
         }
 
         // Handle successful case
-        outputs.push(SSAOutput::CreateOutcome(create_outcome));
+        outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
         outputs.push(SSAOutput::Storage { 
-            key: StorageKey::Code(address), 
-            value: StorageValue::Code(interpreter_result.output.clone()) 
+            key: Box::new(StorageKey::Code(address)), 
+            value: Box::new(StorageValue::Code(interpreter_result.output.clone())) 
         });
 
         Ok(outputs)
@@ -570,7 +570,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: None
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(ssa_call_input)];
+        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -639,7 +639,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: None
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(ssa_call_input)];
+        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -698,7 +698,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: None
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(ssa_call_input)];
+        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);

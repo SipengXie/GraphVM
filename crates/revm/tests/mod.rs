@@ -2185,4 +2185,52 @@ mod erc20_tests {
         // println!("The metrics will be in standard Prometheus format");
         // std::thread::sleep(std::time::Duration::from_secs(15));
     }
+
+    #[test]
+    fn test_push_and_log_entry_size() {
+        use smallvec::SmallVec;
+        let start = Instant::now();
+        let mut log_entry = vec![];
+        for _ in 0..1400000 {
+            log_entry.push(SSALogEntry{
+                lsn:0,
+                opcode:0,
+                inputs: SmallVec::new(),
+                outputs: SmallVec::new(),
+            });
+        }
+        let duration = start.elapsed();
+        eprintln!("Time cost: {:?}", duration);
+    }
+
+    #[test]
+    fn print_all_sizes_sorted() {
+        use std::mem::size_of;
+        use revm_ssa::*;
+        let mut items = vec![
+            ("MemoryDep", size_of::<MemoryDep>()),
+            ("ContractEnv", size_of::<ContractEnv>()),
+            ("StorageKey", size_of::<StorageKey>()),
+            ("StorageValue", size_of::<StorageValue>()),
+            ("SSAInput", size_of::<SSAInput>()),
+            ("SSAOutput", size_of::<SSAOutput>()),
+            ("SSALogEntry", size_of::<SSALogEntry>()),
+            ("SSACallInput", size_of::<SSACallInput>()),
+            ("SSACallOutcome", size_of::<SSACallOutcome>()),
+            ("SSACreateInput", size_of::<SSACreateInput>()),
+            ("SSACreateOutcome", size_of::<SSACreateOutcome>()),
+            ("SSACallScheme", size_of::<SSACallScheme>()),
+            ("SSACreateScheme", size_of::<SSACreateScheme>()),
+            ("SSAInterpreterResult", size_of::<SSAInterpreterResult>()),
+            ("SSAInstructionResult", size_of::<SSAInstructionResult>()),
+        ];
+
+        // 从高到低排序（按字节数比较）
+        items.sort_by(|a, b| b.1.cmp(&a.1));
+
+        println!("Type sizes (largest to smallest):");
+        for (name, size) in items {
+            println!("{:30} : {} bytes", name, size);
+        }
+    }
 }

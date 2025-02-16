@@ -229,8 +229,8 @@ pub enum SSAInput {
         source: Vec<MemoryDep>,
     },
     Storage {
-        key: StorageKey,
-        value: StorageValue,
+        key: Box<StorageKey>,
+        value: Box<StorageValue>,
         source: Option<usize>,
     },
     ReturnDataBuffer {
@@ -242,11 +242,11 @@ pub enum SSAInput {
         source: Option<usize>,
     },
     CallOutcome {
-        outcome: SSACallOutcome,
+        outcome: Box<SSACallOutcome>,
         source: Option<usize>,
     },
     CreateOutcome {
-        outcome: SSACreateOutcome,
+        outcome: Box<SSACreateOutcome>,
         source: Option<usize>,
     },
     ContractEntry {
@@ -258,11 +258,11 @@ pub enum SSAInput {
         last_memory: Option<usize>,
     },
     CreateInput {
-        input: SSACreateInput,
+        input: Box<SSACreateInput>,
         entry: Option<usize>,
     },
     CallInput {
-        input: SSACallInput,
+        input: Box<SSACallInput>,
         entry: Option<usize>,
     }
 }
@@ -273,8 +273,8 @@ pub enum SSAOutput {
     Stack(U256),
     Memory(Bytes),
     Storage {
-        key: StorageKey,
-        value: StorageValue,
+        key: Box<StorageKey>,
+        value: Box<StorageValue>,
     },
     Jump {
         relative_offset: isize,
@@ -283,11 +283,11 @@ pub enum SSAOutput {
     InterpreterResult(SSAInterpreterResult),
     MemorySize(usize),
     Address(Address),
-    CreateFrame(SSACreateInput),
-    CreateOutcome(SSACreateOutcome),
-    CallFrame(SSACallInput),
-    CallOutcome(SSACallOutcome),
-    Log(Log),
+    CreateFrame(Box<SSACreateInput>),
+    CreateOutcome(Box<SSACreateOutcome>),
+    CallFrame(Box<SSACallInput>),
+    CallOutcome(Box<SSACallOutcome>),
+    Log(Box<Log>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -295,8 +295,8 @@ pub enum SSAOutput {
 pub struct SSALogEntry {
     pub lsn: usize,
     pub opcode: u8,
-    pub inputs: SmallVec<[SSAInput; 8]>,
-    pub outputs: SmallVec<[SSAOutput; 3]>,
+    pub inputs: SmallVec<[SSAInput; 2]>,
+    pub outputs: SmallVec<[SSAOutput; 1]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]

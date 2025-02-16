@@ -3656,6 +3656,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "smallvec",
  "tokio",
  "zip",
 ]
