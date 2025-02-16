@@ -88,7 +88,7 @@ impl SharedMemory {
     #[inline]
     pub fn enable_shadow(&mut self) {
         if self.shadow_buffer.is_none() {
-            self.shadow_buffer = Some(Vec::new());
+            self.shadow_buffer = Some(Vec::with_capacity(4 * 1024));
         }
     }
 
