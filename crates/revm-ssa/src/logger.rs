@@ -2,8 +2,6 @@ use std::cmp::min;
 use std::collections::HashMap;
 use revm_primitives::{Address, Bytes, FixedBytes, HashSet, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
-use smallvec::SmallVec;
-use smallvec::smallvec;
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSAValue, SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
 use crate::{SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
@@ -173,22 +171,26 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_pop_operation(&mut self, opcode: u8) {
+    pub fn log_pop_operation(&mut self, _opcode: u8) {
+        self.current_lsn += 1;
         self.pop_stack_def().unwrap();
     }
 
     #[inline]
-    pub fn log_push_operation(&mut self, opcode: u8, result: &[u8]) {
+    pub fn log_push_operation(&mut self, _opcode: u8, _result: &[u8]) {
+        self.current_lsn += 1;
         self.push_stack_def(None).unwrap();
     }
 
     #[inline]
-    pub fn log_dup_operation(&mut self, opcode: u8, n: usize) {
+    pub fn log_dup_operation(&mut self, _opcode: u8, n: usize) {
+        self.current_lsn += 1;
         self.dup_stack_def(n).unwrap();
     }
 
     #[inline]
-    pub fn log_swap_operation(&mut self, opcode: u8, n: usize) {
+    pub fn log_swap_operation(&mut self, _opcode: u8, n: usize) {
+        self.current_lsn += 1;
         self.swap_stack_def(n).unwrap();
     }
 
@@ -229,7 +231,8 @@ impl SSALogger {
     }
     
     #[inline]
-    pub fn log_pc_operation(&mut self, opcode: u8, result: usize) {
+    pub fn log_pc_operation(&mut self, _opcode: u8, _result: usize) {
+        self.current_lsn += 1;
         self.push_stack_def(None).unwrap();
     }
 

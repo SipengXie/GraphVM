@@ -8,7 +8,7 @@ use crate::cmd::statetest::{
     models::MultiTestSuite,
 };
 use revm::{
-    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{address, keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, DatabaseRef, Evm
+    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, Evm
 };
 
 use std::{

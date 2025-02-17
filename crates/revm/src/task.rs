@@ -1,7 +1,7 @@
 use core::default::Default;
 
 use revm_ssa::logger::SsaRwSet;
-use revm_ssa::{SSALogEntry, SSAOutput};
+use revm_ssa::SSAOutput;
 
 use crate::primitives::{ExecutionResult, EvmState, Env, SpecId};
 use crate::journaled_state::ReadWriteSet;

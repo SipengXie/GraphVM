@@ -7,7 +7,6 @@ use revm_primitives::{
 use revm::{db::{CacheDB, EmptyDB}, Evm};
 use revm_ssa::{SSALogger, SSALogEntry};
 use revm_ssa_graph::{SsaGraph, SSAExecutor, ExecutionTracer, ExecutionMode};
-use metrics_exporter_prometheus;
 
 #[derive(Debug, Clone)]
 pub enum TestMode {

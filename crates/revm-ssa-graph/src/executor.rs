@@ -8,7 +8,6 @@ use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result
 };
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
-use revm_interpreter::OpCode;
 use revm_ssa::{
     ContractEnv, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
 };
@@ -166,6 +165,8 @@ where
                 reachable_nodes
             }
         };
+        // ! nodes_to_execute is the num of opcodes that need to be executed.
+        // eprintln!("nodes_to_execute: {:?}", nodes_to_execute.len());
         let node_search_end = std::time::Instant::now();
         let node_search_elapse = node_search_end - node_search_start;
         histogram!("node_search",node_search_elapse);

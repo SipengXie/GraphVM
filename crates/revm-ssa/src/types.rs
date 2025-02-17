@@ -1,5 +1,4 @@
 use revm_primitives::{Address, Bytes, Log, U256};
-use smallvec::SmallVec;
 use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

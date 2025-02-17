@@ -22,10 +22,9 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{address, LatestSpec};
+use revm_primitives::LatestSpec;
 use revm_ssa::logger::SsaRwSet;
 use revm_ssa::{SSALogEntry, SSALogger};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit, SsaGraph};
@@ -253,7 +252,7 @@ impl Occda {
                                 std::hint::spin_loop();
                             }
                             let wait_end = std::time::Instant::now();
-                            let wait_time = wait_end - wait_start;
+                            let wait_time: Duration = wait_end - wait_start;
                             histogram!("ssa_graph_wait", wait_time);
                             let graph = dag_store[idx].get().unwrap().clone();
                             let execution_mode = ExecutionMode::Partial(to_re_execute.clone()); 
@@ -337,6 +336,8 @@ impl Occda {
                                 unsafe {
                                     *ssa_logs_raw_ptr.add(idx) = Some(logger.take_logs());
                                 }
+                                // ! current_lsn is the num of nodes.
+                                // eprintln!("logger.current_lsn: {:?}", logger.current_lsn);
                             }
                         } else {
                             let mut read_write_set = evm.get_read_write_set();
