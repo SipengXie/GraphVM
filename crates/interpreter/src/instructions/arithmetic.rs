@@ -1,4 +1,3 @@
-use revm_ssa::SSAValue;
 use super::i256::{i256_div, i256_mod};
 use crate::{
     gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
@@ -16,10 +15,11 @@ pub fn add<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     
     // Log operation
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             ADD,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-            SSAValue::U256(*op2)
+            orig1,
+            orig2,
+            *op2
         );
     }
 }
@@ -32,10 +32,11 @@ pub fn mul<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op2 = op1.wrapping_mul(*op2);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             MUL,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-            SSAValue::U256(*op2)
+            orig1,
+            orig2,
+            *op2
         );
     }
 }
@@ -48,10 +49,11 @@ pub fn sub<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op2 = op1.wrapping_sub(*op2);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             SUB,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-            SSAValue::U256(*op2)
+            orig1,
+            orig2,
+            *op2
         );
     }
 }
@@ -65,10 +67,11 @@ pub fn div<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
         *op2 = op1.wrapping_div(*op2);
         
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
-            logger.log_pop_top_operation(
+            logger.log_binary_operation(
                 DIV,
-                vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-                SSAValue::U256(*op2)
+                orig1,
+                orig2,
+                *op2
             );
         }
     }
@@ -82,10 +85,11 @@ pub fn sdiv<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op2 = i256_div(op1, *op2);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             SDIV,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-            SSAValue::U256(*op2)
+            orig1,
+            orig2,
+            *op2
         );
     }
 }
@@ -99,10 +103,11 @@ pub fn rem<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
         *op2 = op1.wrapping_rem(*op2);
         
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
-            logger.log_pop_top_operation(
+            logger.log_binary_operation(
                 MOD,
-                vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-                SSAValue::U256(*op2)
+                orig1,
+                orig2,
+                *op2
             );
         }
     }
@@ -116,10 +121,11 @@ pub fn smod<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op2 = i256_mod(op1, *op2);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             SMOD,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-            SSAValue::U256(*op2)
+            orig1,
+            orig2,
+            *op2
         );
     }
 }
@@ -132,10 +138,12 @@ pub fn addmod<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op3 = op1.add_mod(op2, *op3);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_trinary_operation(
             ADDMOD,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2), SSAValue::U256(orig3)],
-            SSAValue::U256(*op3)
+            orig1,
+            orig2,
+            orig3,
+            *op3
         );
     }
 }
@@ -148,10 +156,12 @@ pub fn mulmod<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     *op3 = op1.mul_mod(op2, *op3);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_trinary_operation(
             MULMOD,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2), SSAValue::U256(orig3)],
-            SSAValue::U256(*op3)
+            orig1,
+            orig2,
+            orig3,
+            *op3
         );
     }
 }
@@ -165,10 +175,11 @@ pub fn exp<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
     *op2 = op1.pow(*op2);
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             EXP,
-            vec![SSAValue::U256(orig1), SSAValue::U256(orig2)],
-            SSAValue::U256(*op2)
+            orig1,
+            orig2,
+            *op2
         );
     }
 }
@@ -205,10 +216,11 @@ pub fn signextend<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H
     }
     
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_pop_top_operation(
+        logger.log_binary_operation(
             SIGNEXTEND,
-            vec![SSAValue::U256(orig_ext), SSAValue::U256(orig_x)],
-            SSAValue::U256(*x)
+            orig_ext,
+            orig_x,
+            *x
         );
     }
 }

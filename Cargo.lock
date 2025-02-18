@@ -3762,6 +3762,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "plain_hasher",
+ "rayon",
  "revm",
  "revm-ssa",
  "revm-ssa-graph",

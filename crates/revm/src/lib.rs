@@ -28,6 +28,7 @@ pub mod profiler;
 pub mod occda;
 pub mod access_tracker;
 pub mod ssa_access_tracker;
+pub mod graph_wrapper;
 #[cfg(feature = "optimism")]
 pub mod optimism;
 

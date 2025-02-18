@@ -1,6 +1,5 @@
-use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
 use revm_ssa::SSALogEntry;
-use revm_ssa_graph::SsaGraph;
 use serde_json::{Map, Value};
 use crate::cmd::statetest::{
     merkle_trie::state_merkle_trie_root,
@@ -8,7 +7,7 @@ use crate::cmd::statetest::{
     models::MultiTestSuite,
 };
 use revm::{
-    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, Evm
+    db::{CacheState, DatabaseCommit, State}, graph_wrapper::GraphWrapper, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, Evm
 };
 
 use std::{
@@ -314,9 +313,14 @@ pub fn run_parallel(
 
         tasks.push(Task::new(env.clone(), idx, -1, SpecId::CANCUN));
         idx += 1;
-    }
+    }   
 
-    let mut occda = Occda::new( num_of_threads);
+    let thread_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_of_threads)
+        .build()
+        .unwrap();
+
+    let mut occda = Occda::new(&thread_pool, num_of_threads);
 
     let len = tasks.len();
     let mut h_tx = occda.init(tasks, None);
@@ -324,13 +328,11 @@ pub fn run_parallel(
     let total_start = std::time::Instant::now();
     let mut result_store = Vec::with_capacity(len);
     let mut to_re_execution_store = Vec::<Option<Vec<usize>>>::with_capacity(len);
-    let mut logs_store = Vec::<Option<Vec<SSALogEntry>>>::with_capacity(len);
-    let mut dag_store = Vec::<Arc<OnceCell<Arc<SsaGraph>>>>::with_capacity(len);
+    let mut dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
     for _ in 0..len {
         result_store.push(TaskResultItem::default());
         to_re_execution_store.push(None);
-        logs_store.push(None);
-        dag_store.push(Arc::new(OnceCell::new()));
+        dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
     }
 
     let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
@@ -343,7 +345,6 @@ pub fn run_parallel(
         &mut h_tx, 
         &mut state,
          &mut result_store, 
-         &mut logs_store, 
          &mut to_re_execution_store, 
          &mut dag_store,
          || NoOpInspector,

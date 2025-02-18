@@ -1,3 +1,4 @@
+use crate::graph_wrapper::GraphWrapper;
 /// OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
 /// 
 /// This module implements parallel execution of EVM transactions using optimistic concurrency control.
@@ -22,21 +23,21 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use std::sync::Arc;
+use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
 use revm_primitives::LatestSpec;
 use revm_ssa::logger::SsaRwSet;
-use revm_ssa::{SSALogEntry, SSALogger};
-use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit, SsaGraph};
+use revm_ssa::SSALogger;
+use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
 use std::collections::HashSet as StdHashSet;
-use metrics::histogram;
-use once_cell::sync::OnceCell;
+// use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
-pub struct Occda {
+pub struct Occda<'a> {
     /// Dependency graph for tasks
     /// Used to determine execution order and detect conflicts
     dag: TaskDag,
@@ -46,22 +47,17 @@ pub struct Occda {
     
     /// Thread pool for managing parallel execution
     /// Pre-initialized to avoid creation overhead
-    thread_pool: ThreadPool
+    thread_pool: &'a ThreadPool
 }
 
-impl Occda {
+impl<'a> Occda<'a> {
     /// Creates a new OCCDA instance with specified number of threads
     /// 
     /// The thread pool is created upfront to:
     /// - Avoid runtime overhead of creating threads
     /// - Maintain consistent thread affinity
     /// - Control system resource usage
-    pub fn new(num_threads: usize) -> Self {
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .unwrap();
-
+    pub fn new(thread_pool: &'a ThreadPool, num_threads: usize) -> Self {
         Occda {
             dag: TaskDag::new(),
             num_threads,
@@ -114,8 +110,7 @@ impl Occda {
         h_tx: &[Task],
         db: &mut ParallelDB<&DB>,
         result_store: &mut Vec<TaskResultItem<I>>,
-        logs_store: &mut Vec<Option<Vec<SSALogEntry>>>,
-        dag_store: &mut Vec<Arc<OnceCell<Arc<SsaGraph>>>>,
+        dag_store: &mut Vec<Arc<RwLock<GraphWrapper>>>,
         to_re_execution_store: &Vec<Option<Vec<usize>>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         is_prefetch: bool,
@@ -130,7 +125,6 @@ impl Occda {
         <DB as DatabaseRef>::Error: Send + Sync,
     {
         let result_ptr = result_store.as_mut_ptr() as usize;
-        let logs_ptr = logs_store.as_mut_ptr() as usize;
         let parallel_start = std::time::Instant::now();
         
         // Initialize thread task queues
@@ -247,22 +241,14 @@ impl Occda {
                         // use ssa to re-execute the transaction
                         if to_re_execution_store[idx].is_some() {
                             let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
-                            let wait_start = std::time::Instant::now();
-                            while dag_store[idx].get().is_none() {
+                            while !dag_store[idx].read().is_built() {
                                 std::hint::spin_loop();
                             }
-                            let wait_end = std::time::Instant::now();
-                            let wait_time: Duration = wait_end - wait_start;
-                            histogram!("ssa_graph_wait", wait_time);
-                            let graph = dag_store[idx].get().unwrap().clone();
+                            let graph = dag_store[idx].read().get_graph();
                             let execution_mode = ExecutionMode::Partial(to_re_execute.clone()); 
                             let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
-                            let ssa_execute_start = std::time::Instant::now();
                             match executor.execute() {
                                 Ok(()) => {
-                                    let ssa_execute_end = std::time::Instant::now();
-                                    let ssa_execute_elapse = ssa_execute_end - ssa_execute_start;
-                                    histogram!("ssa_execute",ssa_execute_elapse);
                                     let (result_state, storage_keys) = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                     task_result.ssa_state = Some(result_state);
@@ -275,9 +261,6 @@ impl Occda {
                                     continue;
                                 }
                                 Err(e) => {
-                                    let ssa_execute_end = std::time::Instant::now();
-                                    let ssa_execute_elapse = ssa_execute_end - ssa_execute_start;
-                                    histogram!("ssa_execute",ssa_execute_elapse);
                                     eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
                                     drop(executor);
                                     // fall through to EVM re-execution path below
@@ -315,7 +298,6 @@ impl Occda {
                         let result = evm.transact();
                         let transact_end = std::time::Instant::now();
                         let this_transact_time = transact_end - transact_start;
-                        histogram!("evm.transact", this_transact_time);
                         transact_time += this_transact_time;
                         transact_times.push(this_transact_time);
 
@@ -332,10 +314,13 @@ impl Occda {
                         if enable_ssa {
                             if let Some(mut logger) = evm.take_ssa_logger() {
                                 task_result.ssa_rw_set = Some(logger.get_read_write_set());
-                                let ssa_logs_raw_ptr = logs_ptr as *mut Option<Vec<SSALogEntry>>;
-                                unsafe {
-                                    *ssa_logs_raw_ptr.add(idx) = Some(logger.take_logs());
-                                }
+                                // let dag_raw_ptr = dag_ptr as *mut Arc<RwLock<GraphWrapper>>;
+                                let logs = logger.take_logs();
+                                let graph_wrapper = dag_store[idx].clone();
+                                self.thread_pool.spawn(move || {
+                                    let mut graph_wrapper = graph_wrapper.write();
+                                    graph_wrapper.build(logs);
+                                });
                                 // ! current_lsn is the num of nodes.
                                 // eprintln!("logger.current_lsn: {:?}", logger.current_lsn);
                             }
@@ -416,9 +401,8 @@ impl Occda {
         h_tx: &mut Vec<Task>,
         db: &mut DB,
         result_store: &mut Vec<TaskResultItem<I>>,
-        logs_store: &mut Vec<Option<Vec<SSALogEntry>>>,
         to_re_execution_store: &mut Vec<Option<Vec<usize>>>,
-        dag_store: &mut Vec<Arc<OnceCell<Arc<SsaGraph>>>>,
+        dag_store: &mut Vec<Arc<RwLock<GraphWrapper>>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         enable_dep_graph: bool,
         enable_ssa: bool,
@@ -484,7 +468,6 @@ impl Occda {
                 h_tx,
                 &mut parallel_db,
                 result_store,
-                logs_store,
                 dag_store,
                 to_re_execution_store,
                 &inspector_setup,
@@ -544,24 +527,15 @@ impl Occda {
                     // Handle re-execution case (using SSA)
                     if to_re_execution_store[idx].is_some() {
                         let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
-                        let wait_start = std::time::Instant::now();
-                        while dag_store[idx].get().is_none() {
+                        while !dag_store[idx].read().is_built() {
                             std::hint::spin_loop();
                         }
-                        let wait_end = std::time::Instant::now();
-                        let wait_time = wait_end - wait_start;
-                        histogram!("ssa_graph_wait", wait_time);
-                        let graph = dag_store[idx].get().unwrap().clone();
+                        let graph = dag_store[idx].read().get_graph();
                         let execution_mode = ExecutionMode::Partial(to_re_execute.clone());
                         let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
                             .with_mode(execution_mode);
-                        
-                        let ssa_execute_start = std::time::Instant::now();
                         match executor.execute() {
                             Ok(()) => {
-                                let ssa_execute_end = std::time::Instant::now();
-                                let ssa_execute_elapse = ssa_execute_end - ssa_execute_start;
-                                histogram!("ssa_execute",ssa_execute_elapse);
                                 let (result_state, storage_keys) = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.ssa_state = Some(result_state);
@@ -571,9 +545,6 @@ impl Occda {
                                 continue;
                             }
                             Err(e) => {
-                                let ssa_execute_end = std::time::Instant::now();
-                                let ssa_execute_elapse = ssa_execute_end - ssa_execute_start;
-                                histogram!("ssa_execute",ssa_execute_elapse);
                                 eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
                                 drop(executor);
                                 // fall through to EVM re-execution path below
@@ -602,17 +573,18 @@ impl Occda {
                             .build_with_ssa_logger()
                     };
 
-                    let transact_start = std::time::Instant::now();
                     let result = evm.transact();
-                    let transact_end = std::time::Instant::now();
-                    let transact_time = transact_end - transact_start;
-                    histogram!("evm.transact", transact_time);
                     let mut task_result = TaskResultItem::default();    
                      // Record SSA read-write set
                      if enable_ssa {
                         if let Some(mut logger) = evm.take_ssa_logger() {
                             task_result.ssa_rw_set = Some(logger.get_read_write_set());
-                            logs_store[idx] = Some(logger.take_logs());
+                            let logs = logger.take_logs();
+                            let graph_wrapper = dag_store[idx].clone();
+                            self.thread_pool.spawn(move || {
+                                let mut graph_wrapper = graph_wrapper.write();
+                                graph_wrapper.build(logs);
+                            });
                         }
                     } else {
                         let mut read_write_set = evm.get_read_write_set();
@@ -649,7 +621,6 @@ impl Occda {
                     h_tx,
                     &mut parallel_db,
                     result_store,
-                    logs_store,
                     dag_store,
                     to_re_execution_store,
                     &inspector_setup,
@@ -671,7 +642,6 @@ impl Occda {
                 let Some(Reverse(task_idx)) = h_commit.pop() else {
                     break;
                 };
-
                 // Ensure sequential commit order
                 if h_tx[task_idx].tid != next as i32 {
                     h_commit.push(Reverse(task_idx));
@@ -684,29 +654,21 @@ impl Occda {
                     false
                 } else if !enable_ssa {
                     let read_write_set = task_result.read_write_set.as_ref().unwrap();
-                    let check_conflict_start = std::time::Instant::now();
                     let conflict = access_tracker.as_ref().unwrap().check_conflict_in_range(
                         &read_write_set.read_set,
                         h_tx[task_idx].sid + 1,
                         h_tx[task_idx].tid,
                     );
-                    let check_conflict_end = std::time::Instant::now();
-                    let check_conflict_time = check_conflict_end - check_conflict_start;
-                    histogram!("access_tracker.check_conflict", check_conflict_time);
                     conflict.is_some()
                 } else {
                     let ssa_rw_set = task_result.ssa_rw_set.as_ref().unwrap();
-                    let check_conflict_start = std::time::Instant::now();
                     let conflicts = ssa_access_tracker.as_ref().unwrap().query_conflicts(
                         &ssa_rw_set.get_read_keys(),
                         h_tx[task_idx].sid + 1,
                         h_tx[task_idx].tid,
                     );
-                    let check_conflict_end = std::time::Instant::now();
-                    let check_conflict_time = check_conflict_end - check_conflict_start;
-                    histogram!("ssa_access_tracker.check_conflict", check_conflict_time);
-                    let lsns = conflicts.iter().map(|key| ssa_rw_set.read_set[key]).collect::<Vec<_>>();
                     if !conflicts.is_empty() {
+                        let lsns = conflicts.iter().map(|key| ssa_rw_set.read_set[key]).collect::<Vec<_>>();
                         to_re_execution_store[task_idx] = Some(lsns);
                     }
                     !conflicts.is_empty()
@@ -716,82 +678,39 @@ impl Occda {
                 if is_conflict {
                     // Conflict detected: update sid and retry
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
-                    if enable_ssa {
-                        let cell = dag_store[task_idx].clone();
-                        let entries = logs_store[task_idx].take().unwrap();
-                        std::thread::spawn(move || {
-                            // eprintln!("building ssa graph for idx: {}", task_idx);
-                            build_ssa_graph(entries, cell);
-                            // eprintln!("building ssa graph for idx: {} done", task_idx);
-                        });
-                    }
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
-                    // eprintln!("Sending task {} to re-execution", task_idx);
                 } else {
                     if !enable_ssa {
                         if let Some(state) = task_result.state.clone() {
-                            let parallel_commit_start = std::time::Instant::now();
                             parallel_db.commit(state.clone());
-                            let parallel_commit_end = std::time::Instant::now();
-                            let parallel_commit_time = parallel_commit_end - parallel_commit_start;
-                            histogram!("parallel_db.commit", parallel_commit_time);
-
-                            let db_commit_start = std::time::Instant::now();
                             unsafe {
                                 (*raw_db_ptr).commit(state);
                             }
-                            let db_commit_end = std::time::Instant::now();
-                            let db_commit_time = db_commit_end - db_commit_start;
-                            histogram!("db.commit", db_commit_time);
                         }
+
                         let read_write_set = task_result.read_write_set.as_ref().unwrap();
-                        let record_access_start = std::time::Instant::now();
                         access_tracker.as_mut().unwrap().record_write_set(
                             h_tx[task_idx].tid,
                             &read_write_set.write_set
                         );
-                        let record_access_end = std::time::Instant::now();
-                        let record_access_time = record_access_end - record_access_start;
-                        histogram!("access_tracker.record_write_set", record_access_time);
                     } else {
                         if let Some(state) = task_result.ssa_state.clone() {
-                            let parallel_commit_start = std::time::Instant::now();
                             parallel_db.commit_ssa_storage(state.clone());
-                            let parallel_commit_end = std::time::Instant::now();
-                            let parallel_commit_time = parallel_commit_end - parallel_commit_start;
-                            histogram!("parallel_db.commit_ssa_storage", parallel_commit_time);
-
-                            let db_commit_start = std::time::Instant::now();
                             unsafe {
                                 (*raw_db_ptr).commit_ssa_storage(state);
                             }
-                            let db_commit_end = std::time::Instant::now();
-                            let db_commit_time = db_commit_end - db_commit_start;
-                            histogram!("db.commit_ssa_storage", db_commit_time);
                         } else if let Some(state) = task_result.state.clone() {
-                            let parallel_commit_start = std::time::Instant::now();
                             parallel_db.commit(state.clone());
-                            let parallel_commit_end = std::time::Instant::now();
-                            let parallel_commit_time = parallel_commit_end - parallel_commit_start;
-                            histogram!("parallel_db.commit", parallel_commit_time);
-
-                            let db_commit_start = std::time::Instant::now();
                             unsafe {
                                 (*raw_db_ptr).commit(state);
                             }
-                            let db_commit_end = std::time::Instant::now();
-                            let db_commit_time = db_commit_end - db_commit_start;
-                            histogram!("db.commit", db_commit_time);
                         }
+
                         let ssa_rw_set = task_result.ssa_rw_set.as_ref().unwrap();
-                        let record_access_start = std::time::Instant::now();
                         ssa_access_tracker.as_mut().unwrap().record_access(
                             &ssa_rw_set.write_set,
                             h_tx[task_idx].tid,
                         );
-                        let record_access_end = std::time::Instant::now();
-                        let record_access_time = record_access_end - record_access_start;
-                        histogram!("ssa_access_tracker.record_access", record_access_time);
                     }
                     next += 1;
                 }
@@ -817,7 +736,7 @@ impl Occda {
         println!("prefetch_time: {:?}", prefetch_time);
         // Clean up resources in background to avoid blocking
         // This includes access tracker and task management queues
-        std::thread::spawn(move || {
+        self.thread_pool.spawn(move || {
             drop(access_tracker);
             drop(h_exec);
             drop(h_commit);
@@ -970,19 +889,5 @@ impl Occda {
                 .unwrap_or(-1);
             task.sid = sid_max;
         }
-    }
-}
-
-fn build_ssa_graph(entries: Vec<SSALogEntry>, cell: Arc<OnceCell<Arc<SsaGraph>>>) {
-    let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
-    let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
-    for entry in entries {
-        graph.add_node(entry).unwrap();
-    }
-    for lsn in lsns {
-        graph.add_edges(lsn).unwrap();
-    }
-    if cell.set(Arc::new(graph)).is_err() {
-        eprintln!("SSA graph was already set");
     }
 }

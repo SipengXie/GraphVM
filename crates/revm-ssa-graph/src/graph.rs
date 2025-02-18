@@ -1,6 +1,8 @@
-use dashmap::DashMap;
+// use dashmap::DashMap;
+// use metrics::histogram;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
+use revm_primitives::HashMap;
 use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
 use std::collections::HashSet;
@@ -11,9 +13,9 @@ pub struct SsaGraph {
     /// Graph structure
     graph: DiGraph<SSALogEntry, ()>,
     /// Mapping from LSN to node index
-    lsn_to_node: DashMap<usize, NodeIndex>,
+    lsn_to_node: HashMap<usize, NodeIndex>,
     /// Mapping from node index to results
-    results: DashMap<NodeIndex, Vec<SSAOutput>>,
+    results: HashMap<NodeIndex, Vec<SSAOutput>>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<usize>,
 }
@@ -23,8 +25,8 @@ impl SsaGraph {
     pub fn new(node_num: usize, edge_num: usize) -> Self {
         Self {
             graph: DiGraph::with_capacity(node_num, edge_num),
-            lsn_to_node: DashMap::new(),
-            results: DashMap::new(),
+            lsn_to_node: HashMap::new(),
+            results: HashMap::new(),
             storage_write: Vec::new(),
         }
     }
@@ -117,8 +119,8 @@ impl SsaGraph {
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
         
-        if let Some(guard) = self.results.get(&node_idx) {
-            return Ok(extractor(guard.value()));
+        if let Some(outputs) = self.results.get(&node_idx) {
+            return Ok(extractor(outputs));
         }
 
         Ok(extractor(&self.graph[node_idx].outputs))
@@ -213,7 +215,7 @@ impl SsaGraph {
     /// # Returns
     /// * `Vec<usize>` - A vector of all LSNs in the graph
     pub fn get_lsns(&self) -> Vec<usize> {
-        self.lsn_to_node.iter().map(|entry| *entry.key()).collect()
+        self.lsn_to_node.iter().map(|(lsn, _)| *lsn).collect()
     }
 
     /// Get all storage write outputs and their corresponding storage keys
