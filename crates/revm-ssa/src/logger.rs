@@ -2,7 +2,6 @@ use std::cmp::min;
 use std::collections::HashMap;
 use revm_primitives::{Address, Bytes, FixedBytes, HashSet, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
-use smallvec::SmallVec;
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
 use crate::{SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
@@ -54,8 +53,8 @@ pub struct SSALogger {
     pub create_inputs: Vec<SSACreateInput>,
 
     // memory buffer for storing inputs and outputs
-    input_buf: SmallVec<[SSAInput; 3]>,
-    output_buf: SmallVec<[SSAOutput; 1]>,
+    input_buf: Vec<SSAInput>,
+    output_buf: Vec<SSAOutput>,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +88,7 @@ impl SSALogger {
     }
 
     pub fn new() -> Self {
+        
         Self {
             current_lsn: 0,
             entry_lsn: Vec::new(),
@@ -102,8 +102,8 @@ impl SSALogger {
             call_inputs: vec![],
             create_inputs: vec![],
 
-            input_buf: SmallVec::with_capacity(3),
-            output_buf: SmallVec::with_capacity(1),
+            input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
+            output_buf: vec![SSAOutput::Stack(U256::ZERO); 1],
         }
     }
 
@@ -120,8 +120,8 @@ impl SSALogger {
             last_interpreter_return: None,
             call_inputs: vec![],
             create_inputs: vec![],
-            input_buf: SmallVec::with_capacity(3),
-            output_buf: SmallVec::with_capacity(1),
+            input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
+            output_buf: vec![SSAOutput::Stack(U256::ZERO); 1],
         }
     }
 
@@ -151,12 +151,12 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_operation_test(&mut self, opcode: u8) -> usize {
+    pub fn log_operation_with_buffer(&mut self, opcode: u8, input_size: usize, output_size: usize) -> usize {
         let entry = SSALogEntry {
             lsn: self.current_lsn,
             opcode,
-            inputs: std::mem::take(&mut self.input_buf).to_vec(),
-            outputs: std::mem::take(&mut self.output_buf).to_vec(),
+            inputs: self.input_buf[0..input_size].to_vec(),
+            outputs: self.output_buf[0..output_size].to_vec(),
         };
         self.logs.push(entry);
         self.current_lsn += 1;
@@ -200,9 +200,9 @@ impl SSALogger {
     #[inline]
     pub fn log_monotonic_operation(&mut self, opcode: u8, operand1: U256, result: U256) {
         let operand1_ssa_input = pop_stack_or_const!(self, operand1);
-        self.input_buf.push(operand1_ssa_input);
-        self.output_buf.push(SSAOutput::Stack(result));
-        let lsn = self.log_operation_test(opcode);
+        self.input_buf[0] = operand1_ssa_input;
+        self.output_buf[0] = SSAOutput::Stack(result);
+        let lsn = self.log_operation_with_buffer(opcode, 1, 1);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
@@ -210,10 +210,10 @@ impl SSALogger {
     pub fn log_binary_operation(&mut self, opcode: u8, operand1: U256, operand2: U256, result: U256) {
         let operand1_ssa_input = pop_stack_or_const!(self, operand1);
         let operand2_ssa_input = pop_stack_or_const!(self, operand2);
-        self.input_buf.push(operand1_ssa_input);
-        self.input_buf.push(operand2_ssa_input);
-        self.output_buf.push(SSAOutput::Stack(result));
-        let lsn = self.log_operation_test(opcode);
+        self.input_buf[0] = operand1_ssa_input;
+        self.input_buf[1] = operand2_ssa_input;
+        self.output_buf[0] = SSAOutput::Stack(result);
+        let lsn = self.log_operation_with_buffer(opcode, 2, 1);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
@@ -222,11 +222,11 @@ impl SSALogger {
         let operand1_ssa_input = pop_stack_or_const!(self, operand1);
         let operand2_ssa_input = pop_stack_or_const!(self, operand2);
         let operand3_ssa_input = pop_stack_or_const!(self, operand3);
-        self.input_buf.push(operand1_ssa_input);
-        self.input_buf.push(operand2_ssa_input);
-        self.input_buf.push(operand3_ssa_input);
-        self.output_buf.push(SSAOutput::Stack(result));
-        let lsn = self.log_operation_test(opcode);
+        self.input_buf[0] = operand1_ssa_input;
+        self.input_buf[1] = operand2_ssa_input;
+        self.input_buf[2] = operand3_ssa_input;
+        self.output_buf[0] = SSAOutput::Stack(result);
+        let lsn = self.log_operation_with_buffer(opcode, 3, 1);
         self.push_stack_def(Some(lsn)).unwrap();
     }
 
@@ -261,21 +261,21 @@ impl SSALogger {
     #[inline]
     pub fn log_jump(&mut self, opcode: u8, target: usize, current_pc: usize, relative_offset: isize) {
         let target_ssa_input = pop_stack_or_const!(self, U256::from(target));
-        self.input_buf.push(target_ssa_input);
-        self.input_buf.push(SSAInput::Constant(U256::from(current_pc)));
-        self.output_buf.push(SSAOutput::Jump { relative_offset });
-        self.log_operation_test(opcode);
+        self.input_buf[0] = target_ssa_input;
+        self.input_buf[1] = SSAInput::Constant(U256::from(current_pc));
+        self.output_buf[0] = SSAOutput::Jump { relative_offset };
+        self.log_operation_with_buffer(opcode, 2, 1);
     }
 
     #[inline]
     pub fn log_jumpi(&mut self, opcode: u8, target: usize, cond: U256, current_pc: usize, relative_offset: isize) {
         let target_ssa_input = pop_stack_or_const!(self, U256::from(target));
         let cond_ssa_input = pop_stack_or_const!(self, cond);
-        self.input_buf.push(target_ssa_input);
-        self.input_buf.push(cond_ssa_input);
-        self.input_buf.push(SSAInput::Constant(U256::from(current_pc)));
-        self.output_buf.push(SSAOutput::Jump { relative_offset });
-        self.log_operation_test(opcode);
+        self.input_buf[0] = target_ssa_input;
+        self.input_buf[1] = cond_ssa_input;
+        self.input_buf[2] = SSAInput::Constant(U256::from(current_pc));
+        self.output_buf[0] = SSAOutput::Jump { relative_offset };
+        self.log_operation_with_buffer(opcode, 3, 1);
     }
     
     #[inline]
