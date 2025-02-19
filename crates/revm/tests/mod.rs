@@ -122,8 +122,8 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
             // Execute transact and record time
             let start_time = Instant::now();
             let _result = evm.transact().unwrap();
-            // eprintln!("Result: {:?}", _result.result);
             let execution_time = start_time.elapsed();
+            eprintln!("Non-SSA transact time: {:?}", execution_time);
 
             ExecutionResult {
                 execution_time: Some(execution_time),
@@ -155,8 +155,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
             let start_time = Instant::now();
             let _result = evm.transact().unwrap();
             let execution_time = start_time.elapsed();
-            // eprintln!("Result: {:?}", _result.result);
-            eprintln!("Execution with SSA Logger time: {:?}", execution_time);
+            eprintln!("SSA transact time: {:?}", execution_time);
             let mut logger = evm.take_ssa_logger().unwrap();
             // eprintln!("{:?}",logger.get_first_reads());
             let logs = logger.take_logs();
@@ -2030,6 +2029,7 @@ mod contract_tests {
 }
 
 mod erc20_tests {
+
     use revm_primitives::hex;
     use revm::primitives::Bytes;
     use super::*;
@@ -2162,9 +2162,8 @@ mod erc20_tests {
         };
         let non_ssa_result = execute_case(runtime_code.clone(), "non_ssa", non_ssa_config);
         println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
-        // Transfer Partial From LSN: 0, 236 (require), 263(true logic), 343
-        let serial_partial_config = ExecutionConfig {
-            mode: ExecutionMode::Partial(vec![343]),
+        let serial_full_config = ExecutionConfig {
+            mode: ExecutionMode::Full,
             test_mode: TestMode::SerialGraph,
             collect_metrics: true,
             pre_deployed_contract: vec![],
@@ -2177,8 +2176,8 @@ mod erc20_tests {
             enable_tracer: false,
             is_deployed_contract: false
         };
-        let serial_partial_result = execute_case(runtime_code.clone(), "serial_partial", serial_partial_config);
-        println!("Serial Partial Graph Time Cost: {:?}", serial_partial_result.execution_time);
+        let serial_full_result = execute_case(runtime_code.clone(), "serial_full", serial_full_config);
+        println!("Serial Full Graph Time Cost: {:?}", serial_full_result.execution_time);
         // println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
         // println!("You can use curl http://127.0.0.1:9090/metrics to view them");
         // println!("The metrics will be in standard Prometheus format");
