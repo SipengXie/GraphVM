@@ -12,7 +12,7 @@ use crate::graph_wrapper::GraphWrapper;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{ResultAndState, HashMap, Address, HashSet};
+use crate::primitives::{ResultAndState, Address};
 use crate::access_tracker::AccessTracker;
 use crate::journaled_state::AccessType;
 use crate::ssa_access_tracker::SsaAccessTracker;
@@ -33,7 +33,7 @@ use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
-use std::collections::HashSet as StdHashSet;
+use std::collections::{HashMap, HashSet};
 // use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
@@ -143,7 +143,7 @@ impl Occda {
         } else {
             // Execution phase: group tasks based on DAG dependencies
             let mut task_groups: Vec<Vec<usize>> = Vec::new();
-            let mut visited: StdHashSet<usize> = StdHashSet::new();
+            let mut visited: HashSet<usize> = HashSet::new();
 
             // Iterate through tasks in reverse order since later transactions may depend on earlier ones
             for &task_idx in ready_tasks.iter().rev() {
