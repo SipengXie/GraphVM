@@ -1,6 +1,6 @@
-use crate::primitives::{Address, HashSet, HashMap};
+use crate::primitives::Address;
 use crate::journaled_state::AccessType;
-
+use std::collections::{HashMap, HashSet};
 /// Track write access records for addresses
 #[derive(Default)]
 pub struct AccessTracker {
