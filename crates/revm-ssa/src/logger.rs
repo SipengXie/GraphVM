@@ -1,12 +1,12 @@
-use std::cmp::min;
-use std::collections::HashMap;
-use revm_primitives::{Address, Bytes, FixedBytes, HashSet, Log, B256, U256};
+
+use std::collections::{HashMap, HashSet};
+use revm_primitives::{Address, Bytes, FixedBytes, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
 use crate::{SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
 use revm_primitives::Spec;
-
+use std::cmp::min;
 // Update macro pop_stack_or_const to take two parameters: self and value
 #[macro_export]
 macro_rules! pop_stack_or_const {
