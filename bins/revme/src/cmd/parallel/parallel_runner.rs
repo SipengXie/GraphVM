@@ -1,5 +1,4 @@
 use parking_lot::RwLock;
-use revm_ssa::SSALogEntry;
 use serde_json::{Map, Value};
 use crate::cmd::statetest::{
     merkle_trie::state_merkle_trie_root,
@@ -327,11 +326,11 @@ pub fn run_parallel(
         
     let total_start = std::time::Instant::now();
     let mut result_store = Vec::with_capacity(len);
-    let mut to_re_execution_store = Vec::<Option<Vec<usize>>>::with_capacity(len);
+    let mut to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
     let mut dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
     for _ in 0..len {
         result_store.push(TaskResultItem::default());
-        to_re_execution_store.push(None);
+        to_re_execution_store.push(vec![]);
         dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
     }
 

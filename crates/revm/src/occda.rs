@@ -111,7 +111,7 @@ impl<'a> Occda<'a> {
         db: &mut ParallelDB<&DB>,
         result_store: &mut Vec<TaskResultItem<I>>,
         dag_store: &mut Vec<Arc<RwLock<GraphWrapper>>>,
-        to_re_execution_store: &Vec<Option<Vec<usize>>>,
+        to_re_execution_store: &Vec<Vec<u16>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         is_prefetch: bool,
         enable_dep_graph: bool,
@@ -239,8 +239,8 @@ impl<'a> Occda<'a> {
                         let db_ref = &*db;
                         
                         // use ssa to re-execute the transaction
-                        if to_re_execution_store[idx].is_some() {
-                            let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
+                        if !to_re_execution_store[idx].is_empty() {
+                            let to_re_execute = &to_re_execution_store[idx];
                             while !dag_store[idx].read().is_built() {
                                 std::hint::spin_loop();
                             }
@@ -366,7 +366,10 @@ impl<'a> Occda<'a> {
                     
                 });
         });
-        
+        for (thread_id, (db_read, init, transact, write)) in thread_times.read().iter().enumerate() {
+            println!("Thread {}: DB read time: {:?}, Init time: {:?}, Transaction time: {:?}, Write time: {:?}",
+                thread_id, db_read, init, transact, write);
+        }
         let parallel_end = std::time::Instant::now();
         parallel_end - parallel_start
     }
@@ -401,7 +404,7 @@ impl<'a> Occda<'a> {
         h_tx: &mut Vec<Task>,
         db: &mut DB,
         result_store: &mut Vec<TaskResultItem<I>>,
-        to_re_execution_store: &mut Vec<Option<Vec<usize>>>,
+        to_re_execution_store: &mut Vec<Vec<u16>>,
         dag_store: &mut Vec<Arc<RwLock<GraphWrapper>>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         enable_dep_graph: bool,
@@ -525,8 +528,8 @@ impl<'a> Occda<'a> {
                     let mut inspector = inspector_setup();
 
                     // Handle re-execution case (using SSA)
-                    if to_re_execution_store[idx].is_some() {
-                        let to_re_execute = to_re_execution_store[idx].as_ref().unwrap();
+                    if !to_re_execution_store[idx].is_empty() {
+                        let to_re_execute = &to_re_execution_store[idx];
                         while !dag_store[idx].read().is_built() {
                             std::hint::spin_loop();
                         }
@@ -669,7 +672,7 @@ impl<'a> Occda<'a> {
                     );
                     if !conflicts.is_empty() {
                         let lsns = conflicts.iter().map(|key| ssa_rw_set.read_set[key]).collect::<Vec<_>>();
-                        to_re_execution_store[task_idx] = Some(lsns);
+                        to_re_execution_store[task_idx] = lsns;
                     }
                     !conflicts.is_empty()
                 };

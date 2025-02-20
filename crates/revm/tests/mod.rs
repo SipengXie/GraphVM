@@ -187,7 +187,7 @@ fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut Ca
     let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     
     // Collect all LSNs first
-    let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
+    let lsns: Vec<u16> = entries.iter().map(|entry| entry.lsn).collect();
     
     // Record original results
     let tracer = if config.enable_tracer {
@@ -235,7 +235,7 @@ fn graph_execute_parallel(entries: Vec<SSALogEntry>, config: ExecutionConfig, db
     let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     
     // Collect all LSNs first
-    let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
+    let lsns: Vec<u16> = entries.iter().map(|entry| entry.lsn).collect();
     
     // Record original results
     let tracer = if config.enable_tracer {
@@ -2073,8 +2073,8 @@ mod erc20_tests {
         println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
         // Create Partial From LSN: 0, 456, 627, actually these storage slot won't produce conflicts.
         // Serial partial graph execution
-        let serial_partial_config = ExecutionConfig {
-            mode: ExecutionMode::Partial(vec![456]),
+        let serial_full_config = ExecutionConfig {
+            mode: ExecutionMode::Full,
             test_mode: TestMode::SerialGraph,
             collect_metrics: true,
             pre_deployed_contract: vec![],
@@ -2084,8 +2084,8 @@ mod erc20_tests {
             enable_tracer: false,
             is_deployed_contract: true
         };
-        let serial_partial_result = execute_case(Bytes::default(), "serial_partial", serial_partial_config);
-        println!("Serial Partial Graph Time Cost: {:?}", serial_partial_result.execution_time);
+        let serial_full_result = execute_case(Bytes::default(), "serial_full", serial_full_config);
+        println!("Serial Full Graph Time Cost: {:?}", serial_full_result.execution_time);
     }
 
     #[test]
@@ -2108,9 +2108,9 @@ mod erc20_tests {
         };
         let non_ssa_result = execute_case(runtime_code.clone(), "non_ssa", non_ssa_config);
         println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
-        // Mint Partial From LSN: 0, 186
-        let serial_partial_config = ExecutionConfig {
-            mode: ExecutionMode::Partial(vec![186]),
+        // Serial full graph execution
+        let serial_full_config = ExecutionConfig {
+            mode: ExecutionMode::Full,
             test_mode: TestMode::SerialGraph,
             collect_metrics: true,
             pre_deployed_contract: vec![],
@@ -2120,8 +2120,8 @@ mod erc20_tests {
             enable_tracer: false,
             is_deployed_contract: false
         };
-        let serial_partial_result = execute_case(runtime_code.clone(), "serial_partial", serial_partial_config);
-        println!("Serial Partial Graph Time Cost: {:?}", serial_partial_result.execution_time);
+        let serial_full_result = execute_case(runtime_code.clone(), "serial_full", serial_full_config);
+        println!("Serial Full Graph Time Cost: {:?}", serial_full_result.execution_time);
     }
 
 

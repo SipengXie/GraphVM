@@ -25,7 +25,7 @@ impl GraphWrapper {
         let graph = Arc::get_mut(&mut self.graph)
             .expect("Arc should be unique during build");
 
-        let lsns: Vec<usize> = entries.iter().map(|entry| entry.lsn).collect();
+        let lsns: Vec<u16> = entries.iter().map(|entry| entry.lsn).collect();
 
         for entry in entries {
             graph.add_node(entry).unwrap();

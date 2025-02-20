@@ -115,7 +115,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        let lsn = logger.log_codecopy(EXTCODECOPY,
+        let lsn = logger.log_extcodecopy(EXTCODECOPY,
             address,
             memory_offset,
             code_offset,

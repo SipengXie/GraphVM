@@ -14,7 +14,7 @@ pub enum InstructionResult {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ShadowStack {
     /// The underlying data of the shadow stack, storing LSN definitions
-    data: Vec<Option<usize>>,
+    data: Vec<u16>, // 0 means constant, else means lsn
 }
 
 impl fmt::Display for ShadowStack {
@@ -24,9 +24,10 @@ impl fmt::Display for ShadowStack {
             if i > 0 {
                 f.write_str(", ")?;
             }
-            match x {
-                Some(lsn) => write!(f, "LSN({})", lsn)?,
-                None => write!(f, "Const")?,
+            if *x > 0 {
+                write!(f, "LSN({})", x)?;
+            } else {
+                write!(f, "Const")?;
             }
         }
         f.write_str("]")
@@ -61,28 +62,10 @@ impl ShadowStack {
         self.data.is_empty()
     }
 
-    /// Returns a reference to the underlying data buffer.
-    #[inline]
-    pub fn data(&self) -> &Vec<Option<usize>> {
-        &self.data
-    }
-
-    /// Returns a mutable reference to the underlying data buffer.
-    #[inline]
-    pub fn data_mut(&mut self) -> &mut Vec<Option<usize>> {
-        &mut self.data
-    }
-
-    /// Consumes the stack and returns the underlying data buffer.
-    #[inline]
-    pub fn into_data(self) -> Vec<Option<usize>> {
-        self.data
-    }
-
     /// Removes the topmost element from the stack and returns it, or `StackUnderflow` if it is
     /// empty.
     #[inline]
-    pub fn pop(&mut self) -> Result<Option<usize>, InstructionResult> {
+    pub fn pop(&mut self) -> Result<u16, InstructionResult> {
         self.data.pop().ok_or(InstructionResult::StackUnderflow)
     }
 
@@ -91,7 +74,7 @@ impl ShadowStack {
     /// If it will exceed the stack limit, returns `StackOverflow` error and leaves the stack
     /// unchanged.
     #[inline]
-    pub fn push(&mut self, value: Option<usize>) -> Result<(), InstructionResult> {
+    pub fn push(&mut self, value: u16) -> Result<(), InstructionResult> {
         if self.data.len() == STACK_LIMIT {
             return Err(InstructionResult::StackOverflow);
         }
@@ -103,7 +86,7 @@ impl ShadowStack {
     /// the stack is at index `0`. If the index is too large,
     /// `StackError::Underflow` is returned.
     #[inline]
-    pub fn peek(&self, no_from_top: usize) -> Result<Option<usize>, InstructionResult> {
+    pub fn peek(&self, no_from_top: usize) -> Result<u16, InstructionResult> {
         if self.data.len() > no_from_top {
             Ok(self.data[self.data.len() - no_from_top - 1])
         } else {
@@ -156,7 +139,7 @@ impl ShadowStack {
     /// stack is at index `0`. If the index is too large,
     /// `StackError::Underflow` is returned.
     #[inline]
-    pub fn set(&mut self, no_from_top: usize, val: Option<usize>) -> Result<(), InstructionResult> {
+    pub fn set(&mut self, no_from_top: usize, val: u16) -> Result<(), InstructionResult> {
         if self.data.len() > no_from_top {
             let len = self.data.len();
             self.data[len - no_from_top - 1] = val;
@@ -173,7 +156,7 @@ impl<'de> serde::Deserialize<'de> for ShadowStack {
     where
         D: serde::Deserializer<'de>,
     {
-        let mut data = Vec::<Option<usize>>::deserialize(deserializer)?;
+        let mut data = Vec::<u16>::deserialize(deserializer)?;
         if data.len() > STACK_LIMIT {
             return Err(serde::de::Error::custom(std::format!(
                 "stack size exceeds limit: {} > {}",

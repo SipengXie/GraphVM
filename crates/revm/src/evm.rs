@@ -383,8 +383,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             let new_balance = caller_account.info.balance;
             let pre_deduct = origin_balance - new_balance;
             let caller = ctx.evm.env.tx.caller;
+            let is_create = matches!(ctx.evm.env.tx.transact_to, TxKind::Create);
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_deduct_caller(caller, origin_balance, origin_nonce, pre_deduct);
+            logger.log_deduct_caller(caller, origin_balance, origin_nonce, pre_deduct, is_create);
         } else {
             pre_exec.deduct_caller(ctx)?;
         }

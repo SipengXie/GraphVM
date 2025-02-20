@@ -4,7 +4,7 @@ use std::collections::HashMap;
 /// Mismatch record
 #[derive(Debug, Clone)]
 pub struct MismatchRecord {
-    pub lsn: usize,
+    pub lsn: u16,
     pub opcode: u8,
     pub original: Vec<SSAOutput>,
     pub graph: Vec<SSAOutput>,
@@ -14,7 +14,7 @@ pub struct MismatchRecord {
 #[derive(Debug)]
 pub struct ExecutionTracer {
     /// Original execution results
-    original_results: HashMap<usize, Vec<SSAOutput>>,
+    original_results: HashMap<u16, Vec<SSAOutput>>,
     /// Mismatch records
     mismatches: Vec<MismatchRecord>,
 }
@@ -28,12 +28,12 @@ impl ExecutionTracer {
     }
 
     /// Record original execution result
-    pub fn record_original(&mut self, lsn: usize, outputs: Vec<SSAOutput>) {
+    pub fn record_original(&mut self, lsn: u16, outputs: Vec<SSAOutput>) {
         self.original_results.insert(lsn, outputs);
     }
 
     /// Record graph execution result
-    pub fn record_graph(&mut self, lsn: usize, outputs: Vec<SSAOutput>, opcode: u8) {
+    pub fn record_graph(&mut self, lsn: u16, outputs: Vec<SSAOutput>, opcode: u8) {
         // Check if results match
         if let Some(original) = self.original_results.get(&lsn) {
             if !Self::compare_results(original, &outputs) {

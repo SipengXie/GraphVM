@@ -3648,6 +3648,7 @@ name = "revm-interpreter"
 version = "14.0.0"
 dependencies = [
  "bincode",
+ "metrics",
  "paste",
  "phf",
  "revm-primitives",
@@ -3708,6 +3709,7 @@ version = "1.0.0"
 dependencies = [
  "derive-where",
  "hashbrown 0.12.3",
+ "metrics",
  "revm-primitives",
  "serde",
  "smallvec",

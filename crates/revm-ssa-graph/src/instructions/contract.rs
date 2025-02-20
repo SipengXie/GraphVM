@@ -18,11 +18,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute deduct caller operation
     #[inline]
     pub fn execute_deduct_caller(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 4 {
+        if inputs.len() < 3 {
             return Err(ExecutionError::ExecutionError(
-                "DEDUCT_CALLER requires exactly 1 operand".to_string()
+                "DEDUCT_CALLER requires at least 3 operands".to_string()
             ));
         }
+        let is_call = inputs.len() == 4;
         let caller = match &inputs[0] {
             SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
             _ => return Err(ExecutionError::ExecutionError(
@@ -35,35 +36,35 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "Second operand must be Storage value".to_string()
             )),
         };
-        let origin_nonce = match &inputs[2] {
-            SSAInput::Storage { value, .. } => value.as_nonce().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Storage value".to_string()
-            )),
-        }; 
-        let deduct_balance = match &inputs[3] {
+        let deduct_balance = match &inputs[2] {
             SSAInput::Constant ( value, .. )=> value,
             _ => return Err(ExecutionError::ExecutionError(
                 "Fourth operand must be Constant".to_string()
             )),
         };
-        // Print original balance before deduction
-        // eprintln!("Original balance before deduction: {}", origin_balance);
-        let new_balance = origin_balance - deduct_balance;
-        // Print new balance after deduction
-        // eprintln!("New balance after deduction: {}", new_balance);
-        let new_nonce = origin_nonce + 1;
 
-        let outputs = vec![
+        let new_balance = origin_balance - deduct_balance;
+
+        let mut outputs = vec![
             SSAOutput::Storage {
                 key: Box::new(StorageKey::Balance(caller)),
                 value: Box::new(StorageValue::Balance(new_balance)),
-            },
-            SSAOutput::Storage {
+            }
+        ];
+
+        if is_call {
+            let origin_nonce = match &inputs[3] {
+                SSAInput::Storage { value, .. } => value.as_nonce().unwrap(),
+                _ => return Err(ExecutionError::ExecutionError(
+                    "Third operand must be Storage value".to_string()
+                )),
+            };
+            let new_nonce = origin_nonce + 1;
+            outputs.push(SSAOutput::Storage {
                 key: Box::new(StorageKey::Nonce(caller)),
                 value: Box::new(StorageValue::Nonce(new_nonce)),
-            },
-        ];
+            });
+        }
 
         Ok(outputs)
     }
@@ -373,6 +374,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute make create frame operation
     #[inline]
     pub fn execute_make_create_frame(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+        // eprintln!("execute_make_create_frame: {:?}", inputs);cl
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "MAKE_CREATE_FRAME requires exactly 2 operands (create_input, code)".to_string()

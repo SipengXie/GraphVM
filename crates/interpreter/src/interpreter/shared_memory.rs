@@ -8,10 +8,12 @@ use std::vec::Vec;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MemoryDef {
     /// The LSN of the instruction that wrote this byte
-    pub lsn: usize,
+    pub lsn: u16,
     /// The offset in the result of that instruction
     pub offset: usize,
 }
+
+const EMPTY_MEMORY_DEF: MemoryDef = MemoryDef { lsn: 0, offset: 0 };
 
 /// A sequential memory shared between calls, which uses
 /// a `Vec` for internal representation.
@@ -31,7 +33,7 @@ pub struct SharedMemory {
     #[cfg(feature = "memory_limit")]
     memory_limit: u64,
     /// Shadow memory buffer for tracking memory definitions
-    shadow_buffer: Option<Vec<Option<MemoryDef>>>,
+    shadow_buffer: Option<Vec<MemoryDef>>,
 }
 
 /// Empty shared memory.
@@ -106,22 +108,22 @@ impl SharedMemory {
 
     /// Record a memory write operation in the shadow memory
     #[inline]
-    pub fn record_shadow_write(&mut self, addr: usize, size: usize, lsn: usize) {
+    pub fn record_shadow_write(&mut self, addr: usize, size: usize, lsn: u16) {
         if let Some(ref mut shadow) = self.shadow_buffer {
             // Ensure capacity
             let required_len = self.last_checkpoint + addr + size;
             if required_len > shadow.len() {
-                shadow.resize(required_len, None);
+                shadow.resize(required_len, EMPTY_MEMORY_DEF);
             }
 
             // SAFETY: We've ensured the capacity above
             unsafe {
                 let shadow_ptr = shadow.as_mut_ptr().add(self.last_checkpoint + addr);
                 for i in 0..size {
-                    *shadow_ptr.add(i) = Some(MemoryDef {
+                    *shadow_ptr.add(i) = MemoryDef {
                         lsn,
                         offset: i ,
-                    });
+                    };
                 }
             }
         }
@@ -129,7 +131,7 @@ impl SharedMemory {
 
     /// Get the shadow memory definition for a range of memory
     #[inline]
-    pub fn get_shadow_defs(&self, range: Range<usize>) -> Vec<Option<MemoryDef>> {
+    pub fn get_shadow_defs(&self, range: Range<usize>) -> Vec<MemoryDef> {
         if let Some(ref shadow) = self.shadow_buffer {
             let start = self.last_checkpoint + range.start;
             let end = (self.last_checkpoint + range.end).min(shadow.len());
@@ -153,18 +155,9 @@ impl SharedMemory {
         }
     }
 
-    /// Get the shadow memory definition at a specific offset
-    #[inline]
-    pub fn get_shadow_def(&self, offset: usize) -> Option<MemoryDef> {
-        self.shadow_buffer.as_ref()
-            .and_then(|shadow| shadow.get(self.last_checkpoint + offset))
-            .copied()
-            .flatten()
-    }
-
     /// Get the shadow memory definitions for a word (32 bytes)
     #[inline]
-    pub fn get_shadow_word_defs(&self, offset: usize) -> Vec<Option<MemoryDef>> {
+    pub fn get_shadow_word_defs(&self, offset: usize) -> Vec<MemoryDef> {
         self.get_shadow_defs(offset..offset + 32)
     }
 
@@ -178,60 +171,52 @@ impl SharedMemory {
 
         let mut result = Vec::new();
         let mut start = 0;
-        let mut current_lsn = None;
+        let mut current_lsn = 0;
         let mut current_offset = 0;
         let mut len = 0;
-        let mut i = 0;
 
         // Helper function to push current memory segment
-        let mut push_segment = |start: usize, len: usize, lsn: usize, offset: usize| {
-            result.push(MemoryDep {
-                lsn,
-                self_offset: start,
-                lsn_offset: offset,
-                length: len,
-            });
+        let mut push_segment = |start: usize, len: usize, lsn: u16, offset: usize| {
+            if lsn != 0 {
+                result.push(MemoryDep { // self_offset..self_offset+len is set by lsn's output[lsn_offset..lsn_offset+len]
+                    lsn,
+                    self_offset: start,
+                    lsn_offset: offset,
+                    length: len,
+                });
+            }
         };
 
         // Iterate through definitions to find continuous segments
-        while i < defs.len() {
-            match (current_lsn, defs[i]) {
-                // Start new segment
-                (None, Some(mem_def)) => {
-                    start = i;
-                    current_lsn = Some(mem_def.lsn);
-                    current_offset = mem_def.offset;
-                    len = 1;
-                }
-                // Continue current segment
-                (Some(lsn), Some(mem_def)) if lsn == mem_def.lsn && 
-                                            current_offset + len == mem_def.offset => {
-                    len += 1;
-                }
-                // End current segment and start new one
-                (Some(lsn), Some(mem_def)) => {
-                    push_segment(start, len, lsn, current_offset);
-                    start = i;
-                    current_lsn = Some(mem_def.lsn);
-                    current_offset = mem_def.offset;
-                    len = 1;
-                }
-                // End current segment
-                (Some(lsn), None) => {
-                    push_segment(start, len, lsn, current_offset);
-                    current_lsn = None;
-                    len = 0;
-                }
-                // Skip None values
-                (None, None) => {}
+        for (i, &mem_def) in defs.iter().enumerate() {
+            if mem_def == EMPTY_MEMORY_DEF {
+                // End current segment if exists
+                push_segment(start, len, current_lsn, current_offset);
+                current_lsn = 0;
+                continue;
             }
-            i += 1;
+
+            if current_lsn == 0 {
+                // Start new segment
+                start = i;
+                current_lsn = mem_def.lsn;
+                current_offset = mem_def.offset;
+                len = 1;
+            } else if current_lsn == mem_def.lsn && current_offset + len == mem_def.offset {
+                // Continue current segment
+                len += 1;
+            } else {
+                // End current segment and start new one
+                push_segment(start, len, current_lsn, current_offset);
+                start = i;
+                current_lsn = mem_def.lsn;
+                current_offset = mem_def.offset;
+                len = 1;
+            }
         }
 
         // Push final segment if exists
-        if let Some(lsn) = current_lsn {
-            push_segment(start, len, lsn, current_offset);
-        }
+        push_segment(start, len, current_lsn, current_offset);
 
         result
     }
@@ -316,7 +301,7 @@ impl SharedMemory {
         self.buffer.resize(self.last_checkpoint + new_size, 0);
         // Also resize shadow buffer if enabled
         if let Some(ref mut shadow) = self.shadow_buffer {
-            shadow.resize(self.last_checkpoint + new_size, None);
+            shadow.resize(self.last_checkpoint + new_size, EMPTY_MEMORY_DEF);
         }
     }
 
@@ -477,7 +462,7 @@ impl SharedMemory {
             
             // Ensure capacity
             if end > shadow.len() {
-                shadow.resize(end, None);
+                shadow.resize(end, EMPTY_MEMORY_DEF);
             }
 
             // SAFETY: We've ensured the capacity above
@@ -625,8 +610,8 @@ mod tests {
         let defs = memory.get_shadow_defs(0..32);
         assert_eq!(defs.len(), 32);
         for (i, def) in defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i);
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i);
         }
         
         // Disable shadow memory
@@ -649,7 +634,7 @@ mod tests {
         let defs = memory.get_shadow_defs(0..32);
         assert_eq!(defs.len(), 32);
         for def in defs.iter() {
-            assert_eq!(def.unwrap().lsn, 1);
+            assert_eq!(def.lsn, 1);
         }
         
         // Create new context
@@ -665,7 +650,7 @@ mod tests {
         let defs = memory.get_shadow_defs(0..32);
         assert_eq!(defs.len(), 32);
         for def in defs.iter() {
-            assert_eq!(def.unwrap().lsn, 2);
+            assert_eq!(def.lsn, 2);
         }
         
         // Free child context
@@ -676,7 +661,7 @@ mod tests {
         let defs = memory.get_shadow_defs(0..32);
         assert_eq!(defs.len(), 32);
         for def in defs.iter() {
-            assert_eq!(def.unwrap().lsn, 1);
+            assert_eq!(def.lsn, 1);
         }
     }
 
@@ -694,8 +679,8 @@ mod tests {
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let src_defs = memory.get_shadow_defs(0..32);
         for (i, def) in src_defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i );
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i );
         }
         
         // Copy memory
@@ -705,16 +690,16 @@ mod tests {
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let src_defs = memory.get_shadow_defs(0..32);
         for (i, def) in src_defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i );
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i );
         }
         
         // Verify copied data
         assert_eq!(memory.get_u256(32), U256::from(0x123));
         let dst_defs = memory.get_shadow_defs(32..64);
         for (i, def) in dst_defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i );
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i );
         }
     }
 
@@ -732,8 +717,8 @@ mod tests {
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
         for (i, def) in defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i );
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i );
         }
         
         // Resize larger
@@ -743,15 +728,15 @@ mod tests {
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
         for (i, def) in defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i );
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i );
         }
         
         // Check new space initialized to zero and None
         assert_eq!(memory.get_u256(32), U256::from(0));
         let defs = memory.get_shadow_defs(32..64);
         for def in defs.iter() {
-            assert!(def.is_none());
+            assert!(def == &EMPTY_MEMORY_DEF);
         }
         
         // Resize smaller
@@ -763,8 +748,8 @@ mod tests {
         assert_eq!(data, &expected_data[..16]);
         let defs = memory.get_shadow_defs(0..16);
         for (i, def) in defs.iter().enumerate() {
-            assert_eq!(def.unwrap().lsn, 1);
-            assert_eq!(def.unwrap().offset, i );
+            assert_eq!(def.lsn, 1);
+            assert_eq!(def.offset, i );
         }
     }
 
@@ -776,11 +761,11 @@ mod tests {
         // Test case 1: Two continuous regions with different LSNs
         memory.resize(32);  // Resize for first write
         memory.set_u256(0, U256::from(0x123));
-        memory.record_shadow_write(0, 16, 1);
+        memory.record_shadow_write(0, 16, 1); // lsn 1 set 0..16
         
         memory.resize(48);  // Resize for second write
         memory.set_u256(16, U256::from(0x456));
-        memory.record_shadow_write(16, 16, 2);
+        memory.record_shadow_write(16, 16, 2);// lsn 2 set 16..32
         
         // Convert to deps for continuous regions
         let deps = memory.get_shadow_deps(0..32);
@@ -795,17 +780,17 @@ mod tests {
         // Test case 2: Non-continuous regions with a gap
         memory.resize(96);  // Resize for third write
         memory.set_u256(64, U256::from(0x789));
-        memory.record_shadow_write(64, 32, 3);
+        memory.record_shadow_write(64, 32, 3); // lsn 3 set 64..96
         
         // Convert to deps including the gap
-        let deps = memory.get_shadow_deps(16..96);
+        let deps = memory.get_shadow_deps(16..96); // memory 16..96 is self 0..80, 0..16 is set by lsn 2, 48..80 is set by lsn 3
         assert_eq!(deps.len(), 2, "Should have two segments with gap");
         
         // Check first segment (part of second write)
-        assert_eq!(deps[0], MemoryDep { lsn: 2, self_offset: 16, lsn_offset: 0, length: 16 });
+        assert_eq!(deps[0], MemoryDep { lsn: 2, self_offset: 0, lsn_offset: 0, length: 16 });
         
         // Check second segment (third write)
-        assert_eq!(deps[1], MemoryDep { lsn: 3, self_offset: 64, lsn_offset: 0, length: 32 });
+        assert_eq!(deps[1], MemoryDep { lsn: 3, self_offset: 48, lsn_offset: 0, length: 32 });
 
         // Test case 3: Partial word with specific offset
         memory.resize(128);  // Resize for fourth write
@@ -821,10 +806,10 @@ mod tests {
         assert_eq!(deps.len(), 2, "Should have two segments for separate byte writes");
         
         // Check first segment
-        assert_eq!(deps[0], MemoryDep { lsn: 4, self_offset: 96, lsn_offset: 0, length: 1 });
+        assert_eq!(deps[0], MemoryDep { lsn: 4, self_offset: 0, lsn_offset: 0, length: 1 });
         
         // Check second segment
-        assert_eq!(deps[1], MemoryDep { lsn: 4, self_offset: 97, lsn_offset: 0, length: 1 });
+        assert_eq!(deps[1], MemoryDep { lsn: 4, self_offset: 1, lsn_offset: 0, length: 1 });
 
         // Test case 4: Empty range
         let deps = memory.get_shadow_deps(32..32);
@@ -850,7 +835,7 @@ mod tests {
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
         for def in defs.iter() {
-            assert_eq!(def.unwrap().lsn, 1);
+            assert_eq!(def.lsn, 1);
         }
         
         // Clear memory
@@ -870,7 +855,7 @@ mod tests {
         assert_eq!(memory.get_u256(0), U256::from(0x456));
         let defs = memory.get_shadow_defs(0..32);
         for def in defs.iter() {
-            assert_eq!(def.unwrap().lsn, 2);
+            assert_eq!(def.lsn, 2);
         }
     }
 }

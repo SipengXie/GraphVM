@@ -53,7 +53,7 @@ impl From<InternalOp> for u8 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MemoryDep {
-    pub lsn: usize,
+    pub lsn: u16,
     pub self_offset: usize,
     pub lsn_offset: usize,
     pub length: usize,
@@ -221,7 +221,7 @@ pub enum SSAInput {
     Constant(U256),
     Stack {
         value: U256,
-        source: Option<usize>,
+        source: u16,
     },
     Memory {
         value: Bytes,
@@ -230,39 +230,39 @@ pub enum SSAInput {
     Storage {
         key: Box<StorageKey>,
         value: Box<StorageValue>,
-        source: Option<usize>,
+        source: u16,
     },
     ReturnDataBuffer {
         value: Bytes,
-        source: Option<usize>,
+        source: u16,
     },
     InterpreterResult {
         result: SSAInterpreterResult,
-        source: Option<usize>,
+        source: u16,
     },
     CallOutcome {
         outcome: Box<SSACallOutcome>,
-        source: Option<usize>,
+        source: u16,
     },
     CreateOutcome {
         outcome: Box<SSACreateOutcome>,
-        source: Option<usize>,
+        source: u16,
     },
     ContractEntry {
         value: ContractEnv,
-        entry_lsn: Option<usize>,
+        entry_lsn: u16,
     },
     MemorySizeChange {
         size: usize,
-        last_memory: Option<usize>,
+        last_memory: u16,
     },
     CreateInput {
         input: Box<SSACreateInput>,
-        entry: Option<usize>,
+        entry: u16,
     },
     CallInput {
         input: Box<SSACallInput>,
-        entry: Option<usize>,
+        entry: u16,
     }
 }
 
@@ -292,7 +292,7 @@ pub enum SSAOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SSALogEntry {
-    pub lsn: usize,
+    pub lsn: u16,
     pub opcode: u8,
     pub inputs: Vec<SSAInput>,
     pub outputs: Vec<SSAOutput>,
