@@ -2,10 +2,9 @@
 // use metrics::histogram;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
-use revm_primitives::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
-use std::collections::HashSet;
 use revm_ssa::types::StorageKey;
 
 /// Dependency graph
