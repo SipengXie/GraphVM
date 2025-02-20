@@ -8,6 +8,7 @@ use crate::{
         KECCAK_EMPTY, PRECOMPILE3, U256,
     },
 };
+use std::collections::{HashMap as StdHashMap, HashSet as StdHashSet};
 use core::mem;
 use std::vec::Vec;
 
@@ -25,8 +26,8 @@ pub enum AccessType {
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ReadWriteSet {
-    pub read_set: HashMap<Address, HashSet<AccessType>>,
-    pub write_set: HashMap<Address, HashSet<AccessType>>,
+    pub read_set: StdHashMap<Address, StdHashSet<AccessType>>,
+    pub write_set: StdHashMap<Address, StdHashSet<AccessType>>,
 }
 
 impl ReadWriteSet {

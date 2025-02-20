@@ -1,6 +1,6 @@
 use std::cmp::min;
-use std::collections::{HashMap, HashSet};
-use revm_primitives::{Address, Bytes, FixedBytes, Log, B256, U256};
+use std::collections::HashMap;
+use revm_primitives::{Address, Bytes, FixedBytes, HashSet, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
