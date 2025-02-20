@@ -1,4 +1,4 @@
-use parking_lot::RwLock;
+
 use serde_json::{Map, Value};
 use crate::cmd::statetest::{
     merkle_trie::state_merkle_trie_root,
@@ -6,11 +6,11 @@ use crate::cmd::statetest::{
     models::MultiTestSuite,
 };
 use revm::{
-    db::{CacheState, DatabaseCommit, State}, graph_wrapper::GraphWrapper, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, Evm
+    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::Task, Evm
 };
 
 use std::{
-    fmt::Debug, path::PathBuf, sync::Arc, time::{Duration, Instant}
+    fmt::Debug, path::PathBuf, time::{Duration, Instant}
 };
 
 use thiserror::Error;
@@ -314,38 +314,29 @@ pub fn run_parallel(
         idx += 1;
     }   
 
-    let thread_pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_of_threads)
-        .build()
-        .unwrap();
+    // let thread_pool = rayon::ThreadPoolBuilder::new()
+    //     .num_threads(num_of_threads)
+    //     .build()
+    //     .unwrap();
 
-    let mut occda = Occda::new(&thread_pool, num_of_threads);
+    let mut occda = Occda::new(num_of_threads);
 
     let len = tasks.len();
     let mut h_tx = occda.init(tasks, None);
         
     let total_start = std::time::Instant::now();
-    let mut result_store = Vec::with_capacity(len);
-    let mut to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
-    let mut dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
-    for _ in 0..len {
-        result_store.push(TaskResultItem::default());
-        to_re_execution_store.push(vec![]);
-        dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
-    }
 
     let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
     let _handle = builder
         .with_http_listener(([127, 0, 0, 1], 9090))
         .install()
         .expect("failed to install Prometheus recorder");
+    let mut result_store = Vec::with_capacity(len);
 
     let _ = occda.main_with_db(
         &mut h_tx, 
         &mut state,
          &mut result_store, 
-         &mut to_re_execution_store, 
-         &mut dag_store,
          || NoOpInspector,
          enable_dep_graph, 
          enable_ssa);

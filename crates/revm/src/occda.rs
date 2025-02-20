@@ -37,7 +37,7 @@ use std::collections::HashSet as StdHashSet;
 // use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
-pub struct Occda<'a> {
+pub struct Occda {
     /// Dependency graph for tasks
     /// Used to determine execution order and detect conflicts
     dag: TaskDag,
@@ -47,21 +47,25 @@ pub struct Occda<'a> {
     
     /// Thread pool for managing parallel execution
     /// Pre-initialized to avoid creation overhead
-    thread_pool: &'a ThreadPool
+    thread_pool: ThreadPool
 }
 
-impl<'a> Occda<'a> {
+impl Occda {
     /// Creates a new OCCDA instance with specified number of threads
     /// 
     /// The thread pool is created upfront to:
     /// - Avoid runtime overhead of creating threads
     /// - Maintain consistent thread affinity
     /// - Control system resource usage
-    pub fn new(thread_pool: &'a ThreadPool, num_threads: usize) -> Self {
+    pub fn new(num_threads: usize) -> Self {
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .unwrap();
         Occda {
             dag: TaskDag::new(),
             num_threads,
-            thread_pool
+            thread_pool: thread_pool
         }
     }
 
@@ -404,8 +408,6 @@ impl<'a> Occda<'a> {
         h_tx: &mut Vec<Task>,
         db: &mut DB,
         result_store: &mut Vec<TaskResultItem<I>>,
-        to_re_execution_store: &mut Vec<Vec<u16>>,
-        dag_store: &mut Vec<Arc<RwLock<GraphWrapper>>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         enable_dep_graph: bool,
         enable_ssa: bool,
@@ -417,6 +419,15 @@ impl<'a> Occda<'a> {
            for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
         <DB as DatabaseRef>::Error: Send + Sync,
     {
+        let len = h_tx.len();
+
+        let mut to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
+        let mut dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
+        for _ in 0..len {
+            result_store.push(TaskResultItem::default());
+            to_re_execution_store.push(vec![]);
+            dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+        }
         let raw_db_ptr = db as *mut DB;
 
         let db_ref_for_parallel: &DB = unsafe { &*raw_db_ptr };
@@ -437,7 +448,6 @@ impl<'a> Occda<'a> {
         let mut h_ready: Vec<usize> = Vec::new();          // Tasks ready for execution
         let mut h_exec: BinaryHeap<Reverse<(i32, usize)>> = BinaryHeap::new(); // Tasks executing
         let mut h_commit: BinaryHeap<Reverse<usize>> = BinaryHeap::new(); // Tasks ready for commit
-        let len = h_tx.len();
         let mut next = 0;
 
         // Performance monitoring timers for different execution phases
@@ -471,8 +481,8 @@ impl<'a> Occda<'a> {
                 h_tx,
                 &mut parallel_db,
                 result_store,
-                dag_store,
-                to_re_execution_store,
+                &mut dag_store,
+                &mut to_re_execution_store,
                 &inspector_setup,
                 true,
                 enable_dep_graph,
@@ -624,8 +634,8 @@ impl<'a> Occda<'a> {
                     h_tx,
                     &mut parallel_db,
                     result_store,
-                    dag_store,
-                    to_re_execution_store,
+                    &mut dag_store,
+                    &mut to_re_execution_store,
                     &inspector_setup,
                     false,
                     enable_dep_graph,
