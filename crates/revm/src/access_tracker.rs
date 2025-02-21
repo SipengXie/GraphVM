@@ -34,33 +34,32 @@ impl AccessTracker {
         read_set: &HashMap<Address, HashSet<AccessType>>,
         start_tid: i32,  // sid + 1
         end_tid: i32,    // tid
-    ) -> Option<Vec<(Address, AccessType)>> {
+        enable_ssa: bool,
+    ) -> Vec<(Address, AccessType)> {
         let mut conflicts = Vec::new();
         for (addr, access_types) in read_set {
             if let Some(addr_writes) = self.writes.get(addr) {
                 for access_type in access_types {
                     if let Some(tid_vec) = addr_writes.get(access_type) {
                         // Use binary search to find the first position greater than start_tid
-                        match tid_vec.binary_search(&start_tid) {
-                            Ok(_idx) => {
-                                // Found position equal to start_tid
-                                conflicts.push((*addr, access_type.clone()));
-                            }
-                            Err(idx) => {
-                                // idx is the first position greater than start_tid
-                                if idx < tid_vec.len() && tid_vec[idx] < end_tid {
-                                    conflicts.push((*addr, access_type.clone()));
-                                }
+                        let has_conflict = match tid_vec.binary_search(&start_tid) {
+                            // Found exact match at start_tid
+                            Ok(_) => true,
+                            // Check first position after start_tid
+                            Err(idx) => idx < tid_vec.len() && tid_vec[idx] < end_tid
+                        };
+
+                        if has_conflict {
+                            conflicts.push((*addr, access_type.clone()));
+                            // Early exit if SSA not enabled
+                            if !enable_ssa {
+                                return conflicts;
                             }
                         }
                     }
                 }
             }
         }
-        if conflicts.is_empty() {
-            None
-        } else {
-            Some(conflicts)
-        }
+        conflicts
     }
 }

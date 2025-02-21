@@ -6,7 +6,7 @@ use crate::cmd::statetest::{
     models::MultiTestSuite,
 };
 use revm::{
-    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{address, keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::Task, DatabaseRef, Evm
+    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, Evm
 };
 
 use std::{
@@ -221,6 +221,7 @@ pub fn run_parallel(
     num_of_threads: usize,
     enable_ssa: bool,
     enable_dep_graph: bool,
+    enable_prefetch: bool,
     path: &PathBuf
 ) -> Result<(), TestError> {
     // println!("path: {:?}", path);
@@ -322,7 +323,7 @@ pub fn run_parallel(
     let mut occda = Occda::new(num_of_threads);
 
     let len = tasks.len();
-    let mut h_tx = occda.init(tasks, None);
+    let mut h_tx = occda.init(tasks, None, enable_ssa);
         
     let total_start = std::time::Instant::now();
 
@@ -332,12 +333,16 @@ pub fn run_parallel(
         .install()
         .expect("failed to install Prometheus recorder");
     let mut result_store = Vec::with_capacity(len);
+    for _ in 0..len {
+        result_store.push(TaskResultItem::default());
+    }
 
     let _ = occda.main_with_db(
         &mut h_tx, 
         &mut state,
          &mut result_store, 
          || NoOpInspector,
+         enable_prefetch,
          enable_dep_graph, 
          enable_ssa);
     let after_main = std::time::Instant::now();

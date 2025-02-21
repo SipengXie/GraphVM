@@ -19,6 +19,8 @@ pub struct Cmd {
     enable_ssa: bool,
     #[structopt(short, long, parse(try_from_str), default_value = "false")]
     enable_dep_graph: bool, 
+    #[structopt(short, long, parse(try_from_str), default_value = "false")]
+    enable_prefetch: bool,
 }
 
 impl Cmd {
@@ -26,7 +28,7 @@ impl Cmd {
     pub fn run(&self) -> Result<(), TestError> {
         if self.parallel {
             println!("Running in parallel mode");
-            run_parallel(self.num_of_threads, self.enable_ssa, self.enable_dep_graph, &self.test_file)?;
+            run_parallel(self.num_of_threads, self.enable_ssa, self.enable_dep_graph, self.enable_prefetch, &self.test_file)?;
         } else {
             println!("Running in sequential mode");
             run_sequential(&self.test_file)?;

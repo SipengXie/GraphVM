@@ -5,7 +5,6 @@ use petgraph::algo::toposort;
 use std::collections::{HashMap, HashSet};
 use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
-use revm_ssa::types::StorageKey;
 
 /// Dependency graph
 pub struct SsaGraph {

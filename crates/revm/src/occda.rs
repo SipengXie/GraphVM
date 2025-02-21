@@ -87,17 +87,19 @@ impl Occda {
     /// 3. Prepares tasks for parallel execution
     /// 
     /// Returns a vector of tasks with updated sequence IDs (sid)
-    pub fn init(&mut self, tasks: Vec<Task>, graph: Option<&TaskDag>) -> Vec<Task> {
-        let len = tasks.len();
-        self.to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
-        self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
-        self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
-        let mut vec = Vec::with_capacity(tasks.len());
-        for _ in 0..len {
-            self.to_re_execution_store.push(vec![]);
-            self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
-            self.reads_store.push(HashMap::new());
+    pub fn init(&mut self, tasks: Vec<Task>, graph: Option<&TaskDag>, enable_ssa: bool) -> Vec<Task> {
+        let len: usize = tasks.len();
+        if enable_ssa {
+            self.to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
+            self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
+            self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
+            for _ in 0..len {
+                self.to_re_execution_store.push(vec![]);
+                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+                self.reads_store.push(HashMap::new());
+            }
         }
+        let mut vec = Vec::with_capacity(tasks.len());
         for mut task in tasks {
             if let Some(g) = graph {
                 // Find the maximum sid among dependencies
@@ -261,7 +263,8 @@ impl Occda {
                         let db_ref = &*db;
                         
                         // use ssa to re-execute the transaction
-                        if !self.to_re_execution_store[idx].is_empty() {
+                        if enable_ssa &&!self.to_re_execution_store[idx].is_empty() {
+                            // eprintln!("re-execute task: {} with ssa.", idx);
                             let to_re_execute = &self.to_re_execution_store[idx];
                             while !self.dag_store[idx].read().is_built() {
                                 std::hint::spin_loop();
@@ -292,15 +295,8 @@ impl Occda {
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
-                        let mut evm = if !enable_ssa {
-                            Evm::builder()
-                            .with_ref_db(db_ref)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .build()
-                        } else {
+                        let mut evm = if is_prefetch && enable_ssa {
+                            // enable ssa and prefetch, then we will pre-process the ssa graph
                             Evm::builder()
                             .with_ref_db(db_ref)
                             .modify_env(|env| env.clone_from(&task.env))
@@ -309,6 +305,14 @@ impl Occda {
                             .append_handler_register(inspector_handle_register)
                             .with_ssa_logger(SSALogger::new())
                             .build_with_ssa_logger()
+                        } else {
+                            Evm::builder()
+                            .with_ref_db(db_ref)
+                            .modify_env(|env| env.clone_from(&task.env))
+                            .with_external_context(&mut inspector)
+                            .with_spec_id(task.spec_id)
+                            .append_handler_register(inspector_handle_register)
+                            .build()
                         };
                         let init_end = std::time::Instant::now();
                         init_time += init_end - init_start;
@@ -423,6 +427,7 @@ impl Occda {
         db: &mut DB,
         result_store: &mut Vec<TaskResultItem<I>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
+        enable_prefetch: bool,
         enable_dep_graph: bool,
         enable_ssa: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
@@ -470,7 +475,7 @@ impl Occda {
         
         let prefetch_start = std::time::Instant::now();
         // Set parallel mode for prefetch phase
-        if enable_dep_graph {
+        if enable_prefetch {
             parallel_db.set_parallel_mode(true);
             self.execute_parallel_tasks(
                 &(0..=len-1).collect(),
@@ -479,11 +484,14 @@ impl Occda {
                 result_store,
                 &inspector_setup,
                 true,
-                enable_dep_graph,
-                enable_ssa
+                enable_dep_graph, //  we may enbale prefetch without constructing dependency graph
+                enable_ssa,
             );
-            self.dag = self.build_dag_from_results(result_store);
-            self.update_task_sids(h_tx, &self.dag);
+            
+            if enable_dep_graph {
+                self.dag = self.build_dag_from_results(result_store);
+                self.update_task_sids(h_tx, &self.dag);
+            }
             parallel_db.reset_stats();
         }
         
@@ -532,7 +540,8 @@ impl Occda {
                     let mut inspector = inspector_setup();
 
                     // Handle re-execution case (using SSA)
-                    if !self.to_re_execution_store[idx].is_empty() {
+                    if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
+                        // eprintln!("re-execute task: {} with ssa.", idx);
                         let to_re_execute = &self.to_re_execution_store[idx];
                         while !self.dag_store[idx].read().is_built() {
                             std::hint::spin_loop();
@@ -559,39 +568,24 @@ impl Occda {
                     }
 
                    // Normal execution path
-                   let mut evm = if !enable_ssa {
-                        Evm::builder()
-                            .with_ref_db(&parallel_db)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .build()
-                    } else {
-                        // Enable SSA recording
-                        Evm::builder()
-                            .with_ref_db(&parallel_db)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .with_ssa_logger(SSALogger::new())
-                            .build_with_ssa_logger()
-                    };
-
+                   let mut evm = 
+                    Evm::builder()
+                        .with_ref_db(&parallel_db)
+                        .modify_env(|env| env.clone_from(&task.env))
+                        .with_external_context(&mut inspector)
+                        .with_spec_id(task.spec_id)
+                        .append_handler_register(inspector_handle_register)
+                        .build();
+    
                     let result = evm.transact();
                     let mut task_result = TaskResultItem::default();    
                     // Track read-write access for conflict detection
                     // This information is crucial for maintaining consistency
-                    if let Some(mut logger) = evm.take_ssa_logger() {
-                        let logs = logger.take_logs();
-                        let graph_wrapper = self.dag_store[idx].clone();
-                        self.thread_pool.spawn(move || {
-                            let mut graph = graph_wrapper.write();
-                            graph.build(logs);
-                        });
-                        self.reads_store[idx] = logger.take_first_reads();   
-                    }
+                    let mut read_write_set = evm.get_read_write_set();
+                    read_write_set.add_write(task.env.tx.caller, AccessType::Balance);
+                    read_write_set.add_write(task.env.tx.caller, AccessType::Nonce);
+                    task_result.read_write_set = Some(read_write_set);
+
                     drop(evm);
                     task_result.inspector = Some(inspector);
                     
@@ -624,7 +618,7 @@ impl Occda {
                     &inspector_setup,
                     false,
                     enable_dep_graph,
-                    enable_ssa
+                    enable_ssa,
                 );
             }
 
@@ -656,12 +650,13 @@ impl Occda {
                         &read_write_set.read_set,
                         h_tx[task_idx].sid + 1,
                         h_tx[task_idx].tid,
+                        enable_ssa,
                     );
-                    if conflict.is_some() && enable_ssa {
+                    if !conflict.is_empty() && enable_ssa {
                         let first_reads = &self.reads_store[task_idx];
-                        self.to_re_execution_store[task_idx] = Self::get_storage_first_reads(first_reads, conflict.as_ref().unwrap());
+                        self.to_re_execution_store[task_idx] = Self::get_storage_first_reads(first_reads, &conflict);
                     }
-                    conflict.is_some()
+                    !conflict.is_empty()
                 };
 
                 // Handle conflicts or commit changes
