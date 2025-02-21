@@ -26,10 +26,10 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{address, Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
+use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
 use revm_ssa::logger::SsaRwSet;
-use revm_ssa::{SSALogger, SSAOutput, StorageKey, StorageValue};
-use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit};
+use revm_ssa::{SSALogger, SSAOutput, StorageKey};
+use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
@@ -122,7 +122,7 @@ impl Occda {
         enable_ssa: bool,
     ) -> Duration 
     where
-        DB: DatabaseRef + Database + DatabaseCommit + SsaDatabaseCommit + Send + Sync,
+        DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
         I: Send + Sync + 'static + 
            for<'db> GetInspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>> +
            for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
@@ -413,7 +413,7 @@ impl Occda {
         enable_ssa: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
-        DB: DatabaseRef + Database + DatabaseCommit + SsaDatabaseCommit + Send + Sync,
+        DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
         I: Send + Sync + 'static + 
            for<'db> GetInspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>> +
            for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
