@@ -835,7 +835,7 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result: HashMap<Address, Account> = HashMap::new();
+        let mut result = HashMap::new();
 
         for output in ssa_state {
             let (storage_key, storage_value) = match output {
