@@ -27,30 +27,29 @@ impl AccessTracker {
     }
 
     /// Check if there is a write access within the range
-    /// Return the first conflicting tid found, or None if no conflict
+    /// Return all conflicting keys found
+    /// !! Potential overhead
     pub fn check_conflict_in_range(
         &self, 
         read_set: &HashMap<Address, HashSet<AccessType>>,
         start_tid: i32,  // sid + 1
         end_tid: i32,    // tid
-    ) -> Option<i32> {
+    ) -> Option<Vec<(Address, AccessType)>> {
+        let mut conflicts = Vec::new();
         for (addr, access_types) in read_set {
             if let Some(addr_writes) = self.writes.get(addr) {
                 for access_type in access_types {
                     if let Some(tid_vec) = addr_writes.get(access_type) {
                         // Use binary search to find the first position greater than start_tid
                         match tid_vec.binary_search(&start_tid) {
-                            Ok(idx) => {
-                                // Found position equal to start_tid, check the next position
-                                // Found conflict: address accessed by tid
-                                // println!("Tid {} Found conflict: address {:?} accessed by tid {} with access type {:?}", end_tid, addr, tid_vec[idx], access_type);
-                                return Some(tid_vec[idx])
+                            Ok(_idx) => {
+                                // Found position equal to start_tid
+                                conflicts.push((*addr, access_type.clone()));
                             }
                             Err(idx) => {
                                 // idx is the first position greater than start_tid
                                 if idx < tid_vec.len() && tid_vec[idx] < end_tid {
-                                    // println!("Tid {} Found conflict: address {:?} accessed by tid {} with access type {:?}", end_tid, addr, tid_vec[idx], access_type);
-                                    return Some(tid_vec[idx]);
+                                    conflicts.push((*addr, access_type.clone()));
                                 }
                             }
                         }
@@ -58,6 +57,10 @@ impl AccessTracker {
                 }
             }
         }
-        None
+        if conflicts.is_empty() {
+            None
+        } else {
+            Some(conflicts)
+        }
     }
 }

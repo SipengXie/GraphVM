@@ -1,18 +1,12 @@
-use revm_ssa::SSALogger;
+use revm_ssa::{SSALogger, StorageKey};
 
 use crate::{
-    builder::{EvmBuilder, HandlerStage, SetGenericStage},
-    db::{Database, DatabaseCommit, EmptyDB},
-    handler::Handler,
-    interpreter::{
+    builder::{EvmBuilder, HandlerStage, SetGenericStage}, db::{Database, DatabaseCommit, EmptyDB}, handler::Handler, interpreter::{
         CallInputs, CreateInputs, EOFCreateInputs, Host, InterpreterAction, SharedMemory,
-    },
-    primitives::{
+    }, journaled_state::{AccessType, ReadWriteSet}, primitives::{
         specification::SpecId, BlockEnv, CfgEnv, EVMError, EVMResult, EnvWithHandlerCfg,
         ExecutionResult, HandlerCfg, ResultAndState, TxEnv, TxKind, EOF_MAGIC_BYTES,
-    },
-    journaled_state::ReadWriteSet,
-    Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult,
+    }, Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult
 };
 use core::fmt;
 use std::{boxed::Box, vec::Vec};
@@ -457,8 +451,35 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         post_exec.output(ctx, result)
     }
 
-    /// Returns the read-write set from the journaled state
-    pub fn get_read_write_set(&mut self) -> ReadWriteSet {
+       /// Returns the read-write set from the journaled state
+       pub fn get_read_write_set(&mut self) -> ReadWriteSet {
+        // If SSA logger exists, construct read-write set from SSA logger's first_reads and latest_writes
+        if let Some(logger) = &self.context.evm.inner.ssa_logger {
+            let mut ret = ReadWriteSet::default();
+            // Add all first reads
+            for (key, _) in logger.get_first_reads() {
+                match key {
+                    StorageKey::Balance(addr) => ret.add_read(*addr, AccessType::Balance),
+                    StorageKey::Nonce(addr) => ret.add_read(*addr, AccessType::Nonce),
+                    StorageKey::Code(addr) => ret.add_read(*addr, AccessType::Code),
+                    StorageKey::Slot(addr, slot) => ret.add_read(*addr, AccessType::StorageSlot(*slot)),
+                    StorageKey::CodeSize(addr) => ret.add_read(*addr, AccessType::Code),
+                    StorageKey::CodeHash(addr) => ret.add_read(*addr, AccessType::Code),
+                }
+            }
+            // Add all latest writes 
+            for key in logger.get_latest_writes().keys() {
+                match key {
+                    StorageKey::Balance(addr) => ret.add_write(*addr, AccessType::Balance),
+                    StorageKey::Nonce(addr) => ret.add_write(*addr, AccessType::Nonce),
+                    StorageKey::Code(addr) => ret.add_write(*addr, AccessType::Code),
+                    StorageKey::Slot(addr, slot) => ret.add_write(*addr, AccessType::StorageSlot(*slot)),
+                    StorageKey::CodeSize(addr) => ret.add_write(*addr, AccessType::Code),
+                    StorageKey::CodeHash(addr) => ret.add_write(*addr, AccessType::Code),
+                }
+            }
+            return ret;
+        }
         let ret = self.context.evm.journaled_state.read_write_set();
         self.context.evm.journaled_state.reset_read_write_set();
         ret

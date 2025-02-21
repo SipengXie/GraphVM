@@ -226,13 +226,10 @@ impl SsaGraph {
     /// Get all storage write outputs and their corresponding storage keys
     /// 
     /// # Returns
-    /// * `Result<(Vec<SSAOutput>, HashSet<StorageKey>)>` - A tuple containing:
-    ///   - A vector of all storage write outputs
-    ///   - A set of all storage keys that were written to
-    pub fn get_storage_write_outputs(&self) -> Result<(Vec<SSAOutput>, HashSet<StorageKey>)> {
+    /// * `Result<Vec<SSAOutput>>` - A vector of all storage write outputs
+    pub fn get_storage_write_outputs(&self) -> Result<Vec<SSAOutput>> {
         // Pre-allocate capacity to avoid reallocations
         let mut storage_outputs = Vec::with_capacity(self.storage_write.len());
-        let mut storage_keys = HashSet::with_capacity(self.storage_write.len());
 
         // Get all results at once to avoid multiple get_result calls
         for lsn in &self.storage_write {
@@ -241,7 +238,6 @@ impl SsaGraph {
                 outputs.iter()
                     .filter_map(|o| {
                         if let SSAOutput::Storage { key, value } = o {
-                            storage_keys.insert(**key);
                             Some(SSAOutput::Storage {
                                 key: key.clone(),
                                 value: value.clone()
@@ -257,7 +253,7 @@ impl SsaGraph {
             }
         }
 
-        Ok((storage_outputs, storage_keys))
+        Ok(storage_outputs)
     }
 
 }

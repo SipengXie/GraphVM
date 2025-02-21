@@ -31,14 +31,14 @@ pub struct ReadWriteSet {
 }
 
 impl ReadWriteSet {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             read_set: HashMap::default(),
             write_set: HashMap::default(),
         }
     }
 
-    fn add_read(&mut self, address: Address, access_type: AccessType) {
+    pub fn add_read(&mut self, address: Address, access_type: AccessType) {
         self.read_set
             .entry(address)
             .or_insert_with(HashSet::default)

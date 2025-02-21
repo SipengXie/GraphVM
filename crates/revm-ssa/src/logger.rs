@@ -1557,6 +1557,10 @@ impl SSALogger {
         &self.first_reads
     }
 
+    pub fn take_first_reads(&mut self) -> HashMap<StorageKey, u16> {
+        std::mem::take(&mut self.first_reads)
+    }
+
     pub fn clear(&mut self) {
         self.current_lsn = 0;
         self.logs.clear();

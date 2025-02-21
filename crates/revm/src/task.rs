@@ -1,10 +1,8 @@
 use core::default::Default;
-
-use revm_ssa::logger::SsaRwSet;
-use revm_ssa::SSAOutput;
+use revm_ssa::{SSAOutput, StorageKey};
 
 use crate::primitives::{ExecutionResult, EvmState, Env, SpecId};
-use crate::journaled_state::ReadWriteSet;
+use crate::journaled_state::{AccessType, ReadWriteSet};
 use std::cmp::Ordering;
 
 #[derive(Default)]
@@ -100,7 +98,6 @@ pub struct TaskResultItem<I> {
     pub result: Option<ExecutionResult>,
     pub inspector: Option<I>,
     pub read_write_set: Option<ReadWriteSet>,
-    pub ssa_rw_set: Option<SsaRwSet>,
     pub state: Option<EvmState>,
     pub ssa_state: Option<Vec<SSAOutput>>,
 }
@@ -112,9 +109,47 @@ impl<I> Default for TaskResultItem<I> {
             result: None,
             inspector: None,
             read_write_set: None,
-            ssa_rw_set: None,
             state: None,
             ssa_state: None,
         }
+    }
+}
+
+impl<I> TaskResultItem<I> {
+    pub fn get_read_write_set(&self) -> ReadWriteSet {
+
+        if let Some(rw_set) = &self.read_write_set {
+            return rw_set.clone();
+        }
+
+
+        if let Some(ssa_state) = &self.ssa_state {
+            let mut read_write_set = ReadWriteSet::new();
+            
+            for output in ssa_state {
+                if let SSAOutput::Storage { key, .. } = output {
+                    match &**key {
+                        StorageKey::Balance(address) => {
+                            read_write_set.add_write(*address, AccessType::Balance);
+                        }
+                        StorageKey::Nonce(address) => {
+                            read_write_set.add_write(*address, AccessType::Nonce); 
+                        }
+                        StorageKey::Slot(address, key) => {
+                            read_write_set.add_write(*address, AccessType::StorageSlot(*key));
+                        }
+                        StorageKey::CodeSize(address) |
+                        StorageKey::Code(address) |
+                        StorageKey::CodeHash(address) => {
+                            read_write_set.add_write(*address, AccessType::Code);
+                        }
+                    }
+                }
+            }
+            return read_write_set;
+        }
+
+
+        ReadWriteSet::new()
     }
 }
