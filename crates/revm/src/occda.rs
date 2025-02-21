@@ -12,7 +12,7 @@ use crate::graph_wrapper::GraphWrapper;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{ResultAndState, HashMap, Address, hash_map::Entry};
+use crate::primitives::{ResultAndState, HashMap, HashSet, Address, hash_map::Entry};
 use crate::access_tracker::AccessTracker;
 use crate::journaled_state::AccessType;
 use crate::ssa_access_tracker::SsaAccessTracker;
@@ -33,7 +33,6 @@ use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
-use std::collections::{HashMap as StdHashMap, HashSet};
 // use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
@@ -143,7 +142,7 @@ impl Occda {
         } else {
             // Execution phase: group tasks based on DAG dependencies
             let mut task_groups: Vec<Vec<usize>> = Vec::new();
-            let mut visited: HashSet<usize> = HashSet::new();
+            let mut visited: HashSet<usize> = HashSet::default();
 
             // Iterate through tasks in reverse order since later transactions may depend on earlier ones
             for &task_idx in ready_tasks.iter().rev() {
@@ -835,7 +834,7 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result = HashMap::new();
+        let mut result = HashMap::default();
 
         for output in ssa_state {
             let (storage_key, storage_value) = match output {
@@ -948,8 +947,8 @@ impl Occda {
     /// # Returns
     /// * `bool` - true if there exists at least one address where both sets have a common AccessType
     fn has_intersection(
-        set1: &StdHashMap<Address, HashSet<AccessType>>,
-        set2: &StdHashMap<Address, HashSet<AccessType>>
+        set1: &HashMap<Address, HashSet<AccessType>>,
+        set2: &HashMap<Address, HashSet<AccessType>>
     ) -> bool {
         set1.iter().any(|(addr, types1)| {
             if let Some(types2) = set2.get(addr) {
