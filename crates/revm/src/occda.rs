@@ -12,7 +12,7 @@ use crate::graph_wrapper::GraphWrapper;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{ResultAndState, Address};
+use crate::primitives::{ResultAndState, Address, hash_map::Entry};
 use crate::access_tracker::AccessTracker;
 use crate::journaled_state::AccessType;
 use crate::ssa_access_tracker::SsaAccessTracker;
@@ -26,9 +26,9 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::LatestSpec;
+use revm_primitives::{address, Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
 use revm_ssa::logger::SsaRwSet;
-use revm_ssa::SSALogger;
+use revm_ssa::{SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor, SsaDatabaseCommit};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -707,16 +707,18 @@ impl Occda {
                             &read_write_set.write_set
                         );
                     } else {
-                        if let Some(state) = task_result.ssa_state.clone() {
-                            parallel_db.commit_ssa_storage(state.clone());
-                            unsafe {
-                                (*raw_db_ptr).commit_ssa_storage(state);
-                            }
+                        let state: HashMap<Address, Account> = if let Some(ssa_state) = task_result.ssa_state.clone() {
+                            // Convert SSA state to normal state
+                            self.convert_ssa_to_state(&mut parallel_db, &ssa_state).map_err(|_|()).unwrap_or_default()
                         } else if let Some(state) = task_result.state.clone() {
-                            parallel_db.commit(state.clone());
-                            unsafe {
-                                (*raw_db_ptr).commit(state);
-                            }
+                            state
+                        } else {
+                            continue;
+                        };
+                        // eprintln!("State: {:?}", state);
+                        parallel_db.commit(state.clone());
+                        unsafe {
+                            (*raw_db_ptr).commit(state);
                         }
 
                         let ssa_rw_set = task_result.ssa_rw_set.as_ref().unwrap();
@@ -810,6 +812,128 @@ impl Occda {
         // eprintln!("===========================================\n");
 
         Ok(())
+    }
+
+    /// Convert SSA state to normal state by applying storage updates
+    /// 
+    /// This function takes SSA execution results and converts them to normal state updates by:
+    /// 1. Using result cache as primary source for account data
+    /// 2. Falling back to DB lookup if account not in cache
+    /// 3. Applying storage updates to accounts in order
+    /// 
+    /// # Parameters
+    /// * `db` - Database to read accounts from 
+    /// * `ssa_state` - SSA execution results containing storage updates
+    /// 
+    /// # Returns
+    /// * Result containing updated account states or error
+    pub fn convert_ssa_to_state<DB>(
+        &self,
+        db: &mut DB,
+        ssa_state: &[SSAOutput],
+    ) -> Result<HashMap<Address, Account>, EVMError<DB::Error>>
+    where
+        DB: DatabaseRef
+    {
+        let mut result: HashMap<Address, Account> = HashMap::new();
+
+        for output in ssa_state {
+            let (storage_key, storage_value) = match output {
+                SSAOutput::Storage { key, value } => (key, value),
+                _ => panic!("SSAOutput is not a storage output"),
+            };
+            match **storage_key {
+                StorageKey::Balance(address) => {
+                    let account = result.entry(address)
+                    .or_insert_with(
+                        || 
+                        db.basic_ref(address)
+                        .map(|info| match info {
+                            None => Account::new_not_existing(),
+                            Some(account) => account.into(),
+                        })
+                        .unwrap_or_else(|_| Account::new_not_existing())
+                    );
+                    account.status = AccountStatus::Touched;
+                    account.info.balance = storage_value.as_balance().unwrap();
+                },
+                StorageKey::Nonce(address) => {
+                    let account = result.entry(address)
+                    .or_insert_with(
+                        || 
+                        db.basic_ref(address)
+                        .map(|info| match info {
+                            None => Account::new_not_existing(),
+                            Some(account) => account.into(),
+                        })
+                        .unwrap_or_else(|_| Account::new_not_existing())
+                    );
+                    account.status = AccountStatus::Touched;
+                    account.info.nonce = storage_value.as_nonce().unwrap();
+                },
+                StorageKey::CodeSize(_) => {
+                },
+                StorageKey::Code(address) => {
+                    let account = result.entry(address)
+                    .or_insert_with(
+                        || 
+                        db.basic_ref(address)
+                        .map(|info| match info {
+                            None => Account::new_not_existing(),
+                            Some(account) => account.into(),
+                        })
+                        .unwrap_or_else(|_| Account::new_not_existing())
+                    );
+                    account.status = AccountStatus::Touched;
+                    account.info.code = Some(Bytecode::new_raw(storage_value.as_code().unwrap().clone()));
+                },
+                StorageKey::CodeHash(address) => {
+                    let account = result.entry(address)
+                    .or_insert_with(
+                        || 
+                        db.basic_ref(address)
+                        .map(|info| match info {
+                            None => Account::new_not_existing(),
+                            Some(account) => account.into(),
+                        })
+                        .unwrap_or_else(|_| Account::new_not_existing())
+                    );
+                    account.status = AccountStatus::Touched;
+                    account.info.code_hash = storage_value.as_code_hash().unwrap().into();
+                },
+                StorageKey::Slot(address, index) => {
+                    let account = result.entry(address)
+                    .or_insert_with(
+                        || 
+                        db.basic_ref(address)
+                        .map(|info| match info {
+                            None => Account::new_not_existing(),
+                            Some(account) => account.into(),
+                        })
+                        .unwrap_or_else(|_| Account::new_not_existing())
+                    );
+                    account.status = AccountStatus::Touched;
+                    let is_cold = match account.storage.entry(index) {
+                        Entry::Occupied(occ) => {
+                            let slot = occ.into_mut();
+                            slot.mark_warm()
+                        }
+                        Entry::Vacant(vac) => {
+                            // TODO: we have to consider the case that the storage is cleared, as the account is newly created
+                            let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
+                            vac.insert(EvmStorageSlot::new(value));
+                            true
+                        }
+                    };
+                    let slot = account.storage.get_mut(&index).unwrap();
+                    slot.present_value = storage_value.as_slot().unwrap();
+                    slot.is_cold = is_cold;
+                },
+            }
+        }
+        // eprintln!("SSA State: {:?}", ssa_state);
+        // eprintln!("result: {:?}", result);
+        Ok(result)
     }
 
     /// Checks if two access sets have any overlapping addresses with matching access types
