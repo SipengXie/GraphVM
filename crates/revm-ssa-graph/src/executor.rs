@@ -566,7 +566,7 @@ where
     ) -> Result<SSAInput> {
         // eprintln!("resolve_storage_input: {:?}", source);
         let result = if source != 0 {
-            let (storage_key, storage_value) = Self::get_dependency_result(
+            let (storage_key, storage_value) = match Self::get_dependency_result(
                 graph,
                 source,
                 |results| results.iter().find_map(|output| {
@@ -577,7 +577,16 @@ where
                     }
                 }),
                 "Storage"
-            )?;
+            ) {
+                Ok(result) => result,
+                Err(e) => {
+                    eprintln!("Error resolving storage input for source node {}: {:?}", source, e);
+                    let node = graph.get_node(source);
+                    eprintln!("Source node: {:?}", node);
+                    eprintln!("Source result: {:?}", graph.get_result_by_lsn(source));
+                    return Err(e);
+                }
+            };
             
             Ok(SSAInput::Storage {
                 key: storage_key,
