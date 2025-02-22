@@ -913,9 +913,8 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-
-        self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.last_call = self.current_lsn;
+        self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
     pub fn log_call_code(&mut self, opcode: u8, 
@@ -972,6 +971,7 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
+
         self.last_call = self.current_lsn;
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
         
