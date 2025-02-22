@@ -147,7 +147,7 @@ where
     }
 
     /// Execute the entire graph
-    pub fn execute(&mut self) -> Result<()> {
+    pub fn execute(&mut self) -> Result<usize> {
         let nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
@@ -203,7 +203,7 @@ where
             }
         }
         
-        Ok(())
+        Ok(nodes_to_execute.len())
     }
 
     pub fn execute_parallel(&mut self) -> Result<()> {

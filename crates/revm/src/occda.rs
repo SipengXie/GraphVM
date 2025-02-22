@@ -21,6 +21,7 @@ use crate::evm::Evm;
 use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel_db::ParallelDB};
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
+use crate::profiler;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
@@ -31,7 +32,6 @@ use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
-// use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
 pub struct Occda {
@@ -279,7 +279,7 @@ impl Occda {
                                     .collect::<Vec<_>>()); 
                                 let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
                                 match executor.execute() {
-                                    Ok(()) => {
+                                    Ok(nodes_to_execute_len) => {
                                         let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                         let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                         task_result.ssa_output = Some(result_state);
@@ -290,6 +290,11 @@ impl Occda {
                                             *result_raw_ptr.add(idx) = task_result;
                                         }
                                         drop(executor);
+                                        profiler::note_str_unchecked(
+                                            "re-execution-opcodes",
+                                            &format!("tx-{}", idx), 
+                                            &nodes_to_execute_len.to_string()
+                                        );
                                         continue;
                                     }
                                     Err(e) => {
@@ -362,6 +367,11 @@ impl Occda {
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
+                            profiler::note_str_unchecked(
+                                "total-opcodes", 
+                                &format!("tx-{}", idx), 
+                                &logger.current_lsn.to_string()
+                            );
                         }
 
                         // Clean up EVM instance to free resources
@@ -369,13 +379,24 @@ impl Occda {
                         task_result.inspector = Some(inspector);
 
                         // Store execution results based on success/failure
+                        let uid_for_record = format!("{}-{}", task.env.tx.caller, task.env.tx.nonce.unwrap());
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
+                                profiler::note_str_unchecked(
+                                    "gas-used", 
+                                    &uid_for_record, 
+                                    &result.gas_used().to_string(),
+                                );
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
                             }
                             Err(_) => {
+                                profiler::note_str_unchecked(
+                                    "gas-used", 
+                                    &uid_for_record, 
+                                    &"failure",
+                                );
                                 task_result.state = None;
                                 task_result.result = None;
                             }
@@ -544,8 +565,10 @@ impl Occda {
             if ready_tasks.len() < self.num_threads {
                 parallel_db.set_parallel_mode(false);
                 let seq_start = std::time::Instant::now();
+                profiler::start_multi("non-parallel");
+                profiler::note_str_multi("non-parallel", "type", "non-parallel");
+
                 seq_exec_size += ready_tasks.len();
-                
                 for &idx in &ready_tasks {
                     let task = &mut h_tx[idx];
                     let mut inspector = inspector_setup();
@@ -569,7 +592,7 @@ impl Occda {
                             let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
                                 .with_mode(execution_mode);
                             match executor.execute() {
-                                Ok(()) => {
+                                Ok(nodes_to_execute_len) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                     task_result.ssa_output = Some(result_state);
@@ -577,6 +600,11 @@ impl Occda {
                                     task_result.result = result_store[idx].result.clone();
                                     result_store[idx] = task_result;
                                     drop(executor);
+                                    profiler::note_str_unchecked(
+                                        "re-execution-opcodes",
+                                        &format!("redo-{}", idx), 
+                                        &nodes_to_execute_len.to_string()
+                                    );
                                     continue;
                                 }
                                 Err(e) => {
@@ -612,13 +640,24 @@ impl Occda {
                     drop(evm);
                     task_result.inspector = Some(inspector);
                     
+                    let uid_for_record = format!("{}-{}-redo", task.env.tx.caller, task.env.tx.nonce.unwrap());
                     match result {
                         Ok(result_and_state) => {
                             let ResultAndState { state, result } = result_and_state;
+                            profiler::note_str_unchecked(
+                                "gas-used", 
+                                &uid_for_record, 
+                                &result.gas_used().to_string(),
+                            );
                             task_result.state = Some(state);
                             task_result.result = Some(result);
                         }
                         Err(_) => {
+                            profiler::note_str_unchecked(
+                                "gas-used", 
+                                &uid_for_record, 
+                                &"failure",
+                            );
                             task_result.state = None;
                             task_result.result = None;
                         }
@@ -629,8 +668,11 @@ impl Occda {
                 
                 let seq_end = std::time::Instant::now();
                 seq_time += seq_end - seq_start;
+                profiler::end_multi("non-parallel");
                 
             } else {
+                profiler::start_multi("parallel");
+                profiler::note_str_multi("parallel", "type", "parallel");
                 parallel_exec_size += ready_tasks.len();
                 parallel_db.set_parallel_mode(true);
                 parallel_time += self.execute_parallel_tasks(
@@ -643,6 +685,7 @@ impl Occda {
                     enable_dep_graph,
                     enable_ssa,
                 );
+                profiler::end_multi("parallel");
             }
 
 
@@ -650,6 +693,8 @@ impl Occda {
             h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
 
             let commit_start = std::time::Instant::now();
+            profiler::start_multi("commit-all");
+            profiler::note_str_multi("commit-all", "type", "commit");
             
             // Commit phase: process transactions in sequential order
             // This ensures consistency and handles conflicts
@@ -716,11 +761,16 @@ impl Occda {
             }
             let commit_end = std::time::Instant::now();
             commit_time += commit_end - commit_start;
+            profiler::end_multi("commit-all");
         }
 
         // Calculate final statistics and conflict rate
         // High conflict rates might indicate need for better task scheduling
         let conflict_rate = ((exec_size - tx_size) as f64) / (tx_size as f64) * 100.0;
+        profiler::start("metrics");
+        profiler::note_str("metrics", "type", "metrics");
+        profiler::note_str("metrics", "conflict-rate", &conflict_rate.to_string());
+        profiler::end("metrics");
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",
             result_store.len(),
