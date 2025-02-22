@@ -1,8 +1,8 @@
 /// SsaAccessTracker is responsible for tracking access events of storage keys within the SSA context.
 /// It uses an internal HashMap to map each StorageKey to a sorted list of transaction IDs (tids).
 
-use std::collections::{HashMap, HashSet};
 use revm_ssa::StorageKey;
+use std::collections::{HashMap, HashSet};
 
 /// The SsaAccessTracker tracks access events of storage keys within the SSA context.
 pub struct SsaAccessTracker {

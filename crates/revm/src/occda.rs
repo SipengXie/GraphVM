@@ -12,7 +12,7 @@ use crate::graph_wrapper::GraphWrapper;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{ResultAndState, Address, hash_map::Entry};
+use crate::primitives::{ResultAndState, HashMap, HashSet, Address, hash_map::Entry};
 use crate::access_tracker::AccessTracker;
 use crate::journaled_state::AccessType;
 use crate::task::{Task, TaskResultItem};
@@ -26,12 +26,14 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256, HashMap, HashSet};
+use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
+use revm_ssa::logger::SsaRwSet;
 use revm_ssa::{SSALogger, SSAOutput, StorageKey};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
+// use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
 pub struct Occda {
@@ -869,7 +871,7 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result: HashMap<Address, Account> = HashMap::default();
+        let mut result = HashMap::default();
 
         for output in ssa_state {
             let (storage_key, storage_value) = match output {
