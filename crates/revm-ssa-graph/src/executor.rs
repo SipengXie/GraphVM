@@ -581,9 +581,18 @@ where
                 Ok(result) => result,
                 Err(e) => {
                     eprintln!("Error resolving storage input for source node {}: {:?}", source, e);
-                    let node = graph.get_node(source);
+                    let node = graph.get_node(source).unwrap();
+                    let last_call = match node.inputs[0] {
+                        SSAInput::CallInput { entry, .. } => entry,
+                        _ => 0
+                    };
+                    let last_call_node = graph.get_node(last_call).unwrap();
+                    eprintln!("Last call node: {:?}", last_call_node);
+                    eprintln!("Last call result: {:?}", graph.get_result_by_lsn(last_call));
+                    
                     eprintln!("Source node: {:?}", node);
                     eprintln!("Source result: {:?}", graph.get_result_by_lsn(source));
+
                     return Err(e);
                 }
             };
