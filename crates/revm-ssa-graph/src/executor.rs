@@ -308,7 +308,7 @@ where
                 _ => return Err(ExecutionError::ExecutionError("First operand must be CallInput".to_string())),
             };
             if !call_input.transfer_value.is_zero() && inputs.len() < 4 {
-                eprintln!("make_call_frame call_input: {:?}", call_input);
+                eprintln!("ssa make_call_frame call_input: {:?}", inputs[0]);
             }
         }
 

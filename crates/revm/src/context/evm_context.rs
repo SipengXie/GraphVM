@@ -1,6 +1,6 @@
 use revm_interpreter::{interpreter_action::{convert_call_input, convert_create_input}, CallValue};
 use revm_precompile::PrecompileErrors;
-use revm_primitives::U256;
+use revm_primitives::{address, U256};
 use revm_ssa::SSALogger;
 
 use super::inner_evm_context::InnerEvmContext;
@@ -220,6 +220,11 @@ impl<DB: Database> EvmContext<DB> {
         // ! use to record the balance:
         let mut caller_balance : Option<U256> = None;
         let mut target_balance : Option<U256> = None;
+        let addr1 = address!("c83e009c7794e8f6d1954dc13c23a35fc4d039f6");
+        let addr2 = address!("21cd7c7aeebbe898f18d03d1c540a0205682309b");
+        if inputs.caller == addr1 && inputs.target_address == addr2 {
+            eprintln!("original make_call_frame inputs: {:?}", inputs);
+        }
 
         // Touch address. For "EIP-158 State Clear", this will erase empty accounts.
         match inputs.value {
