@@ -25,13 +25,12 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
+use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256, HashMap, HashSet};
 use revm_ssa::{SSALogger, SSAOutput, StorageKey};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
-use std::collections::{HashMap, HashSet};
 // use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
@@ -48,7 +47,7 @@ pub struct Occda {
     thread_pool: ThreadPool,
 
     /// to_re_execution_store
-    to_re_execution_store: Vec<Vec<u16>>,
+    to_re_execution_store: Vec<Vec<Option<u16>>>,
 
     /// dag_store
     dag_store: Vec<Arc<RwLock<GraphWrapper>>>,
@@ -90,13 +89,13 @@ impl Occda {
     pub fn init(&mut self, tasks: Vec<Task>, graph: Option<&TaskDag>, enable_ssa: bool) -> Vec<Task> {
         let len: usize = tasks.len();
         if enable_ssa {
-            self.to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
+            self.to_re_execution_store = Vec::<Vec<Option<u16>>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
             self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
                 self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
-                self.reads_store.push(HashMap::new());
+                self.reads_store.push(HashMap::default());
             }
         }
         let mut vec = Vec::with_capacity(tasks.len());
@@ -163,7 +162,7 @@ impl Occda {
         } else {
             // Execution phase: group tasks based on DAG dependencies
             let mut task_groups: Vec<Vec<usize>> = Vec::new();
-            let mut visited: HashSet<usize> = HashSet::new();
+            let mut visited: HashSet<usize> = HashSet::default();
 
             // Iterate through tasks in reverse order since later transactions may depend on earlier ones
             for &task_idx in ready_tasks.iter().rev() {
@@ -263,33 +262,45 @@ impl Occda {
                         let db_ref = &*db;
                         
                         // use ssa to re-execute the transaction
-                        if enable_ssa &&!self.to_re_execution_store[idx].is_empty() {
+                        if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
                             // eprintln!("re-execute task: {} with ssa.", idx);
                             let to_re_execute = &self.to_re_execution_store[idx];
-                            while !self.dag_store[idx].read().is_built() {
-                                std::hint::spin_loop();
-                            }
-                            let graph = self.dag_store[idx].read().get_graph();
-                            let execution_mode = ExecutionMode::Partial(to_re_execute.clone()); 
-                            let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
-                            match executor.execute() {
-                                Ok(()) => {
-                                    let result_state = executor.graph.get_storage_write_outputs().unwrap();
-                                    let mut task_result: TaskResultItem<I> = TaskResultItem::default();
-                                    task_result.ssa_state = Some(result_state);
-                                    let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
-                                    unsafe {
-                                        *result_raw_ptr.add(idx) = task_result;
+                            
+                            // Check if any elements are None
+                            let has_none = to_re_execute.iter().any(|x| x.is_none());
+                            
+                            if !has_none {
+                                while !self.dag_store[idx].read().is_built() {
+                                    std::hint::spin_loop();
+                                }
+                                let graph = self.dag_store[idx].read().get_graph();
+                                let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
+                                    .map(|x| x.unwrap())
+                                    .collect::<Vec<_>>()); 
+                                let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
+                                match executor.execute() {
+                                    Ok(()) => {
+                                        let result_state = executor.graph.get_storage_write_outputs().unwrap();
+                                        let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                        task_result.ssa_output = Some(result_state);
+                                        // TODO: simplify the result generation now.
+                                        task_result.result = result_store[idx].result.clone();
+                                        let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
+                                        unsafe {
+                                            *result_raw_ptr.add(idx) = task_result;
+                                        }
+                                        drop(executor);
+                                        continue;
                                     }
-                                    drop(executor);
-                                    continue;
-                                }
-                                Err(e) => {
-                                    eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
-                                    drop(executor);
-                                    // fall through to EVM re-execution path below
+                                    Err(e) => {
+                                        eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                        drop(executor);
+                                        // fall through to EVM re-execution path below
+                                    }
                                 }
                             }
+                            eprintln!("SSA re-execution failed: Encouter unexpected storage access, fall back to EVM re-execution.");
+                            // If has_none is true, fall through to EVM re-execution
                         }
 
                         // Initialize EVM instance with task-specific configuration
@@ -543,28 +554,40 @@ impl Occda {
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
                         // eprintln!("re-execute task: {} with ssa.", idx);
                         let to_re_execute = &self.to_re_execution_store[idx];
-                        while !self.dag_store[idx].read().is_built() {
-                            std::hint::spin_loop();
-                        }
-                        let graph = self.dag_store[idx].read().get_graph();
-                        let execution_mode = ExecutionMode::Partial(to_re_execute.clone());
-                        let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
-                            .with_mode(execution_mode);
-                        match executor.execute() {
-                            Ok(()) => {
-                                let result_state = executor.graph.get_storage_write_outputs().unwrap();
-                                let mut task_result: TaskResultItem<I> = TaskResultItem::default();
-                                task_result.ssa_state = Some(result_state);
-                                result_store[idx] = task_result;
-                                drop(executor);
-                                continue;
+                        
+                        // Check if any elements are None
+                        let has_none = to_re_execute.iter().any(|x| x.is_none());
+                        
+                        if !has_none {
+                            while !self.dag_store[idx].read().is_built() {
+                                std::hint::spin_loop();
                             }
-                            Err(e) => {
-                                eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
-                                drop(executor);
-                                // fall through to EVM re-execution path below
+                            let graph = self.dag_store[idx].read().get_graph();
+                            let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
+                                .map(|x| x.unwrap())
+                                .collect::<Vec<_>>());
+                            let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
+                                .with_mode(execution_mode);
+                            match executor.execute() {
+                                Ok(()) => {
+                                    let result_state = executor.graph.get_storage_write_outputs().unwrap();
+                                    let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                    task_result.ssa_output = Some(result_state);
+                                    // TODO: simplify the result generation now.
+                                    task_result.result = result_store[idx].result.clone();
+                                    result_store[idx] = task_result;
+                                    drop(executor);
+                                    continue;
+                                }
+                                Err(e) => {
+                                    eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                    drop(executor);
+                                    // fall through to EVM re-execution path below
+                                }
                             }
                         }
+                        eprintln!("SSA re-execution failed: Encouter unexpected storage access, fall back to EVM re-execution.");
+                        // If has_none is true, fall through to EVM re-execution
                     }
 
                    // Normal execution path
@@ -666,9 +689,12 @@ impl Occda {
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
                 } else {
                     let state: HashMap<Address, Account> = 
-                    if let Some(ssa_state) = &task_result.ssa_state {
+                    if let Some(ssa_state) = &task_result.ssa_output {
                         // Convert SSA state to normal state
-                        self.convert_ssa_to_state(&mut parallel_db, ssa_state).map_err(|_|()).unwrap_or_default()
+                        let state = self.convert_ssa_to_state(&mut parallel_db, ssa_state).map_err(|_|()).unwrap_or_default();
+                        // Clone a state to task_result, for the reth usage.
+                        task_result.state = Some(state.clone());
+                        state
                     } else if let Some(state) = task_result.state.clone() {
                         state
                     } else {
@@ -717,7 +743,7 @@ impl Occda {
         });
 
         for i in 0..result_store.len() {
-            if result_store[i].state.is_none() && result_store[i].ssa_state.is_none() {
+            if result_store[i].state.is_none() && result_store[i].ssa_output.is_none() {
                 println!("failed task: {:?}", h_tx[i].tid);
             }
         }
@@ -793,7 +819,7 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result: HashMap<Address, Account> = HashMap::new();
+        let mut result: HashMap<Address, Account> = HashMap::default();
 
         for output in ssa_state {
             let (storage_key, storage_value) = match output {
@@ -896,7 +922,7 @@ impl Occda {
 
     /// Returns an array of first read LSNs from the SSA logger
     /// Input is a HashMap<Address, HashSet<AccessType>> representing the read set
-    fn get_storage_first_reads(first_reads: &HashMap<StorageKey, u16>, read_set: &Vec<(Address, AccessType)>) -> Vec<u16> {
+    fn get_storage_first_reads(first_reads: &HashMap<StorageKey, u16>, read_set: &Vec<(Address, AccessType)>) -> Vec<Option<u16>> {
         let mut result = Vec::new();
             
             // Iterate through the read set
@@ -908,9 +934,7 @@ impl Occda {
                     AccessType::StorageSlot(slot) => first_reads.get(&StorageKey::Slot(*addr, *slot)),
                     _ => None,
                 };
-                if let Some(&lsn) = lsn {
-                    result.push(lsn);
-                }
+                result.push(lsn.copied());
             }
         result
     }

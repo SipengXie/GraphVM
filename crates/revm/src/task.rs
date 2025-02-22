@@ -99,7 +99,7 @@ pub struct TaskResultItem<I> {
     pub inspector: Option<I>,
     pub read_write_set: Option<ReadWriteSet>,
     pub state: Option<EvmState>,
-    pub ssa_state: Option<Vec<SSAOutput>>,
+    pub ssa_output: Option<Vec<SSAOutput>>,
 }
 
 impl<I> Default for TaskResultItem<I> {
@@ -110,7 +110,7 @@ impl<I> Default for TaskResultItem<I> {
             inspector: None,
             read_write_set: None,
             state: None,
-            ssa_state: None,
+            ssa_output: None,
         }
     }
 }
@@ -123,7 +123,7 @@ impl<I> TaskResultItem<I> {
         }
 
 
-        if let Some(ssa_state) = &self.ssa_state {
+        if let Some(ssa_state) = &self.ssa_output {
             let mut read_write_set = ReadWriteSet::new();
             
             for output in ssa_state {
