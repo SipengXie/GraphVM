@@ -308,11 +308,10 @@ where
                 _ => return Err(ExecutionError::ExecutionError("First operand must be CallInput".to_string())),
             };
             if !call_input.transfer_value.is_zero() && inputs.len() < 4 {
-                // eprintln!("make_call_frame call_input: {:?}, entry_lsn: {}", call_input, entry_lsn);
-                eprintln!("{:?}", graph.get_node(97));
-                eprintln!("{:?}", graph.get_node(98));
-                eprintln!("{:?}", graph.get_node(99));
-                eprintln!("{:?}", graph.get_node(100));
+                eprintln!("make_call_frame call_input: {:?}, entry_lsn: {}", call_input, entry_lsn);
+                eprintln!("entry-1's SSALogEntry: {:?}", graph.get_node(*entry_lsn - 1));
+                eprintln!("entry's SSALogEntry: {:?}", graph.get_node(*entry_lsn));
+                eprintln!("self: {:?}", node);
             }
         }
 
