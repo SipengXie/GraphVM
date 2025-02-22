@@ -129,6 +129,13 @@ impl SsaGraph {
         Ok(extractor(&self.graph[node_idx].outputs))
     }
 
+    pub fn get_result_by_lsn(&self, lsn: u16) -> Result<Option<&Vec<SSAOutput>>> {
+        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
+            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
+        )?;
+        Ok(self.results.get(&node_idx))
+    }
+
     /// Add edges
     pub fn add_edges(&mut self, lsn: u16) -> Result<()> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 

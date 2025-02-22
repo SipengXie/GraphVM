@@ -303,12 +303,13 @@ where
         let lsn = node.lsn;
         let inputs = Self::resolve_dependencies(graph, &context, &node)?;
         if node.opcode == 0xD7 {
-            let call_input = match &inputs[0] {
-                SSAInput::CallInput { input, .. } => input,
+            let (call_input, entry_lsn) = match &inputs[0] {
+                SSAInput::CallInput { input, entry, .. } => (input, entry),
                 _ => return Err(ExecutionError::ExecutionError("First operand must be CallInput".to_string())),
             };
             if !call_input.transfer_value.is_zero() && inputs.len() < 4 {
-                eprintln!("ssa make_call_frame call_input: {:?}", inputs[0]);
+                eprintln!("make_call_frame call_input: {:?}, entry_lsn: {}", call_input, entry_lsn);
+                eprintln!("entry: {:?}", graph.get_result_by_lsn(*entry_lsn));
             }
         }
 

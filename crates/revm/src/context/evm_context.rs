@@ -220,11 +220,6 @@ impl<DB: Database> EvmContext<DB> {
         // ! use to record the balance:
         let mut caller_balance : Option<U256> = None;
         let mut target_balance : Option<U256> = None;
-        let addr1 = address!("c83e009c7794e8f6d1954dc13c23a35fc4d039f6");
-        let addr2 = address!("21cd7c7aeebbe898f18d03d1c540a0205682309b");
-        if inputs.caller == addr1 && inputs.target_address == addr2 {
-            eprintln!("original make_call_frame inputs: {:?}", inputs);
-        }
 
         // Touch address. For "EIP-158 State Clear", this will erase empty accounts.
         match inputs.value {
@@ -287,6 +282,12 @@ impl<DB: Database> EvmContext<DB> {
             self.journaled_state.checkpoint_commit();
             if let Some(logger) = self.get_mut_logger() {
                 let call_intput = convert_call_input(&inputs);
+                let addr1 = address!("c83e009c7794e8f6d1954dc13c23a35fc4d039f6");
+                let addr2 = address!("21cd7c7aeebbe898f18d03d1c540a0205682309b");
+                if inputs.caller == addr1 && inputs.target_address == addr2 {
+                    eprintln!("original make_call_frame inputs: {:?}", inputs);
+                    eprintln!("original make_call_frame ssa_call_intput: {:?}", call_intput);
+                }
                 logger.log_make_call_frame(call_intput, caller_balance, target_balance, bytecode.bytes());
             }
             return return_result(InstructionResult::Stop);
@@ -305,6 +306,12 @@ impl<DB: Database> EvmContext<DB> {
 
         if let Some(logger) = self.get_mut_logger() {
             let call_intput = convert_call_input(&inputs);
+            let addr1 = address!("c83e009c7794e8f6d1954dc13c23a35fc4d039f6");
+            let addr2 = address!("21cd7c7aeebbe898f18d03d1c540a0205682309b");
+            if inputs.caller == addr1 && inputs.target_address == addr2 {
+                eprintln!("original make_call_frame inputs: {:?}", inputs);
+                eprintln!("original make_call_frame ssa_call_intput: {:?}", call_intput);
+            }
             logger.log_make_call_frame(call_intput, caller_balance, target_balance, bytecode.bytes());
         }
 
