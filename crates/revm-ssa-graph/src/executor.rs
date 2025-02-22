@@ -589,8 +589,8 @@ where
                     let last_call_node = graph.get_node(last_call).unwrap();
                     eprintln!("Last call node: {:?}", last_call_node);
                     eprintln!("Last call result: {:?}", graph.get_result_by_lsn(last_call));
-                    eprintln!("Node 9866: {:?}", graph.get_node(9866).unwrap());
-                    eprintln!("Result 9866: {:?}", graph.get_result_by_lsn(9866));
+                    // eprintln!("Node 9866: {:?}", graph.get_node(9866).unwrap());
+                    // eprintln!("Result 9866: {:?}", graph.get_result_by_lsn(9866));
                     eprintln!("Source node: {:?}", node);
                     eprintln!("Source result: {:?}", graph.get_result_by_lsn(source));
 
