@@ -311,6 +311,7 @@ where
                 eprintln!("make_call_frame call_input: {:?}, entry_lsn: {}", call_input, entry_lsn);
                 eprintln!("entry: {:?}", graph.get_result_by_lsn(*entry_lsn));
                 eprintln!("entry's SSALogEntry: {:?}", graph.get_node(*entry_lsn));
+                eprintln!("self: {:?}", node);
             }
         }
 
