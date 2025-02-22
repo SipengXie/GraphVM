@@ -625,12 +625,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             target_address: target,
             bytecode_address: Address::from_word(B256::from(*to)),
             caller: caller,
-            transfer_value: match &inputs[2] {
-                SSAInput::ContractEntry { value, .. } => value.as_call_value().unwrap(),
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Third operand must be ContractEntry".to_string()
-                )),
-            },
+            transfer_value: U256::ZERO,
             scheme: match opcode {
                 0xF4 => SSACallScheme::DelegateCall,
                 _ => return Err(ExecutionError::ExecutionError(

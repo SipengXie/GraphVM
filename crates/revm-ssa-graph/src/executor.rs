@@ -310,6 +310,7 @@ where
             if !call_input.transfer_value.is_zero() && inputs.len() < 4 {
                 eprintln!("make_call_frame call_input: {:?}, entry_lsn: {}", call_input, entry_lsn);
                 eprintln!("entry: {:?}", graph.get_result_by_lsn(*entry_lsn));
+                eprintln!("entry's SSALogEntry: {:?}", graph.get_node(*entry_lsn));
             }
         }
 

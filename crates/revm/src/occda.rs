@@ -381,7 +381,7 @@ impl Occda {
                         task_result.inspector = Some(inspector);
 
                         // Store execution results based on success/failure
-                        let uid_for_record = format!("{}-{}", task.env.tx.caller, task.env.tx.nonce.unwrap());
+                        let uid_for_record = format!("{}-{:?}", task.env.tx.caller, task.env.tx.nonce);
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
@@ -656,7 +656,7 @@ impl Occda {
                     drop(evm);
                     task_result.inspector = Some(inspector);
                     
-                    let uid_for_record = format!("{}-{}-redo", task.env.tx.caller, task.env.tx.nonce.unwrap());
+                    let uid_for_record = format!("{}-{:?}-redo", task.env.tx.caller, task.env.tx.nonce);
                     match result {
                         Ok(result_and_state) => {
                             let ResultAndState { state, result } = result_and_state;
