@@ -302,6 +302,9 @@ where
     pub fn execution_node(node: &SSALogEntry, graph: &mut SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let lsn = node.lsn;
         let inputs = Self::resolve_dependencies(graph, &context, &node)?;
+        if node.opcode == 0xD7 {
+            eprintln!("make_call_frame call_input: {:?}", inputs[0]);
+        }
 
         let outputs = Self::execute_operation(&context, node.opcode, inputs)?;
 
