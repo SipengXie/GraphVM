@@ -284,6 +284,8 @@ impl Occda {
                                     Ok(nodes_to_execute_len) => {
                                         let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                         let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                        task_result.gas_limit = task.gas;
+                                        task_result.inspector = Some(inspector);
                                         task_result.ssa_output = Some(result_state);
                                         // TODO: simplify the result generation now.
                                         task_result.result = result_store[idx].result.clone();
@@ -349,7 +351,6 @@ impl Occda {
                         let write_start = std::time::Instant::now();
                         let mut task_result = TaskResultItem::default();
                         task_result.gas_limit = task.gas;
-
                         // Track read-write access for conflict detection
                         // This information is crucial for maintaining consistency
                         let mut read_write_set = evm.get_read_write_set();
@@ -609,6 +610,8 @@ impl Occda {
                                 Ok(nodes_to_execute_len) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                    task_result.gas_limit = task.gas;
+                                    task_result.inspector = Some(inspector);
                                     task_result.ssa_output = Some(result_state);
                                     // TODO: simplify the result generation now.
                                     task_result.result = result_store[idx].result.clone();

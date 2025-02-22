@@ -46,7 +46,7 @@ impl ShadowStack {
     #[inline]
     pub fn new() -> Self {
         Self {
-            data: Vec::with_capacity(STACK_LIMIT),
+            data: Vec::with_capacity(4*STACK_LIMIT),
         }
     }
 
@@ -75,41 +75,20 @@ impl ShadowStack {
     /// unchanged.
     #[inline]
     pub fn push(&mut self, value: u16) -> Result<(), InstructionResult> {
-        if self.data.len() == STACK_LIMIT {
-            return Err(InstructionResult::StackOverflow);
-        }
         self.data.push(value);
         Ok(())
-    }
-
-    /// Peek a value at given index for the stack, where the top of
-    /// the stack is at index `0`. If the index is too large,
-    /// `StackError::Underflow` is returned.
-    #[inline]
-    pub fn peek(&self, no_from_top: usize) -> Result<u16, InstructionResult> {
-        if self.data.len() > no_from_top {
-            Ok(self.data[self.data.len() - no_from_top - 1])
-        } else {
-            Err(InstructionResult::StackUnderflow)
-        }
     }
 
     /// Duplicates the `N`th value from the top of the stack.
     #[inline]
     pub fn dup(&mut self, n: usize) -> Result<(), InstructionResult> {
         let len = self.data.len();
-        if len < n {
-            Err(InstructionResult::StackUnderflow)
-        } else if len + 1 > STACK_LIMIT {
-            Err(InstructionResult::StackOverflow)
-        } else {
-            unsafe {
-                let ptr = self.data.as_mut_ptr().add(len);
-                ptr::copy_nonoverlapping(ptr.sub(n), ptr, 1);
-                self.data.set_len(len + 1);
-            }
-            Ok(())
+        unsafe {
+            let ptr = self.data.as_mut_ptr().add(len);
+            ptr::copy_nonoverlapping(ptr.sub(n), ptr, 1);
+            self.data.set_len(len + 1);
         }
+        Ok(())
     }
 
     /// Swaps the topmost value with the `N`th value from the top.
@@ -125,9 +104,6 @@ impl ShadowStack {
     pub fn exchange(&mut self, n: usize, m: usize) -> Result<(), InstructionResult> {
         let len = self.data.len();
         let n_m_index = n + m;
-        if n_m_index >= len {
-            return Err(InstructionResult::StackUnderflow);
-        }
         unsafe {
             let top = self.data.as_mut_ptr().add(len - 1);
             core::ptr::swap_nonoverlapping(top.sub(n), top.sub(n_m_index), 1);
@@ -135,19 +111,6 @@ impl ShadowStack {
         Ok(())
     }
 
-    /// Set a value at given index for the stack, where the top of the
-    /// stack is at index `0`. If the index is too large,
-    /// `StackError::Underflow` is returned.
-    #[inline]
-    pub fn set(&mut self, no_from_top: usize, val: u16) -> Result<(), InstructionResult> {
-        if self.data.len() > no_from_top {
-            let len = self.data.len();
-            self.data[len - no_from_top - 1] = val;
-            Ok(())
-        } else {
-            Err(InstructionResult::StackUnderflow)
-        }
-    }
 }
 
 #[cfg(feature = "serde")]

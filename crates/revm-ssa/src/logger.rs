@@ -1132,7 +1132,7 @@ impl SSALogger {
             ssa_inputs.push(
                 SSAInput::Storage { 
                     key: Box::new(StorageKey::Balance(caller)), 
-                    value: Box::new(StorageValue::Balance(caller_balance.unwrap_or_default())), 
+                    value: Box::new(StorageValue::Balance(caller_balance.unwrap())), 
                     source: self.get_storage_def(StorageKey::Balance(caller)) 
                 }
             );
@@ -1140,7 +1140,7 @@ impl SSALogger {
             ssa_inputs.push(
                 SSAInput::Storage { 
                     key: Box::new(StorageKey::Balance(target_address)), 
-                    value: Box::new(StorageValue::Balance(target_balance.unwrap_or_default())), 
+                    value: Box::new(StorageValue::Balance(target_balance.unwrap())), 
                     source: self.get_storage_def(StorageKey::Balance(target_address))
                 }
             );
