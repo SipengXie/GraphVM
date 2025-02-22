@@ -277,9 +277,6 @@ impl<DB: Database> EvmContext<DB> {
             return return_result(InstructionResult::InvalidExtDelegateCallTarget);
         }
 
-        if !inputs.call_value().is_zero() && caller_balance.is_none() {
-            eprintln!("caller_balance is none, tx:{:?}", self.env.tx);
-        }
 
         if bytecode.is_empty() {
             self.journaled_state.checkpoint_commit();
