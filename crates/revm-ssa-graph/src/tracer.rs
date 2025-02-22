@@ -96,7 +96,7 @@ impl ExecutionTracer {
                 f1.caller == f2.caller &&
                 f1.target_address == f2.target_address &&
                 f1.input == f2.input &&
-                f1.value == f2.value &&
+                f1.transfer_value == f2.transfer_value &&
                 f1.scheme == f2.scheme &&
                 f1.ret_range == f2.ret_range
             },

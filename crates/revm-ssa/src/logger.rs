@@ -886,7 +886,7 @@ impl SSALogger {
             target_address: to,
             bytecode_address: to,
             caller: target_address,
-            value: value,
+            transfer_value: value,
             scheme: match opcode {
                 0xF1 => SSACallScheme::Call,
                 _ => panic!("Invalid opcode")
@@ -944,7 +944,7 @@ impl SSALogger {
             target_address: target_address,
             bytecode_address: to,
             caller: target_address,
-            value: value,
+            transfer_value: value,
             scheme: match opcode {
                 0xF2 => SSACallScheme::CallCode,
                 _ => panic!("Invalid opcode")
@@ -1011,7 +1011,7 @@ impl SSALogger {
             target_address: contract_target,
             bytecode_address: to,
             caller: contract_caller,
-            value: value,
+            transfer_value: U256::ZERO,
             scheme: match opcode {
                 0xF4 => SSACallScheme::DelegateCall,
                 _ => panic!("Invalid opcode")
@@ -1068,7 +1068,7 @@ impl SSALogger {
             target_address: to,
             bytecode_address: to,
             caller: contract_target,
-            value: U256::ZERO,
+            transfer_value: U256::ZERO,
             scheme: match opcode {
                 0xFA => SSACallScheme::StaticCall,
                 _ => panic!("Invalid opcode")
@@ -1101,7 +1101,7 @@ impl SSALogger {
         let opcode = InternalOp::MAKE_CALL_FRAME;
         let lsn = self.current_lsn;
         self.entry_lsn.push(lsn);
-        let value = call_input.value;
+        let value = call_input.transfer_value;
         let caller = call_input.caller;
         let target_address = call_input.target_address;
         

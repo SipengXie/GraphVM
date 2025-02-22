@@ -17,7 +17,7 @@ pub struct SSACallInput {
     /// Caller address
     pub caller: Address,
     /// Call value
-    pub value: U256,
+    pub transfer_value: U256,
     /// Call scheme
     pub scheme: SSACallScheme,
     /// Return range

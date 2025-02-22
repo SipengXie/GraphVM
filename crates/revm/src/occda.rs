@@ -27,7 +27,6 @@ use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
 use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
-use revm_ssa::logger::SsaRwSet;
 use revm_ssa::{SSALogger, SSAOutput, StorageKey};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;

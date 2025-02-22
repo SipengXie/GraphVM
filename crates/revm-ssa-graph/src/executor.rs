@@ -951,7 +951,7 @@ where
             
             // CallValue resolution
             (CallValue(_), input) => CallValue(match input {
-                Either::Left(call) => call.value,
+                Either::Left(call) => call.transfer_value,
                 Either::Right(create) => create.value,
             }),
             

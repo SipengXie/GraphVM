@@ -146,7 +146,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             target_address: Address::from_word(B256::from(*to)),
             bytecode_address: Address::from_word(B256::from(*to)),
             caller: target_address,
-            value: *value,
+            transfer_value: *value,
             scheme: match opcode {
                 0xF1 => SSACallScheme::Call,
                 _ => return Err(ExecutionError::ExecutionError(
@@ -204,7 +204,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             SSAOutput::CallFrame(new_call_input)
         ];
 
-        if !call_input.value.is_zero() {
+        if !call_input.transfer_value.is_zero() {
             let old_caller_balance = match &inputs[2] {
                 SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
                 _ => return Err(ExecutionError::ExecutionError(
@@ -217,13 +217,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                     "Fourth operand must be Storage value".to_string()
                 )),
             };
-            if old_caller_balance < call_input.value {
+            if old_caller_balance < call_input.transfer_value {
                 return Err(ExecutionError::ExecutionError(
-                    format!("Insufficient balance: need {}, had {}", call_input.value, old_caller_balance).to_string()
+                    format!("Insufficient balance: need {}, had {}", call_input.transfer_value, old_caller_balance).to_string()
                 ));
             }
-            let new_caller_balance = old_caller_balance - call_input.value;
-            let new_target_balance = old_target_balance + call_input.value;
+            let new_caller_balance = old_caller_balance - call_input.transfer_value;
+            let new_target_balance = old_target_balance + call_input.transfer_value;
 
             outputs.push(SSAOutput::Storage { 
                 key: Box::new(StorageKey::Balance(call_input.caller)), 
@@ -561,7 +561,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             target_address: target,
             bytecode_address: Address::from_word(B256::from(*to)),
             caller: target,
-            value: *value,
+            transfer_value: *value,
             scheme: match opcode {
                 0xF2 => SSACallScheme::CallCode,
                 _ => return Err(ExecutionError::ExecutionError(
@@ -625,7 +625,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             target_address: target,
             bytecode_address: Address::from_word(B256::from(*to)),
             caller: caller,
-            value: match &inputs[2] {
+            transfer_value: match &inputs[2] {
                 SSAInput::ContractEntry { value, .. } => value.as_call_value().unwrap(),
                 _ => return Err(ExecutionError::ExecutionError(
                     "Third operand must be ContractEntry".to_string()
@@ -689,7 +689,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             target_address: to_addr,
             bytecode_address: to_addr,
             caller: target,
-            value: U256::ZERO,
+            transfer_value: U256::ZERO,
             scheme: match opcode {
                 0xFA => SSACallScheme::StaticCall,
                 _ => return Err(ExecutionError::ExecutionError(
