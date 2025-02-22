@@ -1,6 +1,5 @@
 
-use std::collections::{HashMap, HashSet};
-use revm_primitives::{Address, Bytes, FixedBytes, Log, B256, U256};
+use revm_primitives::{HashMap, HashSet, Address, Bytes, FixedBytes, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
@@ -71,7 +70,7 @@ impl SsaRwSet {
 
     pub fn new_with_write_set(write_set: HashSet<StorageKey>) -> Self {
         Self {
-            read_set: HashMap::new(),
+            read_set: HashMap::default(),
             write_set,
         }
     }
@@ -94,8 +93,8 @@ impl SSALogger {
             entry_lsn: Vec::new(),
             logs: Vec::with_capacity(512),
             stack: ShadowStack::new(),
-            latest_writes: HashMap::new(),
-            first_reads: HashMap::new(),
+            latest_writes: HashMap::default(),
+            first_reads: HashMap::default(),
             last_memory: 0,
             last_return_data_buffer: 0,
             last_interpreter_return: 0,
@@ -113,8 +112,8 @@ impl SSALogger {
             entry_lsn: Vec::new(),
             logs: Vec::with_capacity(capacity),
             stack: ShadowStack::new(),
-            latest_writes: HashMap::new(),
-            first_reads: HashMap::new(),
+            latest_writes: HashMap::default(),
+            first_reads: HashMap::default(),
             last_memory: 0,
             last_return_data_buffer: 0,
             last_interpreter_return: 0,
