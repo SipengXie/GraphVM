@@ -45,6 +45,10 @@ pub struct SSALogger {
     last_return_data_buffer: u16,
     // last_interpreter_return
     last_interpreter_return: u16,
+    // last_call
+    last_call: u16,
+    // last_create
+    last_create: u16,
     // Initial LSN
     // Use stack to track entry_lsn at different levels
     pub entry_lsn: Vec<u16>,
@@ -98,6 +102,8 @@ impl SSALogger {
             last_memory: 0,
             last_return_data_buffer: 0,
             last_interpreter_return: 0,
+            last_call: 0,
+            last_create: 0,
             call_inputs: vec![],
             create_inputs: vec![],
 
@@ -117,6 +123,8 @@ impl SSALogger {
             last_memory: 0,
             last_return_data_buffer: 0,
             last_interpreter_return: 0,
+            last_call: 0,
+            last_create: 0,
             call_inputs: vec![],
             create_inputs: vec![],
             input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
@@ -690,7 +698,7 @@ impl SSALogger {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
             self.last_memory = self.current_lsn;
         }
-        
+        self.last_create = self.current_lsn;
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
@@ -708,7 +716,7 @@ impl SSALogger {
         ssa_inputs.push(
             SSAInput::CreateInput { 
                 input: Box::new(create_input.clone()), 
-                entry: if lsn == 2 { 0 } else { lsn - 1 } // lsn 1 is deduct caller
+                entry: self.last_create
             }
         );
         ssa_inputs.push(
@@ -907,6 +915,7 @@ impl SSALogger {
         }
 
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
+        self.last_call = self.current_lsn;
     }
 
     pub fn log_call_code(&mut self, opcode: u8, 
@@ -963,9 +972,9 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-
+        self.last_call = self.current_lsn;
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
-
+        
     }   
 
     pub fn log_delegatecall(&mut self, opcode: u8, 
@@ -1030,7 +1039,7 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-
+        self.last_call = self.current_lsn;
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
 
     }
@@ -1087,7 +1096,7 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-
+        self.last_call = self.current_lsn;
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
@@ -1109,7 +1118,7 @@ impl SSALogger {
         ssa_inputs.push(
             SSAInput::CallInput {
                 input: Box::new(call_input.clone()),
-                entry: if lsn == 2 {0} else {lsn - 1}
+                entry: self.last_call,
             }
         );
         ssa_inputs.push(
@@ -1193,7 +1202,7 @@ impl SSALogger {
                 ret_range: ret_range,
             }))
         );
-
+        self.entry_lsn.pop();
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
