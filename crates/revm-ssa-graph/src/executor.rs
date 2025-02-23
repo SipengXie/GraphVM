@@ -869,7 +869,15 @@ where
                 SSAInput::Constant(value) => SSAInput::Constant(*value),
                 SSAInput::Stack { source, .. } => Self::resolve_stack_input(graph, *source)?,
                 SSAInput::Memory { source, value } => Self::resolve_memory_input(graph, source, value)?,
-                SSAInput::Storage { source, key, .. } => Self::resolve_storage_input(graph, context, *source, key)?,
+                SSAInput::Storage { source, key, .. } => {
+                    match Self::resolve_storage_input(graph, context, *source, key) {
+                        Ok(input) => input,
+                        Err(e) => {
+                            eprintln!("Self: {:?}", entry);
+                            return Err(e);
+                        }
+                    }
+                },
                 SSAInput::ReturnDataBuffer { source, .. } => Self::resolve_return_data_input(graph, *source)?,
                 SSAInput::ContractEntry { value, entry_lsn } => Self::resolve_contract_entry_input(graph, value, *entry_lsn)?,
                 SSAInput::MemorySizeChange { size, last_memory } => Self::resolve_memory_size_input(graph, *size, *last_memory)?,

@@ -267,48 +267,41 @@ impl Occda {
                             // eprintln!("re-execute task: {} with ssa.", idx);
                             let to_re_execute = &self.to_re_execution_store[idx];
                             
-                            // Check if any elements are None
-                            let has_none = to_re_execute.iter().any(|x| x.is_none());
-                            
-                            if !has_none {
-                                while !self.dag_store[idx].read().is_built() {
-                                    std::hint::spin_loop();
+                            while !self.dag_store[idx].read().is_built() {
+                                std::hint::spin_loop();
+                            }
+                            let graph = self.dag_store[idx].read().get_graph();
+                            let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
+                                .map(|x| x.unwrap())
+                                .collect::<Vec<_>>()); 
+                            let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
+                            match executor.execute() {
+                                Ok(nodes_to_execute_len) => {
+                                    let result_state = executor.graph.get_storage_write_outputs().unwrap();
+                                    let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                    task_result.gas_limit = task.gas;
+                                    task_result.inspector = Some(inspector);
+                                    task_result.ssa_output = Some(result_state);
+                                    // TODO: simplify the result generation now.
+                                    task_result.result = result_store[idx].result.clone();
+                                    let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
+                                    unsafe {
+                                        *result_raw_ptr.add(idx) = task_result;
+                                    }
+                                    drop(executor);
+                                    profiler::note_str_unchecked(
+                                        "re-execution-opcodes",
+                                        &format!("tx-{}", idx), 
+                                        &nodes_to_execute_len.to_string()
+                                    );
+                                    continue;
                                 }
-                                let graph = self.dag_store[idx].read().get_graph();
-                                let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
-                                    .map(|x| x.unwrap())
-                                    .collect::<Vec<_>>()); 
-                                let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
-                                match executor.execute() {
-                                    Ok(nodes_to_execute_len) => {
-                                        let result_state = executor.graph.get_storage_write_outputs().unwrap();
-                                        let mut task_result: TaskResultItem<I> = TaskResultItem::default();
-                                        task_result.gas_limit = task.gas;
-                                        task_result.inspector = Some(inspector);
-                                        task_result.ssa_output = Some(result_state);
-                                        // TODO: simplify the result generation now.
-                                        task_result.result = result_store[idx].result.clone();
-                                        let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
-                                        unsafe {
-                                            *result_raw_ptr.add(idx) = task_result;
-                                        }
-                                        drop(executor);
-                                        profiler::note_str_unchecked(
-                                            "re-execution-opcodes",
-                                            &format!("tx-{}", idx), 
-                                            &nodes_to_execute_len.to_string()
-                                        );
-                                        continue;
-                                    }
-                                    Err(e) => {
-                                        eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
-                                        drop(executor);
-                                        // fall through to EVM re-execution path below
-                                    }
+                                Err(e) => {
+                                    eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                    drop(executor);
+                                    // fall through to EVM re-execution path below
                                 }
                             }
-                            eprintln!("SSA re-execution failed: Encouter unexpected storage access, fall back to EVM re-execution.");
-                            // If has_none is true, fall through to EVM re-execution
                         }
 
                         // Initialize EVM instance with task-specific configuration
@@ -592,46 +585,39 @@ impl Occda {
                         // eprintln!("re-execute task: {} with ssa.", idx);
                         let to_re_execute = &self.to_re_execution_store[idx];
                         
-                        // Check if any elements are None
-                        let has_none = to_re_execute.iter().any(|x| x.is_none());
-                        
-                        if !has_none {
-                            while !self.dag_store[idx].read().is_built() {
-                                std::hint::spin_loop();
+                        while !self.dag_store[idx].read().is_built() {
+                            std::hint::spin_loop();
+                        }
+                        let graph = self.dag_store[idx].read().get_graph();
+                        let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
+                            .map(|x| x.unwrap())
+                            .collect::<Vec<_>>());
+                        let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
+                            .with_mode(execution_mode);
+                        match executor.execute() {
+                            Ok(nodes_to_execute_len) => {
+                                let result_state = executor.graph.get_storage_write_outputs().unwrap();
+                                let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                task_result.gas_limit = task.gas;
+                                task_result.inspector = Some(inspector);
+                                task_result.ssa_output = Some(result_state);
+                                // TODO: simplify the result generation now.
+                                task_result.result = result_store[idx].result.clone();
+                                result_store[idx] = task_result;
+                                drop(executor);
+                                profiler::note_str_unchecked(
+                                    "re-execution-opcodes",
+                                    &format!("redo-{}", idx), 
+                                    &nodes_to_execute_len.to_string()
+                                );
+                                continue;
                             }
-                            let graph = self.dag_store[idx].read().get_graph();
-                            let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
-                                .map(|x| x.unwrap())
-                                .collect::<Vec<_>>());
-                            let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
-                                .with_mode(execution_mode);
-                            match executor.execute() {
-                                Ok(nodes_to_execute_len) => {
-                                    let result_state = executor.graph.get_storage_write_outputs().unwrap();
-                                    let mut task_result: TaskResultItem<I> = TaskResultItem::default();
-                                    task_result.gas_limit = task.gas;
-                                    task_result.inspector = Some(inspector);
-                                    task_result.ssa_output = Some(result_state);
-                                    // TODO: simplify the result generation now.
-                                    task_result.result = result_store[idx].result.clone();
-                                    result_store[idx] = task_result;
-                                    drop(executor);
-                                    profiler::note_str_unchecked(
-                                        "re-execution-opcodes",
-                                        &format!("redo-{}", idx), 
-                                        &nodes_to_execute_len.to_string()
-                                    );
-                                    continue;
-                                }
-                                Err(e) => {
-                                    eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
-                                    drop(executor);
-                                    // fall through to EVM re-execution path below
-                                }
+                            Err(e) => {
+                                eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                drop(executor);
+                                // fall through to EVM re-execution path below
                             }
                         }
-                        eprintln!("SSA re-execution failed: Encouter unexpected storage access, fall back to EVM re-execution.");
-                        // If has_none is true, fall through to EVM re-execution
                     }
 
                    // Normal execution path
@@ -998,8 +984,12 @@ impl Occda {
                     AccessType::Nonce => first_reads.get(&StorageKey::Nonce(*addr)),
                     AccessType::Code => first_reads.get(&StorageKey::Code(*addr)),
                     AccessType::StorageSlot(slot) => first_reads.get(&StorageKey::Slot(*addr, *slot)),
-                    _ => None,
+                    _ => continue,
                 };
+                if lsn.is_none() {
+                    eprintln!("Cannot find lsn for {:?}", access_type);
+                    return vec![];
+                }
                 result.push(lsn.copied());
             }
         result
