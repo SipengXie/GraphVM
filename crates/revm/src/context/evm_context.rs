@@ -1,6 +1,6 @@
 use revm_interpreter::{interpreter_action::{convert_call_input, convert_create_input}, CallValue};
 use revm_precompile::PrecompileErrors;
-use revm_primitives::{address, U256};
+use revm_primitives::U256;
 use revm_ssa::SSALogger;
 
 use super::inner_evm_context::InnerEvmContext;
@@ -256,6 +256,11 @@ impl<DB: Database> EvmContext<DB> {
                     self.journaled_state.checkpoint_commit();
                 } else {
                     self.journaled_state.checkpoint_revert(checkpoint);
+                }
+                if let Some(logger) = self.get_mut_logger() {
+                    let call_intput = convert_call_input(&inputs);
+                    // This is a call to a precompile, so we don't have a bytecode.
+                    logger.log_make_call_frame(call_intput, caller_balance, target_balance, Bytes::default());
                 }
                 return Ok(FrameOrResult::new_call_result(
                     result,
