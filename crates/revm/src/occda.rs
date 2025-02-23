@@ -471,18 +471,6 @@ impl Occda {
         let db_ref_for_parallel: &DB = unsafe { &*raw_db_ptr };
         let mut parallel_db = ParallelDB::new(Arc::new(db_ref_for_parallel));
 
-        // Initialize the store for ssa re-execution
-        if enable_ssa {
-            self.to_re_execution_store = Vec::<Vec<Option<u16>>>::with_capacity(len);
-            self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
-            self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
-            for _ in 0..len {
-                self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
-                self.reads_store.push(HashMap::default());
-            }
-        }
-
         // Initialize core metrics
         // tx_size: Total number of unique transactions to process
         // exec_size: Total execution count including retries (used for conflict rate calculation)
@@ -513,6 +501,17 @@ impl Occda {
         let mut access_tracker = AccessTracker::new();
         
         let prefetch_start = std::time::Instant::now();
+        // Initialize the store for ssa re-execution, we count the time in the prefetch phase.
+        if enable_ssa {
+            self.to_re_execution_store = Vec::<Vec<Option<u16>>>::with_capacity(len);
+            self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
+            self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
+            for _ in 0..len {
+                self.to_re_execution_store.push(vec![]);
+                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+                self.reads_store.push(HashMap::default());
+            }
+        }
         // Set parallel mode for prefetch phase
         if enable_prefetch {
             parallel_db.set_parallel_mode(true);
