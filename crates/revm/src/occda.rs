@@ -297,7 +297,7 @@ impl Occda {
                                     continue;
                                 }
                                 Err(e) => {
-                                    eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                    // eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
                                     drop(executor);
                                     // fall through to EVM re-execution path below
                                 }
@@ -612,7 +612,7 @@ impl Occda {
                                 continue;
                             }
                             Err(e) => {
-                                eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                // eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
                                 drop(executor);
                                 // fall through to EVM re-execution path below
                             }
@@ -986,7 +986,7 @@ impl Occda {
                     _ => continue,
                 };
                 if lsn.is_none() {
-                    eprintln!("Cannot find lsn for {:?}: {:?}, fall back to revm execution", addr, access_type);
+                    // eprintln!("Cannot find lsn for {:?}: {:?}, fall back to revm execution", addr, access_type);
                     return vec![];
                 }
                 result.push(lsn.copied());
