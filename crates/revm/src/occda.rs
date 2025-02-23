@@ -986,7 +986,7 @@ impl Occda {
                     _ => continue,
                 };
                 if lsn.is_none() {
-                    eprintln!("Cannot find lsn for {:?}", access_type);
+                    eprintln!("Cannot find lsn for {:?}: {:?}, fall back to revm execution", addr, access_type);
                     return vec![];
                 }
                 result.push(lsn.copied());

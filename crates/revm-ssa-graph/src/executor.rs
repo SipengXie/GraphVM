@@ -566,7 +566,7 @@ where
     ) -> Result<SSAInput> {
         // eprintln!("resolve_storage_input: {:?}", source);
         let result = if source != 0 {
-            let (storage_key, storage_value) = match Self::get_dependency_result(
+            let (storage_key, storage_value) = Self::get_dependency_result(
                 graph,
                 source,
                 |results| results.iter().find_map(|output| {
@@ -577,26 +577,7 @@ where
                     }
                 }),
                 "Storage"
-            ) {
-                Ok(result) => result,
-                Err(e) => {
-                    eprintln!("Error resolving storage input for source node {}: {:?}", source, e);
-                    let node = graph.get_node(source).unwrap();
-                    let last_call = match node.inputs[0] {
-                        SSAInput::CallInput { entry, .. } => entry,
-                        _ => 0
-                    };
-                    let last_call_node = graph.get_node(last_call).unwrap();
-                    eprintln!("Last call node: {:?}", last_call_node);
-                    eprintln!("Last call result: {:?}", graph.get_result_by_lsn(last_call));
-                    // eprintln!("Node 9866: {:?}", graph.get_node(9866).unwrap());
-                    // eprintln!("Result 9866: {:?}", graph.get_result_by_lsn(9866));
-                    eprintln!("Source node: {:?}", node);
-                    eprintln!("Source result: {:?}", graph.get_result_by_lsn(source));
-
-                    return Err(e);
-                }
-            };
+            )?;
             
             Ok(SSAInput::Storage {
                 key: storage_key,
@@ -869,15 +850,7 @@ where
                 SSAInput::Constant(value) => SSAInput::Constant(*value),
                 SSAInput::Stack { source, .. } => Self::resolve_stack_input(graph, *source)?,
                 SSAInput::Memory { source, value } => Self::resolve_memory_input(graph, source, value)?,
-                SSAInput::Storage { source, key, .. } => {
-                    match Self::resolve_storage_input(graph, context, *source, key) {
-                        Ok(input) => input,
-                        Err(e) => {
-                            eprintln!("Self: {:?}", entry);
-                            return Err(e);
-                        }
-                    }
-                },
+                SSAInput::Storage { source, key, .. } => Self::resolve_storage_input(graph, context, *source, key)?,
                 SSAInput::ReturnDataBuffer { source, .. } => Self::resolve_return_data_input(graph, *source)?,
                 SSAInput::ContractEntry { value, entry_lsn } => Self::resolve_contract_entry_input(graph, value, *entry_lsn)?,
                 SSAInput::MemorySizeChange { size, last_memory } => Self::resolve_memory_size_input(graph, *size, *last_memory)?,
