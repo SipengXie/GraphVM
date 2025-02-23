@@ -415,10 +415,10 @@ impl Occda {
                     
                 });
         });
-        for (thread_id, (db_read, init, transact, write)) in thread_times.read().iter().enumerate() {
-            println!("Thread {}: DB read time: {:?}, Init time: {:?}, Transaction time: {:?}, Write time: {:?}",
-                thread_id, db_read, init, transact, write);
-        }
+        // for (thread_id, (db_read, init, transact, write)) in thread_times.read().iter().enumerate() {
+        //     println!("Thread {}: DB read time: {:?}, Init time: {:?}, Transaction time: {:?}, Write time: {:?}",
+        //         thread_id, db_read, init, transact, write);
+        // }
         let parallel_end = std::time::Instant::now();
         parallel_end - parallel_start
     }
