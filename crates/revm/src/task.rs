@@ -1,7 +1,8 @@
 use core::default::Default;
 use revm_ssa::{SSAOutput, StorageKey};
 
-use crate::primitives::{ExecutionResult, EvmState, Env, SpecId};
+use crate::primitives::{ExecutionResult, EvmState, Env, SpecId, B256};
+
 use crate::journaled_state::{AccessType, ReadWriteSet};
 use std::cmp::Ordering;
 
@@ -12,16 +13,18 @@ pub struct Task {
     pub gas: u64,
     pub spec_id: SpecId,
     pub env: Box<Env>,
+    pub tx_hash: Option<B256>,
 }
 
 impl Task {
-    pub fn new(env: Box<Env>, tid: i32, sid: i32, spec_id: SpecId) -> Self {
+    pub fn new(env: Box<Env>, tid: i32, sid: i32, spec_id: SpecId, tx_hash: Option<B256>) -> Self {
         Self {
             tid,
             sid,
             gas: env.tx.gas_limit,
             spec_id,
             env,
+            tx_hash,
         }
     }
 }

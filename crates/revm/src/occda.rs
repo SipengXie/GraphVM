@@ -22,6 +22,7 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use crate::profiler;
+use core::task;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
@@ -729,7 +730,7 @@ impl Occda {
                         if !self.to_re_execution_store[task_idx].is_empty() {
                             println!("\n[debug] to_re_execution_store is empty, detail:");
                             println!("block_number: {}", h_tx[task_idx].env.block.number);
-                            println!("task_idx: {}", task_idx);
+                            println!("tx_hash: {}", h_tx[task_idx].tx_hash.unwrap());
                             println!("first_reads: {:?}", first_reads);
                             println!("conflict: {:?}", conflict);
                         }

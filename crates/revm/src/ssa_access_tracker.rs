@@ -13,7 +13,7 @@ impl SsaAccessTracker {
     /// Creates a new SsaAccessTracker with an empty accesses hashmap.
     pub fn new() -> Self {
         Self {
-            accesses: HashMap::new(),
+            accesses: HashMap::default(),
         }
     }
 
