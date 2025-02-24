@@ -307,6 +307,7 @@ impl Occda {
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
+                        profiler::start_multi("prefetch");
                         let mut evm = if is_prefetch && enable_ssa {
                             // enable ssa and prefetch, then we will pre-process the ssa graph
                             Evm::builder()
@@ -328,6 +329,7 @@ impl Occda {
                         };
                         let init_end = std::time::Instant::now();
                         init_time += init_end - init_start;
+                        profiler::end_multi("prefetch");
 
                         // Execute the transaction and measure execution time
                         // This is the core EVM execution phase
