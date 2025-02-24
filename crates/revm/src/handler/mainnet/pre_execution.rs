@@ -54,6 +54,7 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
 }
 
 /// Helper function that deducts the caller balance.
+/// TODO: Add rwset here
 #[inline]
 pub fn deduct_caller_inner<SPEC: Spec>(caller_account: &mut Account, env: &Env) {
     // Subtract gas costs from the caller's account.
