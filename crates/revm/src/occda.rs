@@ -296,7 +296,7 @@ impl Occda {
                                     );
                                     continue;
                                 }
-                                Err(e) => {
+                                Err(_err) => {
                                     // eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
                                     drop(executor);
                                     // fall through to EVM re-execution path below
@@ -307,7 +307,7 @@ impl Occda {
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
-                        profiler::start_multi("prefetch");
+                        profiler::start("prefetch");
                         let mut evm = if is_prefetch && enable_ssa {
                             // enable ssa and prefetch, then we will pre-process the ssa graph
                             Evm::builder()
@@ -329,7 +329,7 @@ impl Occda {
                         };
                         let init_end = std::time::Instant::now();
                         init_time += init_end - init_start;
-                        profiler::end_multi("prefetch");
+                        profiler::end("prefetch");
 
                         // Execute the transaction and measure execution time
                         // This is the core EVM execution phase
@@ -613,7 +613,7 @@ impl Occda {
                                 );
                                 continue;
                             }
-                            Err(e) => {
+                            Err(_err) => {
                                 // eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
                                 drop(executor);
                                 // fall through to EVM re-execution path below
@@ -726,6 +726,13 @@ impl Occda {
                     if !conflict.is_empty() && enable_ssa {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] = Self::get_storage_first_reads(first_reads, &conflict);
+                        if !self.to_re_execution_store[task_idx].is_empty() {
+                            println!("\n[debug] to_re_execution_store is empty, detail:");
+                            println!("block_number: {}", h_tx[task_idx].env.block.number);
+                            println!("task_idx: {}", task_idx);
+                            println!("first_reads: {:?}", first_reads);
+                            println!("conflict: {:?}", conflict);
+                        }
                     }
                     !conflict.is_empty()
                 };
