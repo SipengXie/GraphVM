@@ -727,7 +727,7 @@ impl Occda {
                     if !conflict.is_empty() && enable_ssa {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] = Self::get_storage_first_reads(first_reads, &conflict);
-                        if !self.to_re_execution_store[task_idx].is_empty() {
+                        if self.to_re_execution_store[task_idx].is_empty() {
                             println!("\n[debug] to_re_execution_store is empty, detail:");
                             println!("block_number: {}", h_tx[task_idx].env.block.number);
                             println!("tx_hash: {}", h_tx[task_idx].tx_hash.unwrap());
