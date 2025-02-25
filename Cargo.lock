@@ -477,9 +477,9 @@ dependencies = [
 
 [[package]]
 name = "altius-benchtools"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6890ae3ddefdf89aab3166dd967c177e58284702e272c76764b96d99d05ae12d"
+checksum = "177bc987c336bd152c490ce1b90659b1030146030819dd26e6700f700fc68ef1"
 dependencies = [
  "once_cell",
  "rand 0.9.0",
