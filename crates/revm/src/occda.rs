@@ -355,6 +355,7 @@ impl Occda {
 
 
                         if let Some(mut logger) = evm.take_ssa_logger() {
+                            profiler::start("ssa-logger");
                             let logs = logger.take_logs();
                             let graph_wrapper = self.dag_store[idx].clone();
                             self.thread_pool.spawn(move || {
@@ -365,6 +366,7 @@ impl Occda {
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
+                            profiler::end("ssa-logger");
                             profiler::note_str_unchecked(
                                 "total-opcodes", 
                                 &format!("tx-{}", idx), 
@@ -530,7 +532,9 @@ impl Occda {
             );
             
             if enable_dep_graph {
+                profiler::start("build-dag");
                 self.dag = self.build_dag_from_results(result_store);
+                profiler::end("build-dag");
                 self.update_task_sids(h_tx, &self.dag);
             }
             parallel_db.reset_stats();
