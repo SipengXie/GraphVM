@@ -22,7 +22,6 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use crate::profiler;
-use core::task;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
@@ -292,7 +291,7 @@ impl Occda {
                                     drop(executor);
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
-                                        &format!("tx-{}", idx), 
+                                        &format!("tx-{}", task.tid), 
                                         &nodes_to_execute_len.to_string()
                                     );
                                     continue;
@@ -359,8 +358,10 @@ impl Occda {
                             let logs = logger.take_logs();
                             let graph_wrapper = self.dag_store[idx].clone();
                             self.thread_pool.spawn(move || {
+                                profiler::start("build-dag");
                                 let mut graph = graph_wrapper.write();
                                 graph.build(logs);
+                                profiler::end("build-dag");
                             });
                             let reads_raw_ptr = reads_ptr as *mut HashMap<StorageKey, u16>;
                             unsafe {
@@ -369,7 +370,7 @@ impl Occda {
                             profiler::end("ssa-logger");
                             profiler::note_str_unchecked(
                                 "total-opcodes", 
-                                &format!("tx-{}", idx), 
+                                &format!("tx-{}", task.tid), 
                                 &logger.current_lsn.to_string()
                             );
                         }
@@ -379,13 +380,12 @@ impl Occda {
                         task_result.inspector = Some(inspector);
 
                         // Store execution results based on success/failure
-                        let uid_for_record = format!("{}-{:?}", task.env.tx.caller, task.env.tx.nonce);
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
                                 profiler::note_str_unchecked(
                                     "gas-used", 
-                                    &uid_for_record, 
+                                    &format!("{}", task.tx_hash.unwrap()), 
                                     &result.gas_used().to_string(),
                                 );
                                 task_result.state = Some(state);
@@ -394,7 +394,7 @@ impl Occda {
                             Err(_) => {
                                 profiler::note_str_unchecked(
                                     "gas-used", 
-                                    &uid_for_record, 
+                                    &format!("{}", task.tx_hash.unwrap()), 
                                     &"failure",
                                 );
                                 task_result.state = None;
@@ -532,9 +532,7 @@ impl Occda {
             );
             
             if enable_dep_graph {
-                profiler::start("build-dag");
                 self.dag = self.build_dag_from_results(result_store);
-                profiler::end("build-dag");
                 self.update_task_sids(h_tx, &self.dag);
             }
             parallel_db.reset_stats();
@@ -613,7 +611,7 @@ impl Occda {
                                 drop(executor);
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
-                                    &format!("redo-{}", idx), 
+                                    &format!("redo-{}", task.tid), 
                                     &nodes_to_execute_len.to_string()
                                 );
                                 continue;
@@ -648,13 +646,12 @@ impl Occda {
                     drop(evm);
                     task_result.inspector = Some(inspector);
                     
-                    let uid_for_record = format!("{}-{:?}-redo", task.env.tx.caller, task.env.tx.nonce);
                     match result {
                         Ok(result_and_state) => {
                             let ResultAndState { state, result } = result_and_state;
                             profiler::note_str_unchecked(
                                 "gas-used", 
-                                &uid_for_record, 
+                                &format!("redo-{}", task.tx_hash.unwrap()), 
                                 &result.gas_used().to_string(),
                             );
                             task_result.state = Some(state);
@@ -663,7 +660,7 @@ impl Occda {
                         Err(_) => {
                             profiler::note_str_unchecked(
                                 "gas-used", 
-                                &uid_for_record, 
+                                &format!("redo-{}", task.tx_hash.unwrap()), 
                                 &"failure",
                             );
                             task_result.state = None;
@@ -741,6 +738,12 @@ impl Occda {
                     }
                     !conflict.is_empty()
                 };
+
+                profiler::note_str_unchecked(
+                    "is-conflict", 
+                    &format!("tx-{}", h_tx[task_idx].tid), 
+                    &is_conflict.to_string()
+                );
 
                 // Handle conflicts or commit changes
                 if is_conflict {
