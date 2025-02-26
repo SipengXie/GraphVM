@@ -1,4 +1,4 @@
-use revm_primitives::{Address, Bytes, Log, U256};
+use revm_primitives::{AccountInfo, AccountStatus, Address, Bytes, Log, U256};
 use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -154,65 +154,20 @@ impl From<ContractEnv> for U256 {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum StorageKey {
+    Slot(Address, U256),
+    AccountInfo(Address),
+    AccountStatus(Address),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum StorageValue {
-    Balance(U256),
-    Nonce(u64),
-    CodeSize(u64),
-    Code(Bytes),
-    CodeHash(U256),
+    AccountInfo(AccountInfo),
+    AccountStatus(AccountStatus),
     Slot(U256),
-}
-
-impl StorageValue {
-    /// Get balance value, returns None if not Balance type
-    pub fn as_balance(&self) -> Option<U256> {
-        match self {
-            StorageValue::Balance(value) => Some(*value),
-            _ => None
-        }
-    }
-
-    /// Get nonce value, returns None if not Nonce type
-    pub fn as_nonce(&self) -> Option<u64> {
-        match self {
-            StorageValue::Nonce(value) => Some(*value),
-            _ => None
-        }
-    }
-
-    /// Get code size, returns None if not CodeSize type
-    pub fn as_code_size(&self) -> Option<u64> {
-        match self {
-            StorageValue::CodeSize(value) => Some(*value),
-            _ => None
-        }
-    }
-
-    /// Get code content, returns None if not Code type
-    pub fn as_code(&self) -> Option<&Bytes> {
-        match self {
-            StorageValue::Code(value) => Some(value),
-            _ => None
-        }
-    }
-
-    /// Get code hash, returns None if not CodeHash type
-    pub fn as_code_hash(&self) -> Option<U256> {
-        match self {
-            StorageValue::CodeHash(value) => Some(*value),
-            _ => None
-        }
-    }
-
-    /// Get storage slot value, returns None if not Slot type
-    pub fn as_slot(&self) -> Option<U256> {
-        match self {
-            StorageValue::Slot(value) => Some(*value),
-            _ => None
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,15 +251,4 @@ pub struct SSALogEntry {
     pub opcode: u8,
     pub inputs: Vec<SSAInput>,
     pub outputs: Vec<SSAOutput>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum StorageKey {
-    Slot(Address, U256),
-    Balance(Address),
-    Nonce(Address),
-    CodeSize(Address),
-    Code(Address),
-    CodeHash(Address),
 }

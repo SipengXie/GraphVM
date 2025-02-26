@@ -1,11 +1,15 @@
 
-use revm_primitives::{HashMap, HashSet, Address, Bytes, FixedBytes, Log, B256, U256};
+use revm_primitives::bitvec::bitvec;
+use revm_primitives::bitvec::order::Lsb0;
+use revm_primitives::bitvec::vec::BitVec;
+use revm_primitives::{AccountInfo, AccountStatus, Address, AnalysisKind, Bytecode, Bytes, FixedBytes, HashMap, HashSet, JumpTable, LegacyAnalyzedBytecode, Log, B256, U256};
 use revm_primitives::SpecId::{LONDON, SPURIOUS_DRAGON};
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
 use crate::{SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
 use revm_primitives::Spec;
 use std::cmp::min;
+use std::sync::Arc;
 // Update macro pop_stack_or_const to take two parameters: self and value
 #[macro_export]
 macro_rules! pop_stack_or_const {
@@ -170,41 +174,74 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_deduct_caller(&mut self, caller: Address, origin_balance: U256, origin_nonce: u64, pre_deduct: U256, is_create: bool) {
+    pub fn log_deduct_caller(&mut self, caller: Address, info_input: AccountInfo, status_input: AccountStatus, gas_cost: U256, is_create: bool) {
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn() });
-        ssa_inputs.push(SSAInput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance)), source: self.get_storage_def(StorageKey::Balance(caller))  });
-        ssa_inputs.push(SSAInput::Constant(pre_deduct));
+
+        ssa_inputs.push(SSAInput::Storage { 
+            key: Box::new(StorageKey::AccountInfo(caller)), 
+            value: Box::new(StorageValue::AccountInfo(info_input.clone())), 
+            source: self.get_storage_def(StorageKey::AccountInfo(caller)) 
+        });
+
+        ssa_inputs.push(SSAInput::Storage { 
+            key: Box::new(StorageKey::AccountStatus(caller)), 
+            value: Box::new(StorageValue::AccountStatus(status_input)), 
+            source: self.get_storage_def(StorageKey::AccountStatus(caller)) 
+        });
+
+        ssa_inputs.push(SSAInput::Constant(gas_cost));
 
         let mut ssa_outputs = Vec::with_capacity(2);
-        ssa_outputs.push(SSAOutput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance - pre_deduct)) });
-        if !is_create {
-            ssa_inputs.push(SSAInput::Storage { key: Box::new(StorageKey::Nonce(caller)), value: Box::new(StorageValue::Nonce(origin_nonce)), source: self.get_storage_def(StorageKey::Nonce(caller))  });
-            ssa_outputs.push(SSAOutput::Storage { key: Box::new(StorageKey::Nonce(caller)), value: Box::new(StorageValue::Nonce(origin_nonce + 1)) });  
-        }
+        let new_account_info = AccountInfo {
+            balance: info_input.balance - gas_cost,
+            nonce: if is_create { info_input.nonce } else { info_input.nonce + 1 },
+            code: info_input.code,
+            code_hash: info_input.code_hash,
+        };
+        let new_status = status_input | AccountStatus::Touched;
+
+        ssa_outputs.push(SSAOutput::Storage { 
+            key: Box::new(StorageKey::AccountInfo(caller)), 
+            value: Box::new(StorageValue::AccountInfo(new_account_info)), 
+        });
+        ssa_outputs.push(SSAOutput::Storage { 
+            key: Box::new(StorageKey::AccountStatus(caller)), 
+            value: Box::new(StorageValue::AccountStatus(new_status)), 
+        });
 
         let lsn = self.log_operation(0xDA, ssa_inputs, ssa_outputs);
-        self.log_storage_read(StorageKey::Balance(caller), lsn);
-        self.log_storage_write(StorageKey::Balance(caller), lsn);
-        if !is_create {
-            self.log_storage_read(StorageKey::Nonce(caller), lsn);
-            self.log_storage_write(StorageKey::Nonce(caller), lsn);
-        }
+        self.log_load_account(caller, lsn);
+        self.log_storage_write(StorageKey::AccountInfo(caller), lsn);
+        self.log_storage_write(StorageKey::AccountStatus(caller), lsn);
     }
 
     #[inline]
-    pub fn log_refund_gas(&mut self, caller: Address, origin_balance: U256, refund_gas : U256) {
+    pub fn log_refund_gas(&mut self, caller: Address, info_input: AccountInfo, refund_gas : U256) {
         let mut ssa_inputs = Vec::with_capacity(3);
         ssa_inputs.push(SSAInput::ContractEntry { value: ContractEnv::Caller(caller), entry_lsn: self.get_entry_lsn() });
-        ssa_inputs.push(SSAInput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance)), source: self.get_storage_def(StorageKey::Balance(caller)) });
+        ssa_inputs.push(SSAInput::Storage { 
+            key: Box::new(StorageKey::AccountInfo(caller)), 
+            value: Box::new(StorageValue::AccountInfo(info_input.clone())), 
+            source: self.get_storage_def(StorageKey::AccountInfo(caller)) });
         ssa_inputs.push(SSAInput::Constant(refund_gas));
 
         let mut ssa_outputs = Vec::with_capacity(1);
-        ssa_outputs.push(SSAOutput::Storage { key: Box::new(StorageKey::Balance(caller)), value: Box::new(StorageValue::Balance(origin_balance + refund_gas))});
+        let new_info = AccountInfo {
+            balance: info_input.balance + refund_gas,
+            nonce: info_input.nonce,
+            code: info_input.code,
+            code_hash: info_input.code_hash,
+        };
+
+        ssa_outputs.push(SSAOutput::Storage { 
+            key: Box::new(StorageKey::AccountInfo(caller)), 
+            value: Box::new(StorageValue::AccountInfo(new_info))}
+        );
 
         let lsn = self.log_operation(0xDB, ssa_inputs, ssa_outputs);
-        self.log_storage_read(StorageKey::Balance(caller), lsn);
-        self.log_storage_write(StorageKey::Balance(caller), lsn);
+        self.log_load_account(caller, lsn);
+        self.log_storage_write(StorageKey::AccountInfo(caller), lsn);
     }
 
     #[inline]
@@ -705,13 +742,25 @@ impl SSALogger {
     #[inline]
     pub fn log_make_create_frame(&mut self, 
         mut create_input: SSACreateInput, 
-        caller_nonce: u64
+        caller_info: AccountInfo,
+        caller_status: AccountStatus,
+        target_info: AccountInfo,
+        target_status: AccountStatus
     ) 
     {
         let opcode = InternalOp::MAKE_CREATE_FRAME;
         let lsn = self.current_lsn;
         self.entry_lsn.push(lsn);
         let caller = create_input.caller;
+
+        let created_address = match create_input.scheme {
+            SSACreateScheme::Create => create_input.caller.create(caller_info.nonce),
+            SSACreateScheme::Create2 { salt } => {
+                let init_code_hash = revm_primitives::keccak256(&create_input.init_code);
+                create_input.caller.create2(salt.to_be_bytes(), init_code_hash)
+            }
+        };
+
         let mut ssa_inputs = Vec::with_capacity(2);
         ssa_inputs.push(
             SSAInput::CreateInput { 
@@ -721,38 +770,84 @@ impl SSALogger {
         );
         ssa_inputs.push(
             SSAInput::Storage {
-                key: Box::new(StorageKey::Nonce(caller)),
-                value: Box::new(StorageValue::Nonce(caller_nonce)),
-                source: self.get_storage_def(StorageKey::Nonce(caller)),
+                key: Box::new(StorageKey::AccountInfo(caller)),
+                value: Box::new(StorageValue::AccountInfo(caller_info.clone())),
+                source: self.get_storage_def(StorageKey::AccountInfo(caller)),
+            }
+        );
+        ssa_inputs.push(
+            SSAInput::Storage {
+                key: Box::new(StorageKey::AccountStatus(caller)),
+                value: Box::new(StorageValue::AccountStatus(caller_status)),
+                source: self.get_storage_def(StorageKey::AccountStatus(caller)),
+            }
+        );
+        ssa_inputs.push(
+            SSAInput::Storage {
+                key: Box::new(StorageKey::AccountInfo(created_address)),
+                value: Box::new(StorageValue::AccountInfo(target_info.clone())),
+                source: self.get_storage_def(StorageKey::AccountInfo(caller)),
+            }
+        );
+        ssa_inputs.push(
+            SSAInput::Storage {
+                key: Box::new(StorageKey::AccountStatus(created_address)),
+                value: Box::new(StorageValue::AccountStatus(target_status)),
+                source: self.get_storage_def(StorageKey::AccountStatus(caller)),
             }
         );
 
-        let created_address = match create_input.scheme {
-            SSACreateScheme::Create => create_input.caller.create(caller_nonce),
-            SSACreateScheme::Create2 { salt } => {
-                let init_code_hash = revm_primitives::keccak256(&create_input.init_code);
-                create_input.caller.create2(salt.to_be_bytes(), init_code_hash)
-            }
+        let new_caller_info = AccountInfo {
+            balance: caller_info.balance - create_input.value,
+            nonce: caller_info.nonce + 1,
+            code_hash: caller_info.code_hash,
+            code: caller_info.code,
         };
 
-        // inc nonce
-        let new_nonce = caller_nonce + 1;
+        let new_target_info = AccountInfo {
+            balance: target_info.balance + create_input.value,
+            nonce: 1,
+            code_hash: target_info.code_hash,
+            code: target_info.code,
+        };
+
+        let new_target_status = target_status | AccountStatus::Created;
+
         create_input.target = created_address;
-        let mut ssa_outputs = Vec::with_capacity(2);
+        let mut ssa_outputs = Vec::with_capacity(3);
         ssa_outputs.push(SSAOutput::CreateFrame(Box::new(create_input.clone())));
         ssa_outputs.push(SSAOutput::Storage {
-            key: Box::new(StorageKey::Nonce(caller)),
-            value: Box::new(StorageValue::Nonce(new_nonce)),
+            key: Box::new(StorageKey::AccountInfo(caller)),
+            value: Box::new(StorageValue::AccountInfo(new_caller_info)),
+        });
+        ssa_outputs.push(SSAOutput::Storage {
+            key: Box::new(StorageKey::AccountInfo(created_address)),
+            value: Box::new(StorageValue::AccountInfo(new_target_info)),
+        });
+        ssa_outputs.push(SSAOutput::Storage {
+            key: Box::new(StorageKey::AccountStatus(created_address)),
+            value: Box::new(StorageValue::AccountStatus(new_target_status)),
         });
 
+
         self.create_inputs.push(create_input);
-        self.log_storage_read(StorageKey::Nonce(caller), lsn);
-        self.log_storage_write(StorageKey::Nonce(caller), lsn);
+        self.log_load_account(caller, lsn);
+        self.log_load_account(created_address, lsn);
+
+        self.log_storage_write(StorageKey::AccountInfo(caller), lsn);
+        self.log_storage_write(StorageKey::AccountInfo(created_address), lsn);
+        self.log_storage_write(StorageKey::AccountStatus(created_address), lsn);
+
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
     #[inline]
-    pub fn log_create_return<SPEC: Spec>(&mut self, result: &SSAInterpreterResult) {
+    pub fn log_create_return<SPEC: Spec>(&mut self, 
+        result: &SSAInterpreterResult, 
+        target_info: AccountInfo, 
+        target_status: AccountStatus,
+        analysis_kind: AnalysisKind
+    ) {
         let opcode = InternalOp::CREATE_RETURN;
         let create_input = self.create_inputs.pop().unwrap();
         let address = create_input.target;
@@ -778,6 +873,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(2);
+
         if !instruction_result.is_ok() {
             create_outcome.address = None;
             ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
@@ -808,13 +904,34 @@ impl SSALogger {
         // TODO: gas_meters
 
         // return
+        let bytecode = match analysis_kind {
+            AnalysisKind::Raw => Bytecode::new_legacy(result.output.clone()),
+            AnalysisKind::Analyse => {
+                to_analysed(Bytecode::new_legacy(result.output.clone()))
+            }
+        };
+        let code_hash = bytecode.hash_slow();
+        
+        let new_target_info = AccountInfo {
+            balance: target_info.balance,
+            nonce: target_info.nonce,
+            code_hash: code_hash,
+            code: Some(bytecode),
+        };
+        let new_target_status = target_status | AccountStatus::Touched;
+
         ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
-        ssa_outputs.push(SSAOutput::Storage { 
-            key: Box::new(StorageKey::Code(address)), 
-            value: Box::new(StorageValue::Code(result.output.clone())), 
+        ssa_outputs.push(SSAOutput::Storage {
+            key: Box::new(StorageKey::AccountInfo(address)),
+            value: Box::new(StorageValue::AccountInfo(new_target_info)),
+        });
+        ssa_outputs.push(SSAOutput::Storage {
+            key: Box::new(StorageKey::AccountStatus(address)),
+            value: Box::new(StorageValue::AccountStatus(new_target_status)),
         });
         let lsn = self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
-        self.log_storage_write(StorageKey::Code(address), lsn);
+        self.log_storage_write(StorageKey::AccountInfo(address), lsn);
+        self.log_storage_write(StorageKey::AccountStatus(address), lsn);
     }
 
     #[inline]
@@ -1113,6 +1230,7 @@ impl SSALogger {
         let value = call_input.transfer_value;
         let caller = call_input.caller;
         let target_address = call_input.target_address;
+        let bytecode_address = call_input.bytecode_address;
         
         let mut ssa_inputs = Vec::with_capacity(2);
         ssa_inputs.push(
@@ -1137,6 +1255,10 @@ impl SSALogger {
             SSAOutput::CallFrame(Box::new(new_call_input))
         );
 
+        self.log_load_account(caller, lsn);
+        self.log_load_account(bytecode_address, lsn);
+        self.log_load_account(target_address, lsn);
+
         if !value.is_zero() {
             ssa_inputs.push(
                 SSAInput::Storage { 
@@ -1145,7 +1267,6 @@ impl SSALogger {
                     source: self.get_storage_def(StorageKey::Balance(caller)) 
                 }
             );
-            self.log_storage_read(StorageKey::Balance(caller), lsn);
             ssa_inputs.push(
                 SSAInput::Storage { 
                     key: Box::new(StorageKey::Balance(target_address)), 
@@ -1268,7 +1389,7 @@ impl SSALogger {
 
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(lsn).unwrap();
-        self.log_storage_read(StorageKey::Balance(address), lsn);
+        self.log_load_account(address, lsn);
     }
 
     #[inline]
@@ -1292,7 +1413,7 @@ impl SSALogger {
         );
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(lsn).unwrap();
-        self.log_storage_read(StorageKey::Balance(address), lsn);
+        self.log_load_account(address, lsn);
     }
 
     #[inline]
@@ -1313,7 +1434,7 @@ impl SSALogger {
         
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(lsn).unwrap();
-        self.log_storage_read(StorageKey::CodeSize(address), lsn);
+        self.log_load_account(address, lsn);
     }
 
     #[inline]
@@ -1333,7 +1454,7 @@ impl SSALogger {
 
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
         self.push_stack_def(lsn).unwrap();
-        self.log_storage_read(StorageKey::CodeHash(address), lsn);
+        self.log_load_account(address, lsn);
     }
 
     #[inline]
@@ -1371,7 +1492,7 @@ impl SSALogger {
         }
 
         let lsn = self.log_operation(opcode, ssa_inputs, ssa_outputs);
-        self.log_storage_read(StorageKey::Code(address), lsn);
+        self.log_load_account(address, lsn);
         lsn
     }
 
@@ -1520,6 +1641,12 @@ impl SSALogger {
     }
 
     #[inline]
+    pub fn log_load_account(&mut self, address: Address, lsn: u16) {
+        self.log_storage_read(StorageKey::AccountInfo(address), lsn);
+        self.log_storage_read(StorageKey::AccountStatus(address), lsn);
+    }
+
+    #[inline]
     pub fn get_storage_def(&self, key: StorageKey) -> u16 {
         *self.latest_writes.get(&key).unwrap_or(&0)
     }
@@ -1587,4 +1714,55 @@ impl SSALogger {
             write_set: self.latest_writes.keys().cloned().collect(),
         }
     }
+}
+
+/// Perform bytecode analysis.
+///
+/// The analysis finds and caches valid jump destinations for later execution as an optimization step.
+///
+/// If the bytecode is already analyzed, it is returned as-is.
+#[inline]
+pub fn to_analysed(bytecode: Bytecode) -> Bytecode {
+    let (bytes, len) = match bytecode {
+        Bytecode::LegacyRaw(bytecode) => {
+            let len = bytecode.len();
+            let mut padded_bytecode = Vec::with_capacity(len + 33);
+            padded_bytecode.extend_from_slice(&bytecode);
+            padded_bytecode.resize(len + 33, 0);
+            (Bytes::from(padded_bytecode), len)
+        }
+        n => return n,
+    };
+    let jump_table = analyze(bytes.as_ref());
+
+    Bytecode::LegacyAnalyzed(LegacyAnalyzedBytecode::new(bytes, len, jump_table))
+}
+
+/// Analyze bytecode to build a jump map.
+fn analyze(code: &[u8]) -> JumpTable {
+    let mut jumps: BitVec<u8> = bitvec![u8, Lsb0; 0; code.len()];
+
+    let range = code.as_ptr_range();
+    let start = range.start;
+    let mut iterator = start;
+    let end = range.end;
+    while iterator < end {
+        let opcode = unsafe { *iterator };
+        if 0x5B == opcode {
+            // SAFETY: jumps are max length of the code
+            unsafe { jumps.set_unchecked(iterator.offset_from(start) as usize, true) }
+            iterator = unsafe { iterator.offset(1) };
+        } else {
+            let push_offset = opcode.wrapping_sub(0x60);
+            if push_offset < 32 {
+                // SAFETY: iterator access range is checked in the while loop
+                iterator = unsafe { iterator.offset((push_offset + 2) as isize) };
+            } else {
+                // SAFETY: iterator access range is checked in the while loop
+                iterator = unsafe { iterator.offset(1) };
+            }
+        }
+    }
+
+    JumpTable(Arc::new(jumps))
 }

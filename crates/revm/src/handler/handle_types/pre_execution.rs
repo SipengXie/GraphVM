@@ -47,7 +47,7 @@ impl<'a, EXT: 'a, DB: Database + 'a> PreExecutionHandler<'a, EXT, DB> {
 
 impl<EXT, DB: Database> PreExecutionHandler<'_, EXT, DB> {
     /// Deduct caller to its limit.
-    pub fn deduct_caller(&self, context: &mut Context<EXT, DB>) -> Result<(), EVMError<DB::Error>> {
+    pub fn deduct_caller(&self, context: &mut Context<EXT, DB>) -> Result<U256, EVMError<DB::Error>> {
         (self.deduct_caller)(context)
     }
 

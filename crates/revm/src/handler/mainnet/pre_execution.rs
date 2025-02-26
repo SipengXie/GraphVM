@@ -3,14 +3,12 @@
 //! They handle initial setup of the EVM, call loop and the final return of the EVM
 
 use crate::{
-    precompile::PrecompileSpecId,
-    primitives::{
+    journaled_state::AccessType, precompile::PrecompileSpecId, primitives::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
         SpecId::{CANCUN, PRAGUE, SHANGHAI},
         TxKind, BLOCKHASH_STORAGE_ADDRESS, KECCAK_EMPTY, U256,
-    },
-    Context, ContextPrecompiles,
+    }, Context, ContextPrecompiles
 };
 
 /// Main precompile load
@@ -56,7 +54,7 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
 /// Helper function that deducts the caller balance.
 /// TODO: Add rwset here
 #[inline]
-pub fn deduct_caller_inner<SPEC: Spec>(caller_account: &mut Account, env: &Env) {
+pub fn deduct_caller_inner<SPEC: Spec>(caller_account: &mut Account, env: &Env) -> U256 {
     // Subtract gas costs from the caller's account.
     // We need to saturate the gas cost to prevent underflow in case that `disable_balance_check` is enabled.
     let mut gas_cost = U256::from(env.tx.gas_limit).saturating_mul(env.effective_gas_price());
@@ -78,13 +76,15 @@ pub fn deduct_caller_inner<SPEC: Spec>(caller_account: &mut Account, env: &Env) 
 
     // touch account so we know it is changed.
     caller_account.mark_touch();
+
+    gas_cost
 }
 
 /// Deducts the caller balance to the transaction limit.
 #[inline]
 pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
-) -> Result<(), EVMError<DB::Error>> {
+) -> Result<U256, EVMError<DB::Error>> {
     // load caller's account.
     let caller_account = context
         .evm
@@ -93,9 +93,17 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
         .load_account(context.evm.inner.env.tx.caller, &mut context.evm.inner.db)?;
 
     // deduct gas cost from caller's account.
-    deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
+    let gas_cost = deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
+    let journaled_state = &mut context.evm.inner.journaled_state;
+    // ! newly added logic
+    // mark write caller's balance
+    journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::Balance);
+    // mark write caller's nonce if it is Call
+    if matches!(context.evm.inner.env.tx.transact_to, TxKind::Call(_)) {
+        journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::Nonce);
+    }
 
-    Ok(())
+    Ok(gas_cost)
 }
 
 /// Apply EIP-7702 auth list and return number gas refund on already created accounts.

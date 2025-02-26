@@ -22,7 +22,6 @@ use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel
 use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use crate::profiler;
-use core::task;
 use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
@@ -335,8 +334,11 @@ impl Occda {
                         // Execute the transaction and measure execution time
                         // This is the core EVM execution phase
                         let transact_start = std::time::Instant::now();
-                        // TODO: if is_prefetch, result = evm.transact_preverified();
-                        let result = evm.transact();
+                        let result = if is_prefetch {
+                            evm.transact_preverified()
+                        } else {
+                            evm.transact()
+                        };
                         let transact_end = std::time::Instant::now();
                         let this_transact_time = transact_end - transact_start;
                         transact_time += this_transact_time;
@@ -350,9 +352,7 @@ impl Occda {
                         // Track read-write access for conflict detection
                         // This information is crucial for maintaining consistency
                         // TODO: modify the logic of rwset and ssa_rwset
-                        let mut read_write_set = evm.get_read_write_set();
-                        read_write_set.add_write(task.env.tx.caller, AccessType::Balance);
-                        read_write_set.add_write(task.env.tx.caller, AccessType::Nonce);
+                        let read_write_set = evm.get_read_write_set();
                         task_result.read_write_set = Some(read_write_set);
 
 
@@ -638,9 +638,7 @@ impl Occda {
                     let mut task_result = TaskResultItem::default();    
                     // Track read-write access for conflict detection
                     // This information is crucial for maintaining consistency
-                    let mut read_write_set = evm.get_read_write_set();
-                    read_write_set.add_write(task.env.tx.caller, AccessType::Balance);
-                    read_write_set.add_write(task.env.tx.caller, AccessType::Nonce);
+                    let read_write_set = evm.get_read_write_set();
                     task_result.read_write_set = Some(read_write_set);
 
                     drop(evm);

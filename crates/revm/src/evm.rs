@@ -364,22 +364,17 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 .inner
                 .journaled_state
                 .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
-            let origin_balance = caller_account.info.balance;
-            let origin_nonce = caller_account.info.nonce;
 
-            pre_exec.deduct_caller(ctx)?;
+            let gas_cost = pre_exec.deduct_caller(ctx)?;
 
-            let caller_account = ctx
-                .evm
-                .inner
-                .journaled_state
-                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
-            let new_balance = caller_account.info.balance;
-            let pre_deduct = origin_balance - new_balance;
-            let caller = ctx.evm.env.tx.caller;
             let is_create = matches!(ctx.evm.env.tx.transact_to, TxKind::Create);
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_deduct_caller(caller, origin_balance, origin_nonce, pre_deduct, is_create);
+            logger.log_deduct_caller(
+                caller, 
+                caller_account.info, 
+                caller_account.status, 
+                gas_cost, 
+                is_create);
         } else {
             pre_exec.deduct_caller(ctx)?;
         }
@@ -435,16 +430,15 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // TODO: Add refund log and add execute_refund to the executor handler.
         if ctx.evm.inner.ssa_logger.is_some() {
             // eprintln!("Log Refund Gas");
-            let caller_origin_balance = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?.info.balance;
-            post_exec.reimburse_caller(ctx, result.gas())?;
-            let caller_new_balance = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?.info.balance;
+            let caller_account = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
+            let gas_refund = post_exec.reimburse_caller(ctx, result.gas())?;
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, caller_origin_balance, caller_new_balance - caller_origin_balance);
+            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, caller_account.info, gas_refund);
         } else {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
         // Reward beneficiary
-        // TODO: If needed this should also be logged.
+        // TODO: If needed this should also be logged, or we should accumulate the reward_beneficiary to the beneficiary's account.
         post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
 

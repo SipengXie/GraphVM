@@ -73,7 +73,7 @@ pub fn refund<SPEC: Spec, EXT, DB: Database>(
 pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
     gas: &Gas,
-) -> Result<(), EVMError<DB::Error>> {
+) -> Result<U256, EVMError<DB::Error>> {
     let caller = context.evm.env.tx.caller;
     let effective_gas_price = context.evm.env.effective_gas_price();
 
@@ -84,12 +84,12 @@ pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
         .journaled_state
         .load_account(caller, &mut context.evm.inner.db)?;
 
-    caller_account.data.info.balance =
-        caller_account.data.info.balance.saturating_add(
-            effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64),
-        );
+    let gas_refund = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
 
-    Ok(())
+    caller_account.data.info.balance =
+        caller_account.data.info.balance.saturating_add(gas_refund);
+
+    Ok(gas_refund)
 }
 
 /// Main return handle, returns the output of the transaction.
