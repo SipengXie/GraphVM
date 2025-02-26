@@ -60,7 +60,7 @@ pub fn extcodesize<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
 
     push!(interpreter, U256::from(code.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_codesize(EXTCODESIZE, address, code.len());
+        logger.log_extcodesize(EXTCODESIZE, address, code.len());
     }
 }
 
@@ -241,11 +241,9 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
         let mem_deps = interpreter.shared_memory.get_shadow_deps(offset..offset+len);
         let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
         logger.log_log_opcode(LOG0 + N as u8,
-            interpreter.contract.target_address,
             offset,
             len,
             topics,
-            data,
             mem_deps,
             log_to_record.clone(),
             mem_length);
@@ -265,11 +263,6 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
     require_non_staticcall!(interpreter);
     pop_address!(interpreter, target);
 
-    let caller = interpreter.contract.caller;
-    let caller_balance = host.balance(caller).unwrap().data;
-    let target_balance = host.balance(target).unwrap().data;
-
-
     let Some(res) = host.selfdestruct(interpreter.contract.target_address, target) else {
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;
@@ -279,15 +272,13 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
     if !SPEC::enabled(LONDON) && !res.previously_destroyed {
         refund!(interpreter, gas::SELFDESTRUCT)
     }
+    let is_created = res.is_created;
+    let is_cancun_enabled = res.is_cancun_enabled;
     gas!(interpreter, gas::selfdestruct_cost(SPEC::SPEC_ID, res));
 
     interpreter.instruction_result = InstructionResult::SelfDestruct;
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_selfdestruct(SELFDESTRUCT, 
-            caller,
-            caller_balance,
-            target,
-            target_balance);
+        logger.log_selfdestruct(SELFDESTRUCT, interpreter.contract.target_address, target, is_created, is_cancun_enabled);
     }
 }

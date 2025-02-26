@@ -22,8 +22,6 @@ pub struct SSACallInput {
     pub scheme: SSACallScheme,
     /// Return range
     pub ret_range: Range<usize>,
-    /// Contract code
-    pub code: Option<Bytes>,
 }
 
 /// Simplified Call output structure

@@ -571,8 +571,8 @@ impl JournaledState {
     ) -> Result<StateLoad<SelfDestructResult>, EVMError<DB::Error>> {
         // Track the write access
         self.read_write_set.add_write(address, AccessType::Balance);
+        self.read_write_set.add_write(address, AccessType::AccountStatus);
         self.read_write_set.add_write(target, AccessType::Balance);
-        self.read_write_set.add_write(target, AccessType::AccountStatus);
 
         let spec = self.spec;
         let account_load = self.load_account(target, db)?;
@@ -595,7 +595,8 @@ impl JournaledState {
         let is_cancun_enabled = SpecId::enabled(self.spec, CANCUN);
 
         // EIP-6780 (Cancun hard-fork): selfdestruct only if contract is created in the same tx
-        let journal_entry = if acc.is_created() || !is_cancun_enabled {
+        let is_created = acc.is_created();
+        let journal_entry = if is_created || !is_cancun_enabled {
             acc.mark_selfdestruct();
             acc.info.balance = U256::ZERO;
             Some(JournalEntry::AccountDestroyed {
@@ -628,6 +629,8 @@ impl JournaledState {
                 had_value: !balance.is_zero(),
                 target_exists: !is_empty,
                 previously_destroyed,
+                is_created,
+                is_cancun_enabled,
             },
             is_cold,
         })

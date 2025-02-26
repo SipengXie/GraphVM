@@ -594,7 +594,6 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
         logger.log_delegatecall(DELEGATECALL, 
             local_gas_limit,
             to,
-            interpreter.contract.call_value,
             in_offset,
             in_len,
             out_offset,

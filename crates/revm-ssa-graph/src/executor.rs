@@ -650,12 +650,12 @@ where
             
             Ok(SSAInput::MemorySizeChange {
                 size: memory_size,
-                last_memory
+                source: last_memory
             })
         } else {
             Ok(SSAInput::MemorySizeChange {
                 size,
-                last_memory: 0
+                source: 0
             })
         };
         result
@@ -674,7 +674,7 @@ where
         } else {
             Ok(SSAInput::ContractEntry {
                 value: value.clone(),
-                entry_lsn: 0
+                source: 0
             })
         };
         result
@@ -852,8 +852,8 @@ where
                 SSAInput::Memory { source, value } => Self::resolve_memory_input(graph, source, value)?,
                 SSAInput::Storage { source, key, .. } => Self::resolve_storage_input(graph, context, *source, key)?,
                 SSAInput::ReturnDataBuffer { source, .. } => Self::resolve_return_data_input(graph, *source)?,
-                SSAInput::ContractEntry { value, entry_lsn } => Self::resolve_contract_entry_input(graph, value, *entry_lsn)?,
-                SSAInput::MemorySizeChange { size, last_memory } => Self::resolve_memory_size_input(graph, *size, *last_memory)?,
+                SSAInput::ContractEntry { value, source: entry_lsn } => Self::resolve_contract_entry_input(graph, value, *entry_lsn)?,
+                SSAInput::MemorySizeChange { size, source: last_memory } => Self::resolve_memory_size_input(graph, *size, *last_memory)?,
                 SSAInput::CreateInput { input, entry } => Self::resolve_create_input(graph, input, *entry)?,
                 SSAInput::CallInput { input, entry } => Self::resolve_call_input(graph, input, *entry)?,
                 SSAInput::InterpreterResult { source, .. } => Self::resolve_interpreter_result(graph, *source)?,
@@ -991,7 +991,7 @@ where
 
         Ok(SSAInput::ContractEntry {
             value: resolved_value,
-            entry_lsn: lsn
+            source: lsn
         })
     }
 

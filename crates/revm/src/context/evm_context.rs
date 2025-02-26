@@ -217,9 +217,9 @@ impl<DB: Database> EvmContext<DB> {
 
         // Create subroutine checkpoint
         let checkpoint = self.journaled_state.checkpoint();
-        // ! use to record the balance:
-        let mut caller_balance : Option<U256> = None;
-        let mut target_balance : Option<U256> = None;
+        let caller_account = self.load_account(inputs.caller)?;
+        let target_account = self.load_account(inputs.target_address)?;
+        let bytecode_account = self.load_account(inputs.bytecode_address)?;
 
         // Touch address. For "EIP-158 State Clear", this will erase empty accounts.
         match inputs.value {
@@ -231,9 +231,6 @@ impl<DB: Database> EvmContext<DB> {
             CallValue::Transfer(value) => {
                 // Transfer value from caller to called account. As value get transferred
                 // target gets touched.
-                // ! use to record the balance:
-                caller_balance = Some(self.balance(inputs.caller)?.data);
-                target_balance = Some(self.balance(inputs.target_address)?.data);
                 if let Some(result) = self.inner.journaled_state.transfer(
                     &inputs.caller,
                     &inputs.target_address,

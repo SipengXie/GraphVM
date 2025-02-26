@@ -18,7 +18,6 @@ pub fn convert_call_input(input: &CallInputs) -> SSACallInput {
         transfer_value: input.transfer_value().unwrap_or_default(),
         scheme: convert_call_scheme(input.scheme),
         ret_range: input.return_memory_offset.clone(),
-        code: None,
     }
 }
 

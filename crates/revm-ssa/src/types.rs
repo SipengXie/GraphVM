@@ -175,49 +175,38 @@ pub enum StorageValue {
 pub enum SSAInput {
     Constant(U256),
     Stack {
-        value: U256,
         source: u16,
     },
     Memory {
-        value: Bytes,
         source: Vec<MemoryDep>,
     },
     Storage {
         key: Box<StorageKey>,
-        value: Box<StorageValue>,
         source: u16,
     },
     ReturnDataBuffer {
-        value: Bytes,
         source: u16,
     },
     InterpreterResult {
-        result: SSAInterpreterResult,
         source: u16,
     },
     CallOutcome {
-        outcome: Box<SSACallOutcome>,
         source: u16,
     },
     CreateOutcome {
-        outcome: Box<SSACreateOutcome>,
         source: u16,
     },
     ContractEntry {
-        value: ContractEnv,
-        entry_lsn: u16,
+        source: u16,
     },
     MemorySizeChange {
-        size: usize,
-        last_memory: u16,
+        source: u16,
     },
     CreateInput {
-        input: Box<SSACreateInput>,
-        entry: u16,
+        source: u16,
     },
     CallInput {
-        input: Box<SSACallInput>,
-        entry: u16,
+        source: u16,
     }
 }
 

@@ -397,7 +397,7 @@ impl<DB: Database> InnerEvmContext<DB> {
     ) {
         // Log the call return, if SSA logger is present.
         if self.ssa_logger.is_some() {
-            self.ssa_logger.as_mut().unwrap().log_call_return(&convert_interpreter_result(interpreter_result));
+            self.ssa_logger.as_mut().unwrap().log_call_return(convert_interpreter_result(interpreter_result));
         }
         // revert changes or not.
         if matches!(interpreter_result.result, return_ok!()) {
