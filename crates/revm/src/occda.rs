@@ -291,7 +291,7 @@ impl Occda {
                                     drop(executor);
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
-                                        &format!("tx-{}", task.tid), 
+                                        &format!("{}", task.tx_hash.unwrap()), 
                                         &nodes_to_execute_len.to_string()
                                     );
                                     continue;
@@ -370,7 +370,7 @@ impl Occda {
                             profiler::end("ssa-logger");
                             profiler::note_str_unchecked(
                                 "total-opcodes", 
-                                &format!("tx-{}", task.tid), 
+                                &format!("{}", task.tx_hash.unwrap()), 
                                 &logger.current_lsn.to_string()
                             );
                         }
@@ -611,7 +611,7 @@ impl Occda {
                                 drop(executor);
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
-                                    &format!("redo-{}", task.tid), 
+                                    &format!("{}", task.tx_hash.unwrap()), 
                                     &nodes_to_execute_len.to_string()
                                 );
                                 continue;
@@ -650,8 +650,8 @@ impl Occda {
                         Ok(result_and_state) => {
                             let ResultAndState { state, result } = result_and_state;
                             profiler::note_str_unchecked(
-                                "gas-used", 
-                                &format!("redo-{}", task.tx_hash.unwrap()), 
+                                "redo-gas-used", 
+                                &format!("{}", task.tx_hash.unwrap()), 
                                 &result.gas_used().to_string(),
                             );
                             task_result.state = Some(state);
@@ -659,8 +659,8 @@ impl Occda {
                         }
                         Err(_) => {
                             profiler::note_str_unchecked(
-                                "gas-used", 
-                                &format!("redo-{}", task.tx_hash.unwrap()), 
+                                "redo-gas-used", 
+                                &format!("{}", task.tx_hash.unwrap()), 
                                 &"failure",
                             );
                             task_result.state = None;
@@ -741,7 +741,7 @@ impl Occda {
 
                 profiler::note_str_unchecked(
                     "is-conflict", 
-                    &format!("tx-{}", h_tx[task_idx].tid), 
+                    &format!("{}", h_tx[task_idx].tx_hash.unwrap()), 
                     &is_conflict.to_string()
                 );
 
