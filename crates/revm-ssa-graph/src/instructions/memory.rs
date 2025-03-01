@@ -1,6 +1,6 @@
 use revm_primitives::U256;
-use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use revm_ssa::SSAOutput;
+use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
 use super::utils::as_usize_saturated;
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::Spec;
@@ -20,21 +20,16 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MLOAD operation
     #[inline]
-    pub fn execute_mload(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mload(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "MLOAD requires exactly 2 operands (offset, memory)".to_string()
             ));
         }
 
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
 
-        let memory = match &inputs[1] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Memory value".to_string()
-            )),
-        };
+        let memory = match_input!(inputs, 1, SSAOutput::Memory(value) => value, "Second");
 
         // Convert 32 bytes of memory value to U256
         let mut value = [0u8; 32];
@@ -57,15 +52,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MSTORE operation
     #[inline]
-    pub fn execute_mstore(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mstore(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "MSTORE requires exactly 2 operands (offset, value)".to_string()
             ));
         }
 
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         let offset = as_usize_saturated(*offset);
         let value_bytes = value.to_be_bytes::<32>();
@@ -84,15 +79,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MSTORE8 operation
     #[inline]
-    pub fn execute_mstore8(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mstore8(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "MSTORE8 requires exactly 2 operands (offset, value)".to_string()
             ));
         }
 
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let value = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         let offset = as_usize_saturated(*offset);
         let value_bytes = vec![value.byte(0)];
@@ -111,42 +106,32 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MSIZE operation
     #[inline]
-    pub fn execute_msize(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_msize(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "MSIZE requires exactly 1 operand (memory size change)".to_string()
             ));
         }
 
-        let size = match &inputs[0] {
-            SSAInput::MemorySizeChange { size, .. } => size,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be MemorySizeChange".to_string()
-            )),
-        };
+        let size = match_input!(inputs, 0, SSAOutput::MemorySize(value) => value, "First");
 
         Ok(vec![SSAOutput::Stack(U256::from(*size))])
     }
 
     /// Execute MCOPY operation
     #[inline]
-    pub fn execute_mcopy(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mcopy(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
                 "MCOPY requires exactly 4 operands (dst, src, len, memory)".to_string()
             ));
         }
 
-        let dst = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let src = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let dst = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let src = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
 
-        let memory = match &inputs[3] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Memory value".to_string()
-            )),
-        };
+        let memory = match_input!(inputs, 3, SSAOutput::Memory(value) => value, "Fourth");
 
         // If length is 0, return directly
         if len.is_zero() {

@@ -232,6 +232,7 @@ impl JournaledState {
     #[inline]
     pub fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
         self.read_write_set.add_write(address, AccessType::Code);
+        self.read_write_set.add_write(address, AccessType::AccountStatus);
         let account = self.state.get_mut(&address).unwrap();
         Self::touch_account(self.journal.last_mut().unwrap(), &address, account);
 
@@ -255,6 +256,7 @@ impl JournaledState {
     #[inline]
     pub fn inc_nonce(&mut self, address: Address) -> Option<u64> {
         self.read_write_set.add_write(address, AccessType::Nonce);
+        self.read_write_set.add_write(address, AccessType::AccountStatus);
         let account = self.state.get_mut(&address).unwrap();
         // Check if nonce is going to overflow.
         if account.info.nonce == u64::MAX {
@@ -282,6 +284,8 @@ impl JournaledState {
     ) -> Result<Option<InstructionResult>, EVMError<DB::Error>> {
         self.read_write_set.add_write(*from, AccessType::Balance);
         self.read_write_set.add_write(*to, AccessType::Balance);
+        self.read_write_set.add_write(*from, AccessType::AccountStatus);
+        self.read_write_set.add_write(*to, AccessType::AccountStatus);
         // load accounts
         self.load_account(*from, db)?;
         self.load_account(*to, db)?;
@@ -569,11 +573,6 @@ impl JournaledState {
         target: Address,
         db: &mut DB,
     ) -> Result<StateLoad<SelfDestructResult>, EVMError<DB::Error>> {
-        // Track the write access
-        self.read_write_set.add_write(address, AccessType::Balance);
-        self.read_write_set.add_write(address, AccessType::AccountStatus);
-        self.read_write_set.add_write(target, AccessType::Balance);
-
         let spec = self.spec;
         let account_load = self.load_account(target, db)?;
         let is_cold = account_load.is_cold;
@@ -587,6 +586,8 @@ impl JournaledState {
             let target_account = self.state.get_mut(&target).unwrap();
             Self::touch_account(self.journal.last_mut().unwrap(), &target, target_account);
             target_account.info.balance += acc_balance;
+            self.read_write_set.add_write(target, AccessType::Balance);
+            self.read_write_set.add_write(target, AccessType::AccountStatus);
         }
 
         let acc = self.state.get_mut(&address).unwrap();
@@ -597,6 +598,8 @@ impl JournaledState {
         // EIP-6780 (Cancun hard-fork): selfdestruct only if contract is created in the same tx
         let is_created = acc.is_created();
         let journal_entry = if is_created || !is_cancun_enabled {
+            self.read_write_set.add_write(address, AccessType::Balance);
+            self.read_write_set.add_write(address, AccessType::AccountStatus);
             acc.mark_selfdestruct();
             acc.info.balance = U256::ZERO;
             Some(JournalEntry::AccountDestroyed {
@@ -606,6 +609,7 @@ impl JournaledState {
                 had_balance: balance,
             })
         } else if address != target {
+            self.read_write_set.add_write(address, AccessType::Balance);
             acc.info.balance = U256::ZERO;
             Some(JournalEntry::BalanceTransfer {
                 from: address,
@@ -623,7 +627,11 @@ impl JournaledState {
         if let Some(entry) = journal_entry {
             self.journal.last_mut().unwrap().push(entry);
         };
-
+        // additional work to support ssa
+        let address_info = acc.info.clone();
+        let address_status = acc.status;
+        let target_info = account_load.data.info.clone();
+        let target_status = account_load.data.status;
         Ok(StateLoad {
             data: SelfDestructResult {
                 had_value: !balance.is_zero(),
@@ -631,6 +639,10 @@ impl JournaledState {
                 previously_destroyed,
                 is_created,
                 is_cancun_enabled,
+                address_info,
+                address_status,
+                target_info,
+                target_status,
             },
             is_cold,
         })

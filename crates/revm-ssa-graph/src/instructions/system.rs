@@ -1,8 +1,8 @@
 use std::cmp::min;
 
 use revm_primitives::{B256, U256};
-use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use revm_ssa::SSAOutput;
+use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
 use super::utils::as_usize_saturated;
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::Spec;
@@ -10,14 +10,14 @@ use revm_primitives::Spec;
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute GAS operation
     #[inline]
-    pub fn execute_gas(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_gas(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {  
             return Err(ExecutionError::ExecutionError(
                 "GAS requires exactly 1 operand".to_string()
             ));
         }
         let gas = match &inputs[0] {
-            SSAInput::Constant(value) => value,
+            SSAOutput::Constant(value) => value,
             _ => return Err(ExecutionError::ExecutionError(
                 "Operand must be Constant value".to_string()
             )),
@@ -27,80 +27,60 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute ADDRESS operation
     #[inline]
-    pub fn execute_address(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_address(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "ADDRESS requires exactly 1 operand".to_string()
             ));
         }
-        let address = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be CallInput".to_string()
-            )),
-        };
+        let address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
         Ok(vec![SSAOutput::Stack(address.into_word().into())])
     }
 
     /// Execute CALLER operation
     #[inline]
-    pub fn execute_caller(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_caller(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "CALLER requires exactly 1 operand".to_string()
             ));
         }
-        let caller = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be CallInput".to_string()
-            )),
-        };
+        let caller = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.caller, "First");
         Ok(vec![SSAOutput::Stack(caller.into_word().into())])
     }
 
     /// Execute CODESIZE operation
     #[inline]
-    pub fn execute_codesize(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_codesize(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "CODESIZE requires exactly 1 operand".to_string()
             ));
         }
-        let len = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_size().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be CallInput".to_string()
-            )),
-        };
-        Ok(vec![SSAOutput::Stack(U256::from(len))])
+        let code_length = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.bytecode.len(), "First");
+
+        Ok(vec![SSAOutput::Stack(U256::from(code_length))])
     }
 
     /// Execute CODECOPY operation
     #[inline]
-    pub fn execute_codecopy(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_codecopy(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
                 "CODECOPY requires exactly 4 operands".to_string()
             ));
         }
 
-        let memory_offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let code_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let code = match &inputs[3] {
-            SSAInput::ContractEntry { value, .. } => value.as_code().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
+        let memory_offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let code_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let code = match_input!(inputs, 3, SSAOutput::ContractEnv(value) => value.bytecode.original_bytes(), "Fourth");
         let memory_offset = as_usize_saturated(*memory_offset);
         let code_offset = as_usize_saturated(*code_offset);
         let len = as_usize_saturated(*len);
-
         // Prevent code from being too short
-        let code_len = min(code_offset + len, code.len());
-        let code_slice = code.slice(code_offset..code_len);
+        let code_end = min(code_offset + len, code.len());
+        let code_slice = &code[code_offset..code_end];
         let new_size = self.check_memory_size(memory_offset, len);
         // Pad code to len length
         let mut padded_code_slice = vec![0u8; len];
@@ -115,19 +95,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLDATALOAD operation
     #[inline]
-    pub fn execute_calldataload(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_calldataload(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "CALLDATALOAD requires exactly 2 operands".to_string()
             ));
         }
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let call_data = match &inputs[1] {
-            SSAInput::ContractEntry { value, .. } => value.as_call_data().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let call_data = match_input!(inputs, 1, SSAOutput::ContractEnv(value) => value.input.clone(), "Second");
         let offset = as_usize_saturated(*offset);
         let mut word = [0u8; 32];
         if offset < call_data.len() {
@@ -139,63 +114,48 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLDATASIZE operation
     #[inline]
-    pub fn execute_calldatasize(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_calldatasize(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "CALLDATASIZE requires exactly 1 operand".to_string()
             ));
         }
-        let len = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_call_data_size().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
-        Ok(vec![SSAOutput::Stack(U256::from(len))])
+        let input = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.input.clone(), "First");
+        Ok(vec![SSAOutput::Stack(U256::from(input.len()))])
     }
 
     /// Execute CALLVALUE operation
     #[inline]
-    pub fn execute_callvalue(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_callvalue(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "CALLVALUE requires exactly 1 operand".to_string()
             ));
         }
-        let call_value = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_call_value().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
-        Ok(vec![SSAOutput::Stack(call_value.into())])
+        let call_value = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.call_value, "First");
+        Ok(vec![SSAOutput::Stack(call_value)])
     }
 
     /// Execute CALLDATACOPY operation
     #[inline]
-    pub fn execute_calldatacopy(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_calldatacopy(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
                 "CALLDATACOPY requires exactly 4 operands".to_string()
             ));
         }
-        let memory_offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let data_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let call_data = match &inputs[3] {
-            SSAInput::ContractEntry { value, .. } => value.as_call_data().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
+        let memory_offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let data_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let call_data = match_input!(inputs, 3, SSAOutput::ContractEnv(value) => value.input.clone(), "Fourth");
 
         let memory_offset = as_usize_saturated(*memory_offset);
         let data_offset = as_usize_saturated(*data_offset);
         let len = as_usize_saturated(*len);
 
         // Prevent data from being too short
-        let data_len = min(data_offset + len, call_data.len());
-        let data_slice = call_data.slice(data_offset..data_len);
+        let data_end = min(data_offset + len, call_data.len());
+        let data_slice = call_data.slice(data_offset..data_end);
         let new_size = self.check_memory_size(memory_offset, len);
         // Pad data to len length
         let mut padded_data_slice = vec![0u8; len];
@@ -210,46 +170,36 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURNDATASIZE operation
     #[inline]
-    pub fn execute_returndatasize(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_returndatasize(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "RETURNDATASIZE requires exactly 1 operand".to_string()
             ));
         }
-        let return_data = match &inputs[0] {
-            SSAInput::ReturnDataBuffer { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ReturnDataBuffer".to_string()
-            )),
-        };
+        let return_data = match_input!(inputs, 0, SSAOutput::ReturnDataBuffer(value) => value, "First");
         Ok(vec![SSAOutput::Stack(U256::from(return_data.len()))])
     }
 
     /// Execute RETURNDATACOPY operation
     #[inline]
-    pub fn execute_returndatacopy(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_returndatacopy(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
                 "RETURNDATACOPY requires exactly 4 operands".to_string()
             ));
         }
-        let memory_offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let data_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let return_data = match &inputs[3] {
-            SSAInput::ReturnDataBuffer { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ReturnData".to_string()
-            )),
-        };
+        let memory_offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let data_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let return_data = match_input!(inputs, 3, SSAOutput::ReturnDataBuffer(value) => value, "Fourth");
 
         let memory_offset = as_usize_saturated(*memory_offset);
         let data_offset = as_usize_saturated(*data_offset);
         let len = as_usize_saturated(*len);
 
         // Prevent data from being too short
-        let data_len = min(data_offset + len, return_data.len());
-        let data_slice = return_data.slice(data_offset..data_len);
+        let data_end = min(data_offset + len, return_data.len());
+        let data_slice = return_data.slice(data_offset..data_end);
         let new_size = self.check_memory_size(memory_offset, len);
         // Pad data to len length
         let mut padded_data_slice = vec![0u8; len];
@@ -264,19 +214,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURNDATALOAD operation
     #[inline]
-    pub fn execute_returndataload(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_returndataload(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "RETURNDATALOAD requires exactly 2 operands".to_string()
             ));
         }
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let return_data = match &inputs[1] {
-            SSAInput::ReturnDataBuffer { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ReturnData".to_string()
-            )),
-        };
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let return_data = match_input!(inputs, 1, SSAOutput::ReturnDataBuffer(value) => value, "Second");
         let offset = as_usize_saturated(*offset);
         let mut word = [0u8; 32];
         if offset < return_data.len() {
@@ -288,22 +233,17 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute KECCAK256 operation
     #[inline]
-    pub fn execute_keccak256(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_keccak256(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "KECCAK256 requires exactly 3 operands".to_string()
             ));
         }
 
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let len = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let len = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
-        let data = match &inputs[2] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Memory value".to_string()
-            )),
-        };
+        let data = match_input!(inputs, 2, SSAOutput::Memory(value) => value, "Third");
         let offset = as_usize_saturated(*offset);
         let len = as_usize_saturated(*len);
 

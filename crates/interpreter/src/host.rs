@@ -3,6 +3,7 @@ use core::ops::{Deref, DerefMut};
 
 mod dummy;
 pub use dummy::DummyHost;
+use revm_primitives::{AccountInfo, AccountStatus};
 
 /// EVM context host.
 pub trait Host {
@@ -254,6 +255,10 @@ pub struct SelfDestructResult {
     // ! add these two fields to support ssa
     pub is_created: bool,
     pub is_cancun_enabled: bool,
+    pub address_info: AccountInfo,
+    pub address_status: AccountStatus,
+    pub target_info: AccountInfo,
+    pub target_status: AccountStatus,
 }
 
 #[cfg(test)]

@@ -92,7 +92,7 @@ impl ExecutionTracer {
             (SSAOutput::Jump { relative_offset: o1 }, SSAOutput::Jump { relative_offset: o2 }) => o1 == o2,
             
             // Compare call frames
-            (SSAOutput::CallFrame(f1), SSAOutput::CallFrame(f2)) => {
+            (SSAOutput::CallInput(f1), SSAOutput::CallInput(f2)) => {
                 f1.caller == f2.caller &&
                 f1.target_address == f2.target_address &&
                 f1.input == f2.input &&
@@ -108,12 +108,11 @@ impl ExecutionTracer {
             },
             
             // Compare create frames
-            (SSAOutput::CreateFrame(f1), SSAOutput::CreateFrame(f2)) => {
+            (SSAOutput::CreateInput(f1), SSAOutput::CreateInput(f2)) => {
                 f1.caller == f2.caller &&
                 f1.value == f2.value &&
                 f1.init_code == f2.init_code &&
-                f1.scheme == f2.scheme &&
-                f1.target == f2.target
+                f1.scheme == f2.scheme
             },
             
             // Compare create outcomes

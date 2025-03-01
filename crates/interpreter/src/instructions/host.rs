@@ -82,7 +82,7 @@ pub fn extcodehash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     }
     push_b256!(interpreter, code_hash);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_codehash(EXTCODEHASH, address, code_hash.into());
+        logger.log_extcodehash(EXTCODEHASH, address, code_hash.into());
     }
 }
 
@@ -272,13 +272,29 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
     if !SPEC::enabled(LONDON) && !res.previously_destroyed {
         refund!(interpreter, gas::SELFDESTRUCT)
     }
+    // additional work to support ssa
     let is_created = res.is_created;
     let is_cancun_enabled = res.is_cancun_enabled;
+    let address_info = res.data.address_info.clone();
+    let address_status = res.data.address_status;
+    let target_info = res.data.target_info.clone();
+    let target_status = res.data.target_status;
+
     gas!(interpreter, gas::selfdestruct_cost(SPEC::SPEC_ID, res));
 
     interpreter.instruction_result = InstructionResult::SelfDestruct;
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_selfdestruct(SELFDESTRUCT, interpreter.contract.target_address, target, is_created, is_cancun_enabled);
+        logger.log_selfdestruct(
+            SELFDESTRUCT, 
+            interpreter.contract.target_address, 
+            target, 
+            is_created, 
+            is_cancun_enabled,
+            address_info,
+            address_status,
+            target_info,
+            target_status,
+        );
     }
 }

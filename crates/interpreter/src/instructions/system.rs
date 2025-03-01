@@ -1,7 +1,7 @@
 use revm_ssa::ContractEnv;
 
 use crate::{
-    gas, opcode::*, primitives::{Spec, B256, KECCAK_EMPTY, U256}, Host, InstructionResult, Interpreter
+    gas, interpreter_action::convert_contract_env, opcode::*, primitives::{Spec, B256, KECCAK_EMPTY, U256}, Host, InstructionResult, Interpreter
 };
 use core::ptr;
 
@@ -34,7 +34,7 @@ pub fn address<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     push_b256!(interpreter, interpreter.contract.target_address.into_word());
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_system_operation(ADDRESS, 
-        ContractEnv::Target(interpreter.contract.target_address));
+        convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -43,7 +43,7 @@ pub fn caller<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     push_b256!(interpreter, interpreter.contract.caller.into_word());
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_system_operation(CALLER, 
-        ContractEnv::Caller(interpreter.contract.caller));
+        convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -54,7 +54,7 @@ pub fn codesize<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     push!(interpreter, U256::from(interpreter.contract.bytecode.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_system_operation(CODESIZE, 
-        ContractEnv::Size(interpreter.contract.bytecode.len()));
+        convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -127,7 +127,7 @@ pub fn calldatasize<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     push!(interpreter, U256::from(interpreter.contract.input.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_system_operation(CALLDATASIZE, 
-        ContractEnv::CallDataSize(interpreter.contract.input.len()));
+        convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -136,7 +136,7 @@ pub fn callvalue<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H)
     push!(interpreter, interpreter.contract.call_value);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_system_operation(CALLVALUE, 
-        ContractEnv::CallValue(interpreter.contract.call_value));
+        convert_contract_env(&interpreter.contract));
     }
 }
 

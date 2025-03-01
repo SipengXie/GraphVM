@@ -1,4 +1,4 @@
-use revm_primitives::{AccountInfo, AccountStatus, Address, Bytes, Log, U256};
+use revm_primitives::{AccountInfo, AccountStatus, Address, Bytecode, Bytes, Log, B256, U256};
 use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -61,97 +61,23 @@ pub struct MemoryDep {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum ContractEnv {
-    Target(Address),
-    Size(usize),
-    Code(Bytes),
-    Caller(Address),
-    CallValue(U256),
-    CallDataSize(usize),
-    CallData(Bytes),
-    CallDataLoad(U256),
-}
-
-impl ContractEnv {
-    /// Get target address, returns None if not Target type
-    pub fn as_target(&self) -> Option<Address> {
-        match self {
-            ContractEnv::Target(addr) => Some(*addr),
-            _ => None
-        }
-    }
-
-    /// Get size, returns None if not Size type
-    pub fn as_size(&self) -> Option<usize> {
-        match self {
-            ContractEnv::Size(size) => Some(*size),
-            _ => None
-        }
-    }
-
-    /// Get code, returns None if not Code type
-    pub fn as_code(&self) -> Option<&Bytes> {
-        match self {
-            ContractEnv::Code(code) => Some(code),
-            _ => None
-        }
-    }
-
-    /// Get caller address, returns None if not Caller type
-    pub fn as_caller(&self) -> Option<Address> {
-        match self {
-            ContractEnv::Caller(addr) => Some(*addr),
-            _ => None
-        }
-    }
-
-    /// Get call value, returns None if not CallValue type
-    pub fn as_call_value(&self) -> Option<U256> {
-        match self {
-            ContractEnv::CallValue(value) => Some(*value),
-            _ => None
-        }
-    }
-
-    /// Get call data size, returns None if not CallDataSize type
-    pub fn as_call_data_size(&self) -> Option<usize> {
-        match self {
-            ContractEnv::CallDataSize(size) => Some(*size),
-            _ => None
-        }
-    }
-
-    /// Get call data, returns None if not CallData type
-    pub fn as_call_data(&self) -> Option<&Bytes> {
-        match self {
-            ContractEnv::CallData(data) => Some(data),
-            _ => None
-        }
-    }
-
-    /// Get call data load value, returns None if not CallDataLoad type
-    pub fn as_call_data_load(&self) -> Option<U256> {
-        match self {
-            ContractEnv::CallDataLoad(value) => Some(*value),
-            _ => None
-        }
-    }
-}
-
-impl From<ContractEnv> for U256 {
-    fn from(value: ContractEnv) -> Self {
-        match value {
-            ContractEnv::Target(address) => address.into_word().into(),
-            ContractEnv::Size(size) => U256::from(size),
-            ContractEnv::CallDataSize(size) => U256::from(size),
-            ContractEnv::CallDataLoad(data) => U256::from(data),
-            ContractEnv::CallValue(value) => value,
-            ContractEnv::Caller(address) => address.into_word().into(),
-
-            ContractEnv::Code(_) => U256::ZERO, // Code cannot be converted to U256, return 0
-            ContractEnv::CallData(_) => U256::ZERO, // Call data cannot be converted to U256, return 0
-        }
-    }
+pub struct ContractEnv {
+    /// Contracts data
+    pub input: Bytes,
+    /// Bytecode contains contract code, size of original code, analysis with gas block and jump table.
+    /// Note that current code is extended with push padding and STOP at end.
+    pub bytecode: Bytecode,
+    /// Bytecode hash for legacy. For EOF this would be None.
+    pub hash: Option<B256>,
+    /// Target address of the account. Storage of this address is going to be modified.
+    pub target_address: Address,
+    /// Address of the account the bytecode was loaded from. This can be different from target_address
+    /// in the case of DELEGATECALL or CALLCODE
+    pub bytecode_address: Option<Address>,
+    /// Caller of the EVM.
+    pub caller: Address,
+    /// Value send to contract from transaction or from CALL opcodes.
+    pub call_value: U256,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
@@ -170,8 +96,37 @@ pub enum StorageValue {
     Slot(U256),
 }
 
+impl StorageValue {
+    /// Get account info, returns None if not AccountInfo type
+    pub fn as_account_info(&self) -> Option<&AccountInfo> {
+        match self {
+            StorageValue::AccountInfo(info) => Some(info),
+            _ => None
+        }
+    }
+
+    /// Get account status, returns None if not AccountStatus type 
+    pub fn as_account_status(&self) -> Option<&AccountStatus> {
+        match self {
+            StorageValue::AccountStatus(status) => Some(status),
+            _ => None
+        }
+    }
+
+    /// Get slot value, returns None if not Slot type
+    pub fn as_slot(&self) -> Option<&U256> {
+        match self {
+            StorageValue::Slot(value) => Some(value),
+            _ => None
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// SSAInput is the input of the SSA instruction, we only log the source
+// as the value is unnecessary.
 pub enum SSAInput {
     Constant(U256),
     Stack {
@@ -196,9 +151,6 @@ pub enum SSAInput {
     CreateOutcome {
         source: u16,
     },
-    ContractEntry {
-        source: u16,
-    },
     MemorySizeChange {
         source: u16,
     },
@@ -207,12 +159,20 @@ pub enum SSAInput {
     },
     CallInput {
         source: u16,
+    },
+    ContractEnv {
+        source: u16,
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+// SSAOutput is the output of the SSA instruction, we only log the value
+// The SSAOutput also acts like the value of the SSA instruction, when we
+// execute the SSA graph, we can use the SSAOutput as the input of the next
+// instruction.
 pub enum SSAOutput {
+    Constant(U256),
     Stack(U256),
     Memory(Bytes),
     Storage {
@@ -226,18 +186,25 @@ pub enum SSAOutput {
     InterpreterResult(SSAInterpreterResult),
     MemorySize(usize),
     Address(Address),
-    CreateFrame(Box<SSACreateInput>),
+    CreateInput(Box<SSACreateInput>),
     CreateOutcome(Box<SSACreateOutcome>),
-    CallFrame(Box<SSACallInput>),
+    CallInput(Box<SSACallInput>),
     CallOutcome(Box<SSACallOutcome>),
     Log(Box<Log>),
+    ContractEnv(Box<ContractEnv>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SSALogEntry {
+    // The LSN of the log entry
     pub lsn: u16,
+    // The opcode of the instruction
     pub opcode: u8,
+    // The inputs of the instruction
     pub inputs: Vec<SSAInput>,
+    // The outputs of the instruction, it is necessary to record the value
+    // because when we construct the SSA graph, the paritially executed nodes may
+    // access some nodes unnecessary to execute, thus we can give them the same value
     pub outputs: Vec<SSAOutput>,
 }

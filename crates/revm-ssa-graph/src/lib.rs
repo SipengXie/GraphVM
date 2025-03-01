@@ -69,9 +69,3 @@ pub enum ExecutionError {
 
 /// Result type for operations that can fail with an ExecutionError
 pub type Result<T> = std::result::Result<T, ExecutionError>; 
-
-#[auto_impl(&mut, Box)]
-pub trait SsaDatabaseCommit {
-    /// Commit changes to the database.
-    fn commit_ssa_storage(&mut self, changes: Vec<SSAOutput>);
-}

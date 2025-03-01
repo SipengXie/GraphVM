@@ -1,66 +1,66 @@
 use revm_primitives::{Spec, U256, db::DatabaseRef};
-use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use revm_ssa::SSAOutput;
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_output_stack_or_const};
 
 use super::i256::{i256_div, i256_mod};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute addition operation
     #[inline]
-    pub fn execute_add(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_add(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "ADD requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(a.overflowing_add(*b).0)])
     }
 
     /// Execute multiplication operation
     #[inline]
-    pub fn execute_mul(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mul(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "MUL requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(a.overflowing_mul(*b).0)])
     }
 
     /// Execute subtraction operation
     #[inline]
-    pub fn execute_sub(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_sub(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "SUB requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(a.overflowing_sub(*b).0)])
     }
 
     /// Execute division operation
     #[inline]
-    pub fn execute_div(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_div(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "DIV requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         if *b == U256::from(0) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -71,15 +71,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute modulo operation
     #[inline]
-    pub fn execute_mod(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mod(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "MOD requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         if *b == U256::from(0) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -90,16 +90,16 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute addition modulo operation
     #[inline]
-    pub fn execute_addmod(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_addmod(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "ADDMOD requires exactly 3 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let n = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let n = match_ssa_output_stack_or_const!(&inputs[2], "Third");
 
         if *n == U256::from(0) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -110,16 +110,16 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute multiplication modulo operation
     #[inline]
-    pub fn execute_mulmod(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_mulmod(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "MULMOD requires exactly 3 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let n = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let n = match_ssa_output_stack_or_const!(&inputs[2], "Third");
 
         if *n == U256::from(0) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -130,15 +130,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute signed division operation
     #[inline]
-    pub fn execute_sdiv(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_sdiv(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "SDIV requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         if *b == U256::from(0) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -149,15 +149,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute signed modulo operation
     #[inline]
-    pub fn execute_smod(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_smod(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "SMOD requires exactly 2 operands".to_string()
             ));
         }
 
-        let a = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         if *b == U256::from(0) {
             Ok(vec![SSAOutput::Stack(U256::from(0))])
@@ -168,30 +168,30 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute exponentiation operation
     #[inline]
-    pub fn execute_exp(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_exp(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "EXP requires exactly 2 operands".to_string()
             ));
         }
 
-        let base = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let exponent = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let base = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let exponent = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         Ok(vec![SSAOutput::Stack(base.pow(*exponent))])
     }
 
     /// Execute sign extension operation
     #[inline]
-    pub fn execute_signextend(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_signextend(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "SIGNEXTEND requires exactly 2 operands".to_string()
             ));
         }
 
-        let ext = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let word = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let ext = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let word = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         // Completely follow the interpreter's logic
         let ext = ext.as_limbs()[0];

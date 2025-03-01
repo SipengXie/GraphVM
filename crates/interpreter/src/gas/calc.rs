@@ -241,8 +241,9 @@ fn frontier_sstore_cost(vals: &SStoreResult) -> u64 {
 }
 
 /// `SELFDESTRUCT` opcode cost calculation.
+/// !! we modify the pub const fn to pub fn
 #[inline]
-pub const fn selfdestruct_cost(spec_id: SpecId, res: StateLoad<SelfDestructResult>) -> u64 {
+pub fn selfdestruct_cost(spec_id: SpecId, res: StateLoad<SelfDestructResult>) -> u64 {
     // EIP-161: State trie clearing (invariant-preserving alternative)
     let should_charge_topup = if spec_id.is_enabled_in(SpecId::SPURIOUS_DRAGON) {
         res.data.had_value && !res.data.target_exists

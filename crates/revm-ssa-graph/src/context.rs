@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
+use revm_precompile::{PrecompileSpecId, Precompiles};
 use revm_primitives::{
-    AccountInfo, Address, Env, Spec, U256, BLOCK_HASH_HISTORY, db::DatabaseRef
+    db::DatabaseRef, AccountInfo, AccountStatus, Address, Env, Spec, BLOCK_HASH_HISTORY, U256
 };
 use revm_ssa::{StorageKey, StorageValue};
 
@@ -21,6 +22,8 @@ pub struct ExecutionContext<'a, DB: DatabaseRef, SPEC: Spec> {
     error: RwLock<Result<(), <DB as DatabaseRef>::Error>>,
     /// Hardfork specification
     spec: PhantomData<SPEC>,
+    /// Precompiles
+    precompiles: &'static Precompiles,
 }
 
 impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
@@ -30,7 +33,8 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
             db: Arc::new(db),
             memory_size: AtomicUsize::new(0),
             error: RwLock::new(Ok(())),
-            spec: PhantomData,
+            spec: PhantomData,  
+            precompiles: Precompiles::new(PrecompileSpecId::from_spec_id(SPEC::SPEC_ID)),
         }
     }
 
@@ -94,36 +98,19 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Unified storage access interface
-    pub fn get_storage_value(&mut self, key: &StorageKey) -> StorageValue {
+    pub fn get_storage_value_from_db(&mut self, key: &StorageKey) -> StorageValue {
         match key {
             StorageKey::Slot(address, slot) => {
                 let value = self.get_storage(address, *slot);
                 StorageValue::Slot(value)
             },
-            StorageKey::Balance(address) => {
-                let balance = self.get_balance(address);
-                StorageValue::Balance(balance)
+            StorageKey::AccountInfo(address) => {
+                let account = self.get_account(address);
+                StorageValue::AccountInfo(account)
             },
-            StorageKey::Nonce(address) => {
-                let nonce = self.get_account(address).nonce;
-                StorageValue::Nonce(nonce)
-            },
-            StorageKey::CodeSize(address) => {
-                let size = self.get_account(address)
-                    .code
-                    .as_ref()
-                    .map(|code| code.len() as u64)
-                    .unwrap_or_default();
-                StorageValue::CodeSize(size)
-            },
-            StorageKey::Code(address) => {
-                let code = self.get_account(address).code.clone().unwrap_or_default();
-                StorageValue::Code(code.bytes())
-            },
-            StorageKey::CodeHash(address) => {
-                let hash = self.get_account(address).code_hash;
-                StorageValue::CodeHash(hash.into())
-            },
+            StorageKey::AccountStatus(_) => {
+                StorageValue::AccountStatus(AccountStatus::default())
+            }
         }
     }
     

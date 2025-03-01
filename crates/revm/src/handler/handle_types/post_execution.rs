@@ -85,7 +85,7 @@ impl<EXT, DB: Database> PostExecutionHandler<'_, EXT, DB> {
         &self,
         context: &mut Context<EXT, DB>,
         gas: &Gas,
-    ) -> Result<U256, EVMError<DB::Error>> {
+    ) -> Result<(), EVMError<DB::Error>> {
         (self.reimburse_caller)(context, gas)
     }
     /// Reward beneficiary

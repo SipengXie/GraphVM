@@ -394,11 +394,10 @@ pub fn create<const IS_CREATE2: bool, H: Host + ?Sized, SPEC: Spec>(
         ssa_logger.log_create(opcode, 
             value, 
             code_offset, 
-            len, 
-            salt, 
-            code.clone(), 
-            code_deps, 
+            len,
+            code.clone(), code_deps, // memory
             interpreter.contract.target_address, 
+            salt, 
             mem_length);
     }
 
@@ -444,12 +443,9 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
             local_gas_limit,
             to,
             value,
-            in_offset,
-            in_len,
-            out_offset,
-            out_len,
-            input.clone(),
-            mem_deps,
+            in_offset, in_len, // in range
+            out_offset, out_len, // return range
+            input.clone(), mem_deps, // memory
             interpreter.contract.target_address,
             mem_length
         );
@@ -519,12 +515,9 @@ pub fn call_code<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
             local_gas_limit,
             to,
             value,
-            in_offset,
-            in_len,
-            out_offset,
-            out_len,
-            input.clone(),
-            mem_deps,
+            in_offset, in_len, // in range
+            out_offset, out_len, // return range
+            input.clone(), mem_deps, // memory
             interpreter.contract.target_address,
             mem_length
         );
@@ -594,12 +587,9 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
         logger.log_delegatecall(DELEGATECALL, 
             local_gas_limit,
             to,
-            in_offset,
-            in_len,
-            out_offset,
-            out_len,
-            input.clone(),
-            mem_deps,
+            in_offset, in_len, // in range
+            out_offset, out_len, // return range
+            input.clone(), mem_deps, // memory
             mem_length,
             interpreter.contract.caller,
             interpreter.contract.target_address,
@@ -665,12 +655,9 @@ pub fn static_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         logger.log_staticcall(STATICCALL, 
             local_gas_limit,
             to,
-            in_offset,
-            in_len,
-            out_offset,
-            out_len,
-            input.clone(),
-            mem_deps,
+            in_offset, in_len, // in range
+            out_offset, out_len, // return range
+            input.clone(), mem_deps, // memory
             mem_length,
             interpreter.contract.target_address,
         );

@@ -458,7 +458,7 @@ impl<DB: Database> InnerEvmContext<DB> {
         self.journaled_state.checkpoint_commit();
 
         // Do analysis of bytecode straight away.
-        let analysis_kind = self.env.cfg.perf_analyse_created_bytecodes;
+        let analysis_kind = &self.env.cfg.perf_analyse_created_bytecodes;
         let bytecode = match analysis_kind {
             AnalysisKind::Raw => Bytecode::new_legacy(interpreter_result.output.clone()),
             AnalysisKind::Analyse => {
@@ -466,19 +466,20 @@ impl<DB: Database> InnerEvmContext<DB> {
             }
         };
 
-        // TODO: Log the create return, if SSA logger is present.
+        // set code
+        self.journaled_state.set_code(address, bytecode);
+        // ! To support ssa.
+        let account = self.journaled_state.account(address);
         if self.ssa_logger.is_some() {
-            let account = self.journaled_state.load_account(address, &mut self.db).unwrap();
             self.ssa_logger.as_mut().unwrap().log_create_return::<SPEC>(
                 &convert_interpreter_result(interpreter_result),
-                account.info,
+                address,
+                account.info.clone(),
                 account.status,
                 analysis_kind,
             );
         }
-        // set code
-        self.journaled_state.set_code(address, bytecode);
-
+        
         interpreter_result.result = InstructionResult::Return;
     }
 

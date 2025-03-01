@@ -1,55 +1,43 @@
 use std::cmp::min;
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
-    Address, Bytes, FixedBytes, Log, LogData, 
-    Spec, B256, U256
+    AccountStatus, Address, FixedBytes, Log, LogData, Spec, U256
 };
 use revm_ssa::{
-    SSAInput, SSAOutput, StorageKey, StorageValue,
-    SSAInstructionResult, SSAInterpreterResult
+    output_account_info, output_account_status, SSAOutput, StorageKey, StorageValue
 };
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
 
-use super::{as_u64_saturated, as_usize_saturated};
+use super::{as_u64_saturated, as_usize_saturated, u256_to_bool};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute SLOAD operation
     #[inline]
-    pub fn execute_sload(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_sload(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "SLOAD requires exactly 1 operand".to_string()
             ));
         }
 
-        let value = match &inputs[2] {
-            SSAInput::Storage { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
-
-        Ok(vec![SSAOutput::Stack(value.as_slot().unwrap())])
+        let value = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value, "Third");
+        let value = value.as_slot().unwrap();
+        Ok(vec![SSAOutput::Stack(*value)])
     }
 
     /// Execute SSTORE operation
     #[inline]
-    pub fn execute_sstore(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_sstore(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "SSTORE requires exactly 2 operands".to_string()
             ));
         }
 
-        let address = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
+        let address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
 
-        let index = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
+        let index = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let value = match_ssa_output_stack_or_const!(&inputs[2], "Third");
 
         Ok(vec![SSAOutput::Storage {
             key: Box::new(StorageKey::Slot(address, *index)),
@@ -59,100 +47,74 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute BALANCE operation
     #[inline]
-    pub fn execute_balance(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_balance(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
-                "BALANCE requires exactly 1 operand".to_string()
+                "BALANCE requires exactly 2 operand".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let balance = match &inputs[1] {
-            SSAInput::Storage {value, .. } => value.as_balance().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
-
-        Ok(vec![SSAOutput::Stack(balance)])
+        // check first operand is stack/constant value
+        match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+        Ok(vec![SSAOutput::Stack(account_info.balance)])
     }
 
     /// Execute SELFBALANCE operation
     #[inline]
-    pub fn execute_selfbalance(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_selfbalance(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
-                "SELFBALANCE requires exactly 1 operand".to_string()
+                "SELFBALANCE requires exactly 2 operand".to_string()
             ));
         }
-        let _ = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Stack value".to_string()
-            )),
-        };
-        let balance = match &inputs[1] {
-            SSAInput::Storage {value, .. } => value.as_balance().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
-        Ok(vec![SSAOutput::Stack(balance)])
+        let _target = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
+        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+        Ok(vec![SSAOutput::Stack(account_info.balance)])
     }
 
     /// Execute EXTCODESIZE operation
     #[inline]
-    pub fn execute_extcodesize(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_extcodesize(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
-                "EXTCODESIZE requires exactly 1 operand".to_string()
+                "EXTCODESIZE requires exactly 2 operand".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let code_size = match &inputs[1] {
-            SSAInput::Storage {value, .. } => value.as_code_size().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
-        Ok(vec![SSAOutput::Stack(U256::from(code_size))])
+        match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+        // we ignore EIP 7702 here
+        let code = account_info.code.as_ref().unwrap().original_bytes();
+        Ok(vec![SSAOutput::Stack(U256::from(code.len()))])
     }
 
     /// Execute EXTCODEHASH operation
     #[inline]
-    pub fn execute_extcodehash(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_extcodehash(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
-                "EXTCODEHASH requires exactly 1 operand".to_string()
+                "EXTCODEHASH requires exactly 2 operand".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let code_hash = match &inputs[1] {
-            SSAInput::Storage {value, .. } => value.as_code_hash().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
-        Ok(vec![SSAOutput::Stack(code_hash)])
+        let _ = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+        Ok(vec![SSAOutput::Stack(account_info.code_hash.into())])
     }
 
     /// Execute EXTCODECOPY operation
     #[inline]
-    pub fn execute_extcodecopy(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_extcodecopy(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 5 {
             return Err(ExecutionError::ExecutionError(
                 "CODECOPY requires exactly 4 operands".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let mem_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let code_offset = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let len = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
-        let code = match &inputs[4] {
-            SSAInput::Storage {value, .. } => value.as_code().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
+        let _ = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let mem_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let code_offset = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let len = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
+        let account_info = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Fifth");
+        let code = account_info.code.as_ref().unwrap().original_bytes();
+        
         let mem_offset = as_usize_saturated(*mem_offset);
         let code_offset = as_usize_saturated(*code_offset);
         let len = as_usize_saturated(*len);
@@ -173,14 +135,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute BLOCKHASH operation
     #[inline]
-    pub fn execute_blockhash(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_blockhash(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "BLOCKHASH requires exactly 2 operand".to_string()
             ));
         }
 
-        let number = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let number = match_ssa_output_stack_or_const!(&inputs[0], "First");
         let number = as_u64_saturated(*number);
         let blockhash = self.get_blockhash(number);
         Ok(vec![SSAOutput::Stack(blockhash)])
@@ -188,31 +150,20 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute LOG operation
     #[inline]
-    pub fn execute_log(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_log(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() < 4 {
             return Err(ExecutionError::ExecutionError(
                 "LOG requires at least 4 operands".to_string()
             ));
         }
-        let address = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
-        let _ = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let _ = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-
-        let memory = match &inputs[3] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Memory value".to_string()
-            )),
-        };
+        let address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
+        let _ = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let _ = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let memory = match_input!(inputs, 3, SSAOutput::Memory(value) => value, "Fourth");
 
         let mut topics: Vec<FixedBytes<32>> = vec![];
         for i in 4..inputs.len() {
-            let topic = match_ssa_input_stack_or_const!(&inputs[i], format!("Topic {}", i-3).as_str());
+            let topic = match_ssa_output_stack_or_const!(&inputs[i], format!("Topic {}", i-3).as_str());
             topics.push(topic.to_be_bytes::<32>().into());
         }
 
@@ -226,47 +177,50 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute SELFDESTRUCT operation
     #[inline]
-    pub fn execute_selfdestruct(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 4 {
+    pub fn execute_selfdestruct(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 8 {
             return Err(ExecutionError::ExecutionError(
-                "SELFDESTRUCT requires exactly 4 operands".to_string()
+                "SELFDESTRUCT requires exactly 6 operands".to_string()
             ));
         }
-        let caller = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be ContractEntry".to_string()
-            )),
-        };
-        let caller_balance = match &inputs[1] {
-            SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
-        let target = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let target_balance = match &inputs[3] {
-            SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Storage value".to_string()
-            )),
-        };
+        let contract_address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
+        let target = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let address_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
+        let target_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Fourth");
+        let address_status = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fifth");
+        let target_status = match_input!(inputs, 5, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Sixth");
+        let is_created = match_ssa_output_stack_or_const!(&inputs[6], "Seventh");
+        let is_cancun_enabled = match_ssa_output_stack_or_const!(&inputs[7], "Eighth");
 
-        let new_caller_balance = caller_balance.saturating_add(target_balance);
-        let new_target_balance = U256::ZERO;
+        
+        let target = Address::from_word(target.to_be_bytes::<32>().into());
+        let is_created = u256_to_bool(*is_created).unwrap();
+        let is_cancun_enabled = u256_to_bool(*is_cancun_enabled).unwrap();
 
-        Ok(vec![SSAOutput::Storage { 
-            key: Box::new(StorageKey::Balance(caller)),
-            value: Box::new(StorageValue::Balance(new_caller_balance))
-        },
-        SSAOutput::Storage { 
-            key: Box::new(StorageKey::Balance(Address::from_word(B256::from(*target)))), 
-            value: Box::new(StorageValue::Balance(new_target_balance))
-        },
-        SSAOutput::InterpreterResult(SSAInterpreterResult{
-            result: SSAInstructionResult::Ok,
-            output: Bytes::default(),
-        })] )
+        let mut outputs = Vec::with_capacity(4);
+
+        if contract_address != target {
+            let mut new_target_info = target_info.clone();
+            let mut new_target_status = target_status.clone();
+            new_target_info.balance = new_target_info.balance.saturating_add(address_info.balance);
+            new_target_status |= AccountStatus::Touched;
+            outputs.push(output_account_info!(target, new_target_info));
+            outputs.push(output_account_status!(target, new_target_status));
+        }
+
+        if is_created || !is_cancun_enabled {
+            let new_address_status = *address_status | AccountStatus::SelfDestructed;
+            let mut new_address_info = address_info.clone();
+            new_address_info.balance = U256::ZERO;
+            outputs.push(output_account_info!(contract_address, new_address_info));
+            outputs.push(output_account_status!(contract_address, new_address_status));
+        } else if contract_address != target {
+            let mut new_address_info = address_info.clone();
+            new_address_info.balance = U256::ZERO;
+            outputs.push(output_account_info!(contract_address, new_address_info));
+        }
+
+        Ok(outputs)
     }
 }
 
