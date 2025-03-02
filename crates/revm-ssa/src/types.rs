@@ -23,6 +23,7 @@ pub enum InternalOp {
 
     // Post Execution operation
     REFUND_GAS = 0xDB,
+    REWARD_BENEFICIARY = 0xDC,
 }
 
 impl From<u8> for InternalOp {

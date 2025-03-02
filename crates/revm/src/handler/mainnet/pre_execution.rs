@@ -95,11 +95,7 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
     let journaled_state = &mut context.evm.inner.journaled_state;
     // ! newly added logic
     // mark write caller's balance
-    journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::Balance);
-    // mark write caller's nonce if it is Call
-    if matches!(context.evm.inner.env.tx.transact_to, TxKind::Call(_)) {
-        journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::Nonce);
-    }
+    journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
 
     Ok(())
 }

@@ -5,7 +5,7 @@ use revm_primitives::{
 };
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
-    output_account_info, output_account_status, ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAOutput, StorageKey, StorageValue
+    output_account_info, output_account_status, ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult, SSAOutput, StorageKey, StorageValue
 };
 use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
 
@@ -77,6 +77,39 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(outputs)
     }
 
+    #[inline]
+    pub fn execute_reward_beneficiary(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 4 {
+            return Err(ExecutionError::ExecutionError(
+                "REWARD_BENEFICIARY requires exactly 2 operands".to_string()
+            ));
+        }
+        let beneficiary = match_input!(inputs, 0, SSAOutput::Constant (value) => value, "First");
+        let beneficiary_account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+        let beneficiary_account_status = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Third");
+        let reward = match_input!(inputs, 3, SSAOutput::Constant(value)=> value, "Fourth");
+
+        let beneficiary = Address::from_word(B256::from(*beneficiary));
+        let new_beneficiary_account_info = AccountInfo {
+            balance: beneficiary_account_info.balance + reward,
+            nonce: beneficiary_account_info.nonce,
+            code: beneficiary_account_info.code.clone(),
+            code_hash: beneficiary_account_info.code_hash,
+        };
+        let new_beneficiary_account_status = *beneficiary_account_status | AccountStatus::Touched;
+
+        let outputs = vec![
+            SSAOutput::Storage {
+                key: Box::new(StorageKey::AccountInfo(beneficiary)),
+                value: Box::new(StorageValue::AccountInfo(new_beneficiary_account_info)),
+            },
+            SSAOutput::Storage {
+                key: Box::new(StorageKey::AccountStatus(beneficiary)),
+                value: Box::new(StorageValue::AccountStatus(new_beneficiary_account_status)),
+            },
+        ];
+        Ok(outputs)
+    }
     /// Execute call operation
     #[inline]
     pub fn execute_call(&mut self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
@@ -164,6 +197,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let value = call_input.transfer_value;
         let caller = call_input.caller;
         let target_address = call_input.target_address;
+        let bytecode_address = call_input.bytecode_address;
 
         let mut outputs = Vec::with_capacity(5);
 
@@ -191,22 +225,33 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             outputs.push(output_account_status!(target_address, new_target_status));
         }
 
-        // if is precompile ..
+        let bytecode = bytecode_info.code.clone().unwrap_or_default();
 
-        // if is simple transfer ..
-
-        // if is contract call
-        let contract = ContractEnv {
-            input: call_input.input.clone(),
-            bytecode: bytecode_info.code.clone().unwrap_or_default(),
-            hash: Some(bytecode_info.code_hash()),
-            target_address: target_address,
-            bytecode_address: Some(target_address),
-            caller: caller,
-            call_value: value,
-        };
-        outputs.push(SSAOutput::ContractEnv(Box::new(contract)));
-
+        if self.is_precompile(&bytecode_address) {
+            // if is precompile ..
+            let precompile = self.call_precompile(&bytecode_address, &call_input.input, call_input.gas_limit);
+            outputs.push(SSAOutput::InterpreterResult(precompile));
+        } else if bytecode.is_empty() {
+            // if is simple transfer ..
+            let ssa_interpreter_result = SSAInterpreterResult {
+                result: SSAInstructionResult::Ok,
+                output: Bytes::default(),
+            };
+            outputs.push(SSAOutput::InterpreterResult(ssa_interpreter_result));
+        } else {
+            // if is contract call
+            let contract = ContractEnv {
+                input: call_input.input.clone(),
+                bytecode: bytecode_info.code.clone().unwrap_or_default(),
+                hash: Some(bytecode_info.code_hash()),
+                target_address: target_address,
+                bytecode_address: Some(target_address),
+                caller: caller,
+                call_value: value,
+            };
+            outputs.push(SSAOutput::ContractEnv(Box::new(contract)));
+        }
+        
         Ok(outputs)
     }
 

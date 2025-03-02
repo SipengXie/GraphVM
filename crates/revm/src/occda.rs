@@ -12,7 +12,7 @@ use crate::graph_wrapper::GraphWrapper;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{ResultAndState, HashMap, HashSet, Address, hash_map::Entry};
+use crate::primitives::{ResultAndState, HashMap, HashSet, Address};
 use crate::access_tracker::AccessTracker;
 use crate::journaled_state::AccessType;
 use crate::task::{Task, TaskResultItem};
@@ -26,8 +26,8 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, Bytecode, EVMError, EvmStorageSlot, LatestSpec, U256};
-use revm_ssa::{SSALogger, SSAOutput, StorageKey};
+use revm_primitives::{Account, EVMError, EvmStorageSlot, LatestSpec, U256};
+use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -55,6 +55,12 @@ pub struct Occda {
 
     /// reads_store
     reads_store: Vec<HashMap<StorageKey, u16>>,
+
+    /// first_call_input_store
+    first_call_input_store: Vec<Option<SSACallInput>>,
+
+    /// first_create_input_store
+    first_create_input_store: Vec<Option<SSACreateInput>>,
 }
 
 impl Occda {
@@ -76,6 +82,8 @@ impl Occda {
             to_re_execution_store: vec![],
             dag_store: vec![],
             reads_store: vec![],
+            first_call_input_store: vec![],
+            first_create_input_store: vec![],
         }
     }
 
@@ -149,6 +157,8 @@ impl Occda {
     {
         let result_ptr = result_store.as_mut_ptr() as usize;
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
+        let first_call_input_ptr = self.first_call_input_store.as_mut_ptr() as usize;
+        let first_create_input_ptr = self.first_create_input_store.as_mut_ptr() as usize;
         let parallel_start = std::time::Instant::now();
         
         // Initialize thread task queues
@@ -274,7 +284,14 @@ impl Occda {
                             let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
                                 .map(|x| x.unwrap())
                                 .collect::<Vec<_>>()); 
-                            let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, db_ref, &task.env, None).with_mode(execution_mode);
+                            let mut executor = SSAExecutor::<_, LatestSpec>::new(
+                                graph, 
+                                db_ref, 
+                                &task.env, 
+                                None, 
+                                self.first_call_input_store[idx].clone(), 
+                                self.first_create_input_store[idx].clone())
+                            .with_mode(execution_mode);
                             match executor.execute() {
                                 Ok(nodes_to_execute_len) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
@@ -366,6 +383,12 @@ impl Occda {
                             let reads_raw_ptr = reads_ptr as *mut HashMap<StorageKey, u16>;
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
+                            }
+                            let first_call_input_raw_ptr = first_call_input_ptr as *mut Option<SSACallInput>;
+                            let first_create_input_raw_ptr = first_create_input_ptr as *mut Option<SSACreateInput>;
+                            unsafe {
+                                *first_call_input_raw_ptr.add(idx) = logger.take_first_call_input();
+                                *first_create_input_raw_ptr.add(idx) = logger.take_first_create_input();
                             }
                             profiler::note_str_unchecked(
                                 "total-opcodes", 
@@ -511,10 +534,14 @@ impl Occda {
             self.to_re_execution_store = Vec::<Vec<Option<u16>>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
             self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
+            self.first_call_input_store = Vec::<Option<SSACallInput>>::with_capacity(len);
+            self.first_create_input_store = Vec::<Option<SSACreateInput>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
                 self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
                 self.reads_store.push(HashMap::default());
+                self.first_call_input_store.push(None);
+                self.first_create_input_store.push(None);
             }
         }
         // Set parallel mode for prefetch phase
@@ -596,7 +623,13 @@ impl Occda {
                         let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
                             .map(|x| x.unwrap())
                             .collect::<Vec<_>>());
-                        let mut executor = SSAExecutor::<_, LatestSpec>::new(graph, &parallel_db, &task.env, None)
+                        let mut executor = SSAExecutor::<_, LatestSpec>::new(
+                            graph, 
+                            &parallel_db, 
+                            &task.env, 
+                            None, 
+                            self.first_call_input_store[idx].clone(), 
+                            self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                         match executor.execute() {
                             Ok(nodes_to_execute_len) => {
@@ -888,7 +921,7 @@ impl Occda {
                 _ => panic!("SSAOutput is not a storage output"),
             };
             match **storage_key {
-                StorageKey::Balance(address) => {
+                StorageKey::AccountInfo(address) | StorageKey::AccountStatus(address) => {
                     let account = result.entry(address)
                     .or_insert_with(
                         || 
@@ -899,52 +932,12 @@ impl Occda {
                         })
                         .unwrap_or_else(|_| Account::new_not_existing())
                     );
-                    account.status = AccountStatus::Touched;
-                    account.info.balance = storage_value.as_balance().unwrap();
-                },
-                StorageKey::Nonce(address) => {
-                    let account = result.entry(address)
-                    .or_insert_with(
-                        || 
-                        db.basic_ref(address)
-                        .map(|info| match info {
-                            None => Account::new_not_existing(),
-                            Some(account) => account.into(),
-                        })
-                        .unwrap_or_else(|_| Account::new_not_existing())
-                    );
-                    account.status = AccountStatus::Touched;
-                    account.info.nonce = storage_value.as_nonce().unwrap();
-                },
-                StorageKey::CodeSize(_) => {
-                },
-                StorageKey::Code(address) => {
-                    let account = result.entry(address)
-                    .or_insert_with(
-                        || 
-                        db.basic_ref(address)
-                        .map(|info| match info {
-                            None => Account::new_not_existing(),
-                            Some(account) => account.into(),
-                        })
-                        .unwrap_or_else(|_| Account::new_not_existing())
-                    );
-                    account.status = AccountStatus::Touched;
-                    account.info.code = Some(Bytecode::new_raw(storage_value.as_code().unwrap().clone()));
-                },
-                StorageKey::CodeHash(address) => {
-                    let account = result.entry(address)
-                    .or_insert_with(
-                        || 
-                        db.basic_ref(address)
-                        .map(|info| match info {
-                            None => Account::new_not_existing(),
-                            Some(account) => account.into(),
-                        })
-                        .unwrap_or_else(|_| Account::new_not_existing())
-                    );
-                    account.status = AccountStatus::Touched;
-                    account.info.code_hash = storage_value.as_code_hash().unwrap().into();
+                    if let Some(info) = storage_value.as_account_info() {
+                        account.info = info.clone();
+                    }
+                    if let Some(status) = storage_value.as_account_status() {
+                        account.status = *status;
+                    }
                 },
                 StorageKey::Slot(address, index) => {
                     let account = result.entry(address)
@@ -957,22 +950,16 @@ impl Occda {
                         })
                         .unwrap_or_else(|_| Account::new_not_existing())
                     );
-                    account.status = AccountStatus::Touched;
-                    let is_cold = match account.storage.entry(index) {
-                        Entry::Occupied(occ) => {
-                            let slot = occ.into_mut();
-                            slot.mark_warm()
+                    match **storage_value {
+                        StorageValue::Slot(new_value) => {
+                            let evm_storage = account.storage.entry(index).or_insert_with(|| {
+                                let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
+                                EvmStorageSlot::new(value)
+                            });
+                            evm_storage.present_value = new_value;
                         }
-                        Entry::Vacant(vac) => {
-                            // TODO: we have to consider the case that the storage is cleared, as the account is newly created
-                            let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
-                            vac.insert(EvmStorageSlot::new(value));
-                            true
-                        }
-                    };
-                    let slot = account.storage.get_mut(&index).unwrap();
-                    slot.present_value = storage_value.as_slot().unwrap();
-                    slot.is_cold = is_cold;
+                        _ => {}
+                    }
                 },
             }
         }
@@ -989,9 +976,8 @@ impl Occda {
             // Iterate through the read set
             for (addr, access_type) in read_set {
                 let lsn = match access_type {
-                    AccessType::Balance => first_reads.get(&StorageKey::Balance(*addr)),
-                    AccessType::Nonce => first_reads.get(&StorageKey::Nonce(*addr)),
-                    AccessType::Code => first_reads.get(&StorageKey::Code(*addr)),
+                    AccessType::AccountInfo => first_reads.get(&StorageKey::AccountInfo(*addr)),
+                    AccessType::AccountStatus => first_reads.get(&StorageKey::AccountStatus(*addr)),
                     AccessType::StorageSlot(slot) => first_reads.get(&StorageKey::Slot(*addr, *slot)),
                     _ => continue,
                 };

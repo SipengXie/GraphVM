@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 use revm_precompile::{PrecompileSpecId, Precompiles};
 use revm_primitives::{
-    db::DatabaseRef, AccountInfo, AccountStatus, Address, Env, Spec, BLOCK_HASH_HISTORY, U256
+    db::DatabaseRef, AccountInfo, AccountStatus, Address, Bytes, Env, PrecompileErrors, Spec, BLOCK_HASH_HISTORY, U256
 };
-use revm_ssa::{StorageKey, StorageValue};
+use revm_ssa::{SSACallInput, SSACreateInput, SSAInstructionResult, SSAInterpreterResult, StorageKey, StorageValue};
 
 
 use std::sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}};
@@ -24,10 +24,14 @@ pub struct ExecutionContext<'a, DB: DatabaseRef, SPEC: Spec> {
     spec: PhantomData<SPEC>,
     /// Precompiles
     precompiles: &'static Precompiles,
+    /// First call input
+    first_call_input: Option<SSACallInput>,
+    /// First create input
+    first_create_input: Option<SSACreateInput>,
 }
 
 impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
-    pub fn new(env: &'a Env, db: DB) -> Self {
+    pub fn new(env: &'a Env, db: DB, first_call_input: Option<SSACallInput>, first_create_input: Option<SSACreateInput>) -> Self {
         Self {
             env: Arc::new(env),
             db: Arc::new(db),
@@ -35,12 +39,51 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
             error: RwLock::new(Ok(())),
             spec: PhantomData,  
             precompiles: Precompiles::new(PrecompileSpecId::from_spec_id(SPEC::SPEC_ID)),
+            first_call_input,
+            first_create_input,
         }
     }
 
     /// Get environment
     pub fn env(&self) -> &'a Env {
         self.env.as_ref()
+    }
+
+    pub fn is_precompile(&mut self, address: &Address) -> bool {
+        self.precompiles.contains(address)
+    }
+
+    pub fn call_precompile(&mut self, address: &Address, input_data: &Bytes, gas: u64) -> SSAInterpreterResult {
+        let precompile = self.precompiles.get(address);
+
+        let outcome = precompile.unwrap().call_ref(input_data, gas, self.env.as_ref());
+        match outcome {
+            Ok(output) => {
+                let ssa_interpreter_result = SSAInterpreterResult {
+                    result: SSAInstructionResult::Ok,
+                    output: output.bytes,
+                };
+                return ssa_interpreter_result
+            }
+            Err(e) => {
+                let ssa_interpreter_result = SSAInterpreterResult {
+                    result: match e {
+                        PrecompileErrors::Error(_) => SSAInstructionResult::Revert,
+                        PrecompileErrors::Fatal{msg: _} => SSAInstructionResult::Error,
+                    },
+                    output: Bytes::default()
+                };
+                return ssa_interpreter_result
+            }
+        }
+    }
+
+    pub fn get_first_call_input(&self) -> Option<SSACallInput> {
+        self.first_call_input.clone()
+    }
+
+    pub fn get_first_create_input(&self) -> Option<SSACreateInput> {
+        self.first_create_input.clone()
     }
 
     /// Get account information

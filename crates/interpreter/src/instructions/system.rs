@@ -1,5 +1,3 @@
-use revm_ssa::ContractEnv;
-
 use crate::{
     gas, interpreter_action::convert_contract_env, opcode::*, primitives::{Spec, B256, KECCAK_EMPTY, U256}, Host, InstructionResult, Interpreter
 };

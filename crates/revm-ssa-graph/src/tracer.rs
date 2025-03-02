@@ -129,6 +129,20 @@ impl ExecutionTracer {
                 r1.result == r2.result && r1.output == r2.output
             },
             
+            // 添加常量比较
+            (SSAOutput::Constant(v1), SSAOutput::Constant(v2)) => v1 == v2,
+            
+            // 添加合约环境比较
+            (SSAOutput::ContractEnv(e1), SSAOutput::ContractEnv(e2)) => {
+                e1.target_address == e2.target_address &&
+                e1.caller == e2.caller &&
+                e1.call_value == e2.call_value &&
+                e1.input == e2.input &&
+                e1.bytecode == e2.bytecode &&
+                e1.hash == e2.hash &&
+                e1.bytecode_address == e2.bytecode_address
+            },
+            
             // Different types of outputs are considered unequal
             _ => false,
         }

@@ -359,20 +359,29 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // deduce caller balance with its limit.
         // ! Add deduct_caller log here and add execute_deduct_caller to the executor handler.
         if  ctx.evm.inner.ssa_logger.is_some() {
-            let caller_account = ctx
+            let origin_balance = ctx
                 .evm
                 .inner
                 .journaled_state
-                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
+                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?
+                .info.balance;
 
-            let gas_cost = pre_exec.deduct_caller(ctx)?;
+            pre_exec.deduct_caller(ctx)?;
+
+            let after_account = ctx
+                .evm
+                .inner
+                .journaled_state
+                .account(ctx.evm.inner.env.tx.caller);
+
+            let gas_cost = origin_balance - after_account.info.balance;
 
             let is_create = matches!(ctx.evm.env.tx.transact_to, TxKind::Create);
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
             logger.log_deduct_caller(
-                caller, 
-                caller_account.info, 
-                caller_account.status, 
+                ctx.evm.inner.env.tx.caller, 
+                after_account.info.clone(), 
+                after_account.status, 
                 gas_cost, 
                 is_create);
         } else {
@@ -427,19 +436,54 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // calculate final refund and add EIP-7702 refund to gas.
         post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
-        // TODO: Add refund log and add execute_refund to the executor handler.
         if ctx.evm.inner.ssa_logger.is_some() {
-            // eprintln!("Log Refund Gas");
-            let caller_account = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
-            let gas_refund = post_exec.reimburse_caller(ctx, result.gas())?;
+            let origin_balance = ctx
+            .evm
+            .inner
+            .journaled_state
+            .account(ctx.evm.inner.env.tx.caller)
+            .info.balance;
+
+            post_exec.reimburse_caller(ctx, result.gas())?;
+
+            let after_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .account(ctx.evm.inner.env.tx.caller);
+
+            let gas_refund = origin_balance - after_account.info.balance;
+
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, caller_account.info, gas_refund);
+            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, after_account.info.clone(), gas_refund);
         } else {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
         // Reward beneficiary
         // TODO: If needed this should also be logged, or we should accumulate the reward_beneficiary to the beneficiary's account.
-        post_exec.reward_beneficiary(ctx, result.gas())?;
+        if ctx.evm.inner.ssa_logger.is_some() {
+            let origin_balance = ctx
+            .evm
+            .inner
+            .journaled_state
+            .load_account(ctx.evm.inner.env.block.coinbase, &mut ctx.evm.inner.db)?
+            .info.balance;
+            
+            post_exec.reward_beneficiary(ctx, result.gas())?;
+
+            let after_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .account(ctx.evm.inner.env.block.coinbase);
+
+            let gas_reward = origin_balance - after_account.info.balance;
+
+            let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
+            logger.log_reward_beneficiary(ctx.evm.inner.env.block.coinbase, after_account.info.clone(), after_account.status, gas_reward);
+        } else {
+            post_exec.reward_beneficiary(ctx, result.gas())?;
+        }
         // Returns output of transaction.
 
         post_exec.output(ctx, result)
@@ -453,23 +497,17 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             // Add all first reads
             for (key, _) in logger.get_first_reads() {
                 match key {
-                    StorageKey::Balance(addr) => ret.add_read(*addr, AccessType::Balance),
-                    StorageKey::Nonce(addr) => ret.add_read(*addr, AccessType::Nonce),
-                    StorageKey::Code(addr) => ret.add_read(*addr, AccessType::Code),
                     StorageKey::Slot(addr, slot) => ret.add_read(*addr, AccessType::StorageSlot(*slot)),
-                    StorageKey::CodeSize(addr) => ret.add_read(*addr, AccessType::Code),
-                    StorageKey::CodeHash(addr) => ret.add_read(*addr, AccessType::Code),
+                    StorageKey::AccountInfo(addr) => ret.add_read(*addr, AccessType::AccountInfo),
+                    StorageKey::AccountStatus(addr) => ret.add_read(*addr, AccessType::AccountStatus),
                 }
             }
             // Add all latest writes 
             for key in logger.get_latest_writes().keys() {
                 match key {
-                    StorageKey::Balance(addr) => ret.add_write(*addr, AccessType::Balance),
-                    StorageKey::Nonce(addr) => ret.add_write(*addr, AccessType::Nonce),
-                    StorageKey::Code(addr) => ret.add_write(*addr, AccessType::Code),
                     StorageKey::Slot(addr, slot) => ret.add_write(*addr, AccessType::StorageSlot(*slot)),
-                    StorageKey::CodeSize(addr) => ret.add_write(*addr, AccessType::Code),
-                    StorageKey::CodeHash(addr) => ret.add_write(*addr, AccessType::Code),
+                    StorageKey::AccountInfo(addr) => ret.add_write(*addr, AccessType::AccountInfo),
+                    StorageKey::AccountStatus(addr) => ret.add_write(*addr, AccessType::AccountStatus),
                 }
             }
             return ret;

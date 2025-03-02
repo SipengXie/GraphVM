@@ -5,7 +5,7 @@ use revm_primitives::{
 };
 
 use revm::{db::{CacheDB, EmptyDB}, Evm};
-use revm_ssa::{SSALogger, SSALogEntry};
+use revm_ssa::{SSACallInput, SSACreateInput, SSALogEntry, SSALogger};
 use revm_ssa_graph::{SsaGraph, SSAExecutor, ExecutionTracer, ExecutionMode};
 
 #[derive(Debug, Clone)]
@@ -47,7 +47,7 @@ impl Default for ExecutionConfig {
             pre_determined_slots: vec![],
             input: None,
             thread_number: Some(8),
-            test_mode: TestMode::ParallelGraph,
+            test_mode: TestMode::SerialGraph,
             enable_tracer: true,
             is_deployed_contract: false,
         }
@@ -159,11 +159,13 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
             let mut logger = evm.take_ssa_logger().unwrap();
             // eprintln!("{:?}",logger.get_first_reads());
             let logs = logger.take_logs();
+            let first_call = logger.take_first_call_input();
+            let first_create = logger.take_first_create_input();
             
             // Choose execution method based on test mode
             let (tracer, execution_time) = match config.test_mode {
-                TestMode::SerialGraph => graph_execute(logs, config.clone(), &mut cdb, &env),
-                TestMode::ParallelGraph => graph_execute_parallel(logs, config.clone(), &mut cdb, &env),
+                TestMode::SerialGraph => graph_execute(logs, config.clone(), &mut cdb, &env, first_call, first_create),
+                TestMode::ParallelGraph => graph_execute_parallel(logs, config.clone(), &mut cdb, &env, first_call, first_create),
                 _ => unreachable!(),
             };
             
@@ -182,7 +184,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
 
 
 /// Re-execute using graph execution engine
-fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut CacheDB<EmptyDB>, env: &Env) -> (Option<ExecutionTracer>, Option<std::time::Duration>) {
+fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut CacheDB<EmptyDB>, env: &Env, first_call: Option<SSACallInput>, first_create: Option<SSACreateInput>) -> (Option<ExecutionTracer>, Option<std::time::Duration>) {
     // Create dependency graph
     let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     
@@ -211,7 +213,14 @@ fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut Ca
     }
 
     // Create executor and tracer
-    let mut executor = SSAExecutor::<_, LatestSpec>::new(Arc::new(graph), db, env, config.thread_number).with_mode(config.mode).with_tracer(tracer);
+    let mut executor = SSAExecutor::<_, LatestSpec>::new(
+        Arc::new(graph), 
+        db, 
+        env, 
+        None, 
+        first_call, 
+        first_create
+        ).with_mode(config.mode).with_tracer(tracer);
 
 
     // Start timing after loading previous results
@@ -230,7 +239,7 @@ fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut Ca
 }
 
 /// Re-execute using graph execution engine
-fn graph_execute_parallel(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut CacheDB<EmptyDB>, env: &Env) -> (Option<ExecutionTracer>, Option<std::time::Duration>) {
+fn graph_execute_parallel(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut CacheDB<EmptyDB>, env: &Env, first_call: Option<SSACallInput>, first_create: Option<SSACreateInput>) -> (Option<ExecutionTracer>, Option<std::time::Duration>) {
     // Create dependency graph
     let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     
@@ -258,8 +267,19 @@ fn graph_execute_parallel(entries: Vec<SSALogEntry>, config: ExecutionConfig, db
         graph.add_edges(lsn).unwrap();
     }
 
+    let thread_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(config.thread_number.unwrap_or(8))
+        .build()
+        .unwrap();
     // Create executor and tracer
-    let mut executor = SSAExecutor::<_, LatestSpec>::new(Arc::new(graph), db, env, config.thread_number).with_mode(config.mode).with_tracer(tracer);
+    let mut executor = SSAExecutor::<_, LatestSpec>::new(
+        Arc::new(graph), 
+        db,
+        env, 
+        Some(thread_pool), 
+        first_call, 
+        first_create
+        ).with_mode(config.mode).with_tracer(tracer);
     
     // Start timing after loading previous results
     let start_time = if config.collect_metrics {

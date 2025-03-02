@@ -1,9 +1,7 @@
 use crate::{
-    interpreter::{Gas, SuccessOrHalt},
-    primitives::{
-        db::Database, EVMError, ExecutionResult, ResultAndState, Spec, SpecId, SpecId::LONDON, U256,
-    },
-    Context, FrameResult,
+    interpreter::{Gas, SuccessOrHalt}, journaled_state::AccessType, primitives::{
+        db::Database, EVMError, ExecutionResult, ResultAndState, Spec, SpecId::{self, LONDON}, U256,
+    }, Context, FrameResult
 };
 
 /// Mainnet end handle does not change the output.
@@ -52,6 +50,10 @@ pub fn reward_beneficiary<SPEC: Spec, EXT, DB: Database>(
         .info
         .balance
         .saturating_add(coinbase_gas_price * U256::from(gas.spent() - gas.refunded() as u64));
+
+    let journaled_state = &mut context.evm.inner.journaled_state;
+    journaled_state.read_write_set.add_write(beneficiary, AccessType::AccountInfo);
+    journaled_state.read_write_set.add_write(beneficiary, AccessType::AccountInfo);
 
     Ok(())
 }

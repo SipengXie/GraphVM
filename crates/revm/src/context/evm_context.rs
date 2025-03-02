@@ -135,13 +135,7 @@ impl<DB: Database> EvmContext<DB> {
     fn get_mut_logger(&mut self) -> Option<&mut SSALogger> {
         self.inner.ssa_logger_mut()
     }
-
-    /// Return whether self has a logger
-    #[inline]
-    fn has_logger(&self) -> bool {
-        self.inner.ssa_logger.is_some()
-    }
-
+    
     /// Transfer logger to interpreter
     #[inline]
     fn transfer_ssa_logger_to_interpreter(&mut self, interpreter: &mut Interpreter) {

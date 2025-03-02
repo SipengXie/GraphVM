@@ -46,8 +46,6 @@ pub mod tracer;
 pub use context::*;
 pub use executor::*;
 pub use graph::*;
-use revm_ssa::SSAOutput;
-use auto_impl::auto_impl;
 pub use tracer::*;
 
 
