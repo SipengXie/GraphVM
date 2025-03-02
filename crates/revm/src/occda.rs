@@ -27,7 +27,7 @@ use metrics::histogram;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256};
+use revm_primitives::{address, Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256};
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
@@ -144,6 +144,7 @@ impl Occda {
         h_tx: &[Task],
         db: &mut ParallelDB<&DB>,
         result_store: &mut Vec<TaskResultItem<I>>,
+        opcode_counts_store: &mut Vec<usize>,
         inspector_setup: impl Fn() -> I + Send + Sync,
         is_prefetch: bool,
         enable_dep_graph: bool,
@@ -160,6 +161,7 @@ impl Occda {
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
         let first_call_input_ptr = self.first_call_input_store.as_mut_ptr() as usize;
         let first_create_input_ptr = self.first_create_input_store.as_mut_ptr() as usize;
+        let opcode_counts_ptr = opcode_counts_store.as_mut_ptr() as usize;
         let parallel_start = std::time::Instant::now();
         
         // Initialize thread task queues
@@ -395,11 +397,10 @@ impl Occda {
                                 *first_call_input_raw_ptr.add(idx) = logger.take_first_call_input();
                                 *first_create_input_raw_ptr.add(idx) = logger.take_first_create_input();
                             }
-                            profiler::note_str_unchecked(
-                                "total-opcodes", 
-                                &format!("tx-{}", idx), 
-                                &logger.current_lsn.to_string()
-                            );
+                            let opcode_counts_raw_ptr = opcode_counts_ptr as *mut usize;
+                            unsafe {
+                                *opcode_counts_raw_ptr.add(idx) = logger.current_lsn as usize;
+                            }
                         }
 
                         // Clean up EVM instance to free resources
@@ -534,6 +535,7 @@ impl Occda {
         let mut access_tracker = AccessTracker::new();
         
         let prefetch_start = std::time::Instant::now();
+        let mut opcode_counts_store = Vec::<usize>::with_capacity(len);
         // Initialize the store for ssa re-execution, we count the time in the prefetch phase.
         if enable_ssa {
             self.to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
@@ -547,6 +549,7 @@ impl Occda {
                 self.reads_store.push(HashMap::default());
                 self.first_call_input_store.push(None);
                 self.first_create_input_store.push(None);
+                opcode_counts_store.push(0);
             }
         }
         // Set parallel mode for prefetch phase
@@ -557,6 +560,7 @@ impl Occda {
                 h_tx,
                 &mut parallel_db,
                 result_store,
+                &mut opcode_counts_store,
                 &inspector_setup,
                 true,
                 enable_dep_graph, //  we may enbale prefetch without constructing dependency graph
@@ -722,6 +726,7 @@ impl Occda {
                     h_tx,
                     &mut parallel_db,
                     result_store,
+                    &mut opcode_counts_store,
                     &inspector_setup,
                     false,
                     enable_dep_graph,
@@ -787,6 +792,13 @@ impl Occda {
                     // Conflict detected: update sid and retry
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
+                    if enable_ssa {
+                        profiler::note_str_unchecked(
+                            "total-opcodes", 
+                            &format!("tx-{}", task_idx), 
+                            &opcode_counts_store[task_idx].to_string()
+                        );
+                    }
                 } else {
                     let state: HashMap<Address, Account> = 
                     if let Some(ssa_state) = &task_result.ssa_output {
@@ -800,6 +812,7 @@ impl Occda {
                     } else {
                         continue;
                     };
+                    // println!("idx:{}, state: {:?}", task_idx, state);
 
                     parallel_db.commit(state.clone());
                     unsafe {

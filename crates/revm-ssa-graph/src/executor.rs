@@ -164,7 +164,17 @@ where
                 reachable_nodes
             }
         };
-
+        // eprintln!("Nodes to execute (sorted by LSN):");
+        // let mut sorted_nodes = nodes_to_execute.clone();
+        // sorted_nodes.sort_by_key(|node| node.lsn);
+        // for node in sorted_nodes {
+        //     eprintln!("LSN: {}, OpCode: 0x{:02X}, Inputs: {:?}, Old Outputs: {:?}", 
+        //         node.lsn, 
+        //         node.opcode,
+        //         node.inputs,
+        //         node.outputs
+        //     );
+        // }
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
         let execute_start = Instant::now();
         for node in &nodes_to_execute {

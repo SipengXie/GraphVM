@@ -64,7 +64,11 @@ impl SsaGraph {
             },
             SSAInput::Storage { source, .. } => lsn_vec.push(*source),
             SSAInput::ReturnDataBuffer { source, .. } => lsn_vec.push(*source),
-            SSAInput::ContractEnv { source: entry_lsn, .. } => lsn_vec.push(*entry_lsn),
+            SSAInput::ContractEnv { source: entry_lsn, .. } => {
+                if *entry_lsn != 2 {
+                    lsn_vec.push(*entry_lsn) // we should consider the first contract_env(lsn:2) as a constant
+                }
+            },
             SSAInput::MemorySizeChange { source: last_memory, .. } => lsn_vec.push(*last_memory),
             SSAInput::CreateInput { source, .. } => lsn_vec.push(*source),
             SSAInput::CallInput { source, .. } => lsn_vec.push(*source),
