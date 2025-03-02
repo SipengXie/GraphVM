@@ -51,8 +51,8 @@ pub fn reward_beneficiary<SPEC: Spec, EXT, DB: Database>(
         .balance
         .saturating_add(coinbase_gas_price * U256::from(gas.spent() - gas.refunded() as u64));
 
+    // TODO: Extra work is needed here to finish the complete logic.
     let journaled_state = &mut context.evm.inner.journaled_state;
-    journaled_state.read_write_set.add_write(beneficiary, AccessType::AccountInfo);
     journaled_state.read_write_set.add_write(beneficiary, AccessType::AccountInfo);
 
     Ok(())

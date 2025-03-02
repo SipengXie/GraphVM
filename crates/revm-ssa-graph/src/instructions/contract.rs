@@ -16,16 +16,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute deduct caller operation
     #[inline]
     pub fn execute_deduct_caller(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 5 {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
-                "DEDUCT_CALLER requires at least 3 operands".to_string()
+                "DEDUCT_CALLER requires at least 4 operands".to_string()
             ));
         }
-        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "First");
-        let is_call = match_input!(inputs, 1, SSAOutput::Constant(value, ..) => u256_to_bool(*value)?, "Second");
-        let caller_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
-        let caller_status = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fourth");
-        let gas_cost = match_input!(inputs, 4, SSAOutput::Constant ( value, .. )=> value, "Fifth");
+        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "Constant");
+        let is_call = match_input!(inputs, 1, SSAOutput::Constant(value, ..) => u256_to_bool(*value)?, "Constant");
+        let caller_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let gas_cost = match_input!(inputs, 3, SSAOutput::Constant ( value, .. )=> value, "Constant");
 
         let caller = Address::from_word(B256::from(*caller));
         let new_caller_info = AccountInfo {
@@ -34,16 +33,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: caller_info.code.clone(),
             code_hash: caller_info.code_hash,
         };
-        let new_caller_status = *caller_status | AccountStatus::Touched;
 
         let outputs = vec![
             SSAOutput::Storage {
                 key: Box::new(StorageKey::AccountInfo(caller)),
                 value: Box::new(StorageValue::AccountInfo(new_caller_info)),
-            },
-            SSAOutput::Storage {
-                key: Box::new(StorageKey::AccountStatus(caller)),
-                value: Box::new(StorageValue::AccountStatus(new_caller_status)),
             },
         ];
 
@@ -55,12 +49,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         // eprintln!("Refund Gas");
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
-                "REFUND_GAS requires exactly 2 operands (caller, refund_gas)".to_string()
+                "REFUND_GAS requires exactly 3 operands (caller, refund_gas)".to_string()
             ));
         }
-        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "First");
-        let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
-        let refund_gas = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Third");
+        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "Constant");
+        let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let refund_gas = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Constant");
         
         let caller = Address::from_word(B256::from(*caller));
         let new_caller_info = AccountInfo {
@@ -81,15 +75,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     #[inline]
     pub fn execute_reward_beneficiary(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 4 {
+        if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
-                "REWARD_BENEFICIARY requires exactly 2 operands".to_string()
+                "REWARD_BENEFICIARY requires exactly 3 operands".to_string()
             ));
         }
-        let beneficiary = match_input!(inputs, 0, SSAOutput::Constant (value) => value, "First");
-        let beneficiary_account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
-        let beneficiary_account_status = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Third");
-        let reward = match_input!(inputs, 3, SSAOutput::Constant(value)=> value, "Fourth");
+        let beneficiary = match_input!(inputs, 0, SSAOutput::Constant (value) => value, "Constant");
+        let beneficiary_account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let reward = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Constant");
 
         let beneficiary = Address::from_word(B256::from(*beneficiary));
         let new_beneficiary_account_info = AccountInfo {
@@ -98,16 +91,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: beneficiary_account_info.code.clone(),
             code_hash: beneficiary_account_info.code_hash,
         };
-        let new_beneficiary_account_status = *beneficiary_account_status | AccountStatus::Touched;
 
         let outputs = vec![
             SSAOutput::Storage {
                 key: Box::new(StorageKey::AccountInfo(beneficiary)),
                 value: Box::new(StorageValue::AccountInfo(new_beneficiary_account_info)),
-            },
-            SSAOutput::Storage {
-                key: Box::new(StorageKey::AccountStatus(beneficiary)),
-                value: Box::new(StorageValue::AccountStatus(new_beneficiary_account_status)),
             },
         ];
         Ok(outputs)
@@ -182,9 +170,9 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// TODO: achieve precompile in this function
     #[inline]
     pub fn execute_make_call_frame(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 6 {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
-                "MAKE_CALL_FRAME requires at least 6 operands".to_string()
+                "MAKE_CALL_FRAME requires at least 4 operands".to_string()
             ));
 
         }
@@ -193,15 +181,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
         let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
         let bytecode_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
-        let caller_status = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Storage(AccountStatus)");
-        let target_status = match_input!(inputs, 5, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Storage(AccountStatus)");
-        
+  
         let value = call_input.transfer_value;
         let caller = call_input.caller;
         let target_address = call_input.target_address;
         let bytecode_address = call_input.bytecode_address;
 
-        let mut outputs = Vec::with_capacity(5);
+        let mut outputs = Vec::with_capacity(3);
 
         if !value.is_zero() {
             let new_caller_info = AccountInfo {
@@ -210,21 +196,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 code: caller_info.code.clone(),
                 code_hash: caller_info.code_hash,
             };
-            let new_caller_status = *caller_status | AccountStatus::Touched;
             let new_target_info = AccountInfo {
                 nonce: target_info.nonce,
                 balance: target_info.balance.saturating_add(value),
                 code: target_info.code.clone(),
                 code_hash: target_info.code_hash,
             };
-            let new_target_status = *target_status | AccountStatus::Touched;
             outputs.push(output_account_info!(caller, new_caller_info));
-            outputs.push(output_account_status!(caller, new_caller_status));
             outputs.push(output_account_info!(target_address, new_target_info));
-            outputs.push(output_account_status!(target_address, new_target_status));
-        } else {
-            let new_target_status = *target_status | AccountStatus::Touched;
-            outputs.push(output_account_status!(target_address, new_target_status));
         }
 
         let bytecode = bytecode_info.code.clone().unwrap_or_default();
@@ -328,8 +307,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let value = match_ssa_output_stack_or_const!(&inputs[0], "First");
         let code_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
         let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
-        let code = match_input!(inputs, 3, SSAOutput::Memory(value) => value, "Fourth");
-        let contract_address = match_input!(inputs, 4, SSAOutput::ContractEnv(value) => value.target_address, "Fifth");
+        let code = match_input!(inputs, 3, SSAOutput::Memory(value) => value, "Memory");
+        let contract_address = match_input!(inputs, 4, SSAOutput::ContractEnv(value) => value.target_address, "ContractEnv");
         let salt = if inputs.len() == 6 {
             Some(match_ssa_output_stack_or_const!(&inputs[5], "Sixth"))
         } else {
@@ -367,7 +346,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     #[inline]
     pub fn execute_make_create_frame(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         // eprintln!("execute_make_create_frame: {:?}", inputs);cl
-        if inputs.len() != 5 {
+        if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "MAKE_CREATE_FRAME requires exactly 5 operands".to_string()
             ));
@@ -376,9 +355,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let create_input = match_input!(inputs, 0, SSAOutput::CreateInput(input) => input, "First");
         let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
         let created_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
-        let caller_status = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fourth");
-        let created_status = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fifth");
-
+        
         let caller = create_input.caller;
         let mut init_code_hash = B256::ZERO;
         let target = match create_input.scheme {
@@ -403,8 +380,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: created_info.code.clone(),
         };
 
-        let new_caller_status = *caller_status | AccountStatus::Touched;
-        let new_created_status = *created_status | AccountStatus::Created;
+        let new_created_status = AccountStatus::Created;
 
         let bytecode = Bytecode::new_legacy(create_input.init_code.clone());
         let contract_env = ContractEnv {
@@ -417,10 +393,9 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             call_value: create_input.value,
         };
 
-        let mut outputs = Vec::with_capacity(5);
+        let mut outputs = Vec::with_capacity(4);
         outputs.push(output_account_info!(caller, new_caller_info));
         outputs.push(output_account_info!(target, new_created_info));
-        outputs.push(output_account_status!(caller, new_caller_status));
         outputs.push(output_account_status!(target, new_created_status));
         outputs.push(SSAOutput::ContractEnv(Box::new(contract_env)));
 
@@ -430,17 +405,16 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute create return operation
     #[inline]
     pub fn execute_create_return(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 5 {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
-                "CREATE_RETURN requires exactly 5 operands".to_string()
+                "CREATE_RETURN requires exactly 4 operands".to_string()
             ));
         }
 
         let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "First");
         let address = match_input!(inputs, 1, SSAOutput::ContractEnv(input) => input.target_address, "Second");
         let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
-        let target_status = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fourth");
-        let analysis_kind = match_input!(inputs, 4, SSAOutput::Constant(value) => value, "Fifth");
+        let analysis_kind = match_input!(inputs, 3, SSAOutput::Constant(value) => value, "Fifth");
         let analysis_kind = u256_to_bool(*analysis_kind)?;
 
         // TODO: Gas metering and error handling
@@ -464,12 +438,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code_hash: codehash,
             code: Some(bytecode),
         };
-        let new_target_status = *target_status | AccountStatus::Touched;
 
-        let mut outputs = Vec::with_capacity(3);
+        let mut outputs = Vec::with_capacity(2);
         outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
         outputs.push(output_account_info!(address, new_target_info));
-        outputs.push(output_account_status!(address, new_target_status));
 
         Ok(outputs)
     }

@@ -94,7 +94,7 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
     deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
     let journaled_state = &mut context.evm.inner.journaled_state;
     // ! newly added logic
-    // mark write caller's balance
+    // mark write caller's balance and nonce
     journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
 
     Ok(())

@@ -475,7 +475,6 @@ impl<DB: Database> InnerEvmContext<DB> {
                 &convert_interpreter_result(interpreter_result),
                 address,
                 account.info.clone(),
-                account.status,
                 analysis_kind,
             );
         }

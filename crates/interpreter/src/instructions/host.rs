@@ -278,7 +278,6 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
     let address_info = res.data.address_info.clone();
     let address_status = res.data.address_status;
     let target_info = res.data.target_info.clone();
-    let target_status = res.data.target_status;
 
     gas!(interpreter, gas::selfdestruct_cost(SPEC::SPEC_ID, res));
 
@@ -294,7 +293,6 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
             address_info,
             address_status,
             target_info,
-            target_status,
         );
     }
 }

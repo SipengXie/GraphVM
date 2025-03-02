@@ -14,15 +14,20 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute SLOAD operation
     #[inline]
     pub fn execute_sload(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 3 {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
                 "SLOAD requires exactly 1 operand".to_string()
             ));
         }
 
         let value = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value, "Third");
-        let value = value.as_slot().unwrap();
-        Ok(vec![SSAOutput::Stack(*value)])
+        let account_status = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fourth");
+        let value = if account_status.contains(AccountStatus::Created) {
+            U256::ZERO
+        } else {
+            *value.as_slot().unwrap()
+        };
+        Ok(vec![SSAOutput::Stack(value)])
     }
 
     /// Execute SSTORE operation
@@ -95,7 +100,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "EXTCODEHASH requires exactly 2 operand".to_string()
             ));
         }
-        let _ = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        match_ssa_output_stack_or_const!(&inputs[0], "First");
         let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
         Ok(vec![SSAOutput::Stack(account_info.code_hash.into())])
     }
@@ -108,7 +113,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "CODECOPY requires exactly 4 operands".to_string()
             ));
         }
-        let _ = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        match_ssa_output_stack_or_const!(&inputs[0], "First");
         let mem_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
         let code_offset = match_ssa_output_stack_or_const!(&inputs[2], "Third");
         let len = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
@@ -178,34 +183,29 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute SELFDESTRUCT operation
     #[inline]
     pub fn execute_selfdestruct(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 8 {
+        if inputs.len() != 6 {
             return Err(ExecutionError::ExecutionError(
                 "SELFDESTRUCT requires exactly 6 operands".to_string()
             ));
         }
         let contract_address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
         let target = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-        let address_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
-        let target_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Fourth");
-        let address_status = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fifth");
-        let target_status = match_input!(inputs, 5, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Sixth");
-        let is_created = match_ssa_output_stack_or_const!(&inputs[6], "Seventh");
-        let is_cancun_enabled = match_ssa_output_stack_or_const!(&inputs[7], "Eighth");
+        let address_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let target_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let address_status = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Storage");
+        let is_cancun_enabled = match_ssa_output_stack_or_const!(&inputs[5], "Fifth");
 
         
         let target = Address::from_word(target.to_be_bytes::<32>().into());
-        let is_created = u256_to_bool(*is_created).unwrap();
+        let is_created = address_status.contains(AccountStatus::Created);
         let is_cancun_enabled = u256_to_bool(*is_cancun_enabled).unwrap();
 
         let mut outputs = Vec::with_capacity(4);
 
         if contract_address != target {
             let mut new_target_info = target_info.clone();
-            let mut new_target_status = target_status.clone();
             new_target_info.balance = new_target_info.balance.saturating_add(address_info.balance);
-            new_target_status |= AccountStatus::Touched;
             outputs.push(output_account_info!(target, new_target_info));
-            outputs.push(output_account_status!(target, new_target_status));
         }
 
         if is_created || !is_cancun_enabled {

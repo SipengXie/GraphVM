@@ -48,7 +48,7 @@ pub struct Occda {
     thread_pool: ThreadPool,
 
     /// to_re_execution_store
-    to_re_execution_store: Vec<Vec<Option<u16>>>,
+    to_re_execution_store: Vec<Vec<u16>>,
 
     /// dag_store
     dag_store: Vec<Arc<RwLock<GraphWrapper>>>,
@@ -98,7 +98,7 @@ impl Occda {
     pub fn init(&mut self, tasks: Vec<Task>, graph: Option<&TaskDag>, enable_ssa: bool) -> Vec<Task> {
         let len: usize = tasks.len();
         if enable_ssa {
-            self.to_re_execution_store = Vec::<Vec<Option<u16>>>::with_capacity(len);
+            self.to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
             self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
             for _ in 0..len {
@@ -282,7 +282,7 @@ impl Occda {
                             }
                             let graph = self.dag_store[idx].read().get_graph();
                             let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
-                                .map(|x| x.unwrap())
+                                .map(|x| *x)
                                 .collect::<Vec<_>>()); 
                             let mut executor = SSAExecutor::<_, LatestSpec>::new(
                                 graph, 
@@ -314,7 +314,7 @@ impl Occda {
                                     continue;
                                 }
                                 Err(_err) => {
-                                    // eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                    eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", _err);
                                     drop(executor);
                                     // fall through to EVM re-execution path below
                                 }
@@ -531,7 +531,7 @@ impl Occda {
         let prefetch_start = std::time::Instant::now();
         // Initialize the store for ssa re-execution, we count the time in the prefetch phase.
         if enable_ssa {
-            self.to_re_execution_store = Vec::<Vec<Option<u16>>>::with_capacity(len);
+            self.to_re_execution_store = Vec::<Vec<u16>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
             self.reads_store = Vec::<HashMap<StorageKey, u16>>::with_capacity(len);
             self.first_call_input_store = Vec::<Option<SSACallInput>>::with_capacity(len);
@@ -621,7 +621,7 @@ impl Occda {
                         }
                         let graph = self.dag_store[idx].read().get_graph();
                         let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
-                            .map(|x| x.unwrap())
+                            .map(|x| *x)
                             .collect::<Vec<_>>());
                         let mut executor = SSAExecutor::<_, LatestSpec>::new(
                             graph, 
@@ -650,7 +650,7 @@ impl Occda {
                                 continue;
                             }
                             Err(_err) => {
-                                // eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", e);
+                                eprintln!("SSA re-execution failed: {:?}, fall back to EVM re-execution.", _err);
                                 drop(executor);
                                 // fall through to EVM re-execution path below
                             }
@@ -764,6 +764,12 @@ impl Occda {
                             println!("\n[debug] to_re_execution_store is empty, detail:");
                             println!("block_number: {}", h_tx[task_idx].env.block.number);
                             println!("tx_hash: {}", h_tx[task_idx].tx_hash.unwrap());
+                            println!("first_reads: {:?}", first_reads);
+                            println!("conflict: {:?}", conflict);
+                        } else {
+                            println!("\n[debug] to_re_execution_store is not empty, detail:");
+                            println!("tx_idx: {}", task_idx);
+                            println!("to_re_execution_store: {:?}", self.to_re_execution_store[task_idx]);
                             println!("first_reads: {:?}", first_reads);
                             println!("conflict: {:?}", conflict);
                         }
@@ -970,7 +976,7 @@ impl Occda {
 
     /// Returns an array of first read LSNs from the SSA logger
     /// Input is a HashMap<Address, HashSet<AccessType>> representing the read set
-    fn get_storage_first_reads(first_reads: &HashMap<StorageKey, u16>, read_set: &Vec<(Address, AccessType)>) -> Vec<Option<u16>> {
+    fn get_storage_first_reads(first_reads: &HashMap<StorageKey, u16>, read_set: &Vec<(Address, AccessType)>) -> Vec<u16> {
         let mut result = Vec::new();
             
             // Iterate through the read set
@@ -985,7 +991,7 @@ impl Occda {
                     // eprintln!("Cannot find lsn for {:?}: {:?}, fall back to revm execution", addr, access_type);
                     return vec![];
                 }
-                result.push(lsn.copied());
+                result.push(*lsn.unwrap());
             }
         result
     }

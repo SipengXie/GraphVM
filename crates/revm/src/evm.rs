@@ -381,7 +381,6 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             logger.log_deduct_caller(
                 ctx.evm.inner.env.tx.caller, 
                 after_account.info.clone(), 
-                after_account.status, 
                 gas_cost, 
                 is_create);
         } else {
@@ -460,7 +459,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
         // Reward beneficiary
-        // TODO: If needed this should also be logged, or we should accumulate the reward_beneficiary to the beneficiary's account.
+        // TODO: Extra work is needed to compelete the logic here.
         if ctx.evm.inner.ssa_logger.is_some() {
             let origin_balance = ctx
             .evm
@@ -480,10 +479,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             let gas_reward = origin_balance - after_account.info.balance;
 
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_reward_beneficiary(ctx.evm.inner.env.block.coinbase, after_account.info.clone(), after_account.status, gas_reward);
+            logger.log_reward_beneficiary(ctx.evm.inner.env.block.coinbase, after_account.info.clone(), gas_reward);
         } else {
             post_exec.reward_beneficiary(ctx, result.gas())?;
         }
+        // post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
 
         post_exec.output(ctx, result)
