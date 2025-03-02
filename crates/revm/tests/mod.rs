@@ -2101,7 +2101,7 @@ mod erc20_tests {
             pre_determined_slots: vec![],
             input: Some(input.clone()),
             thread_number: None,
-            enable_tracer: false,
+            enable_tracer: true,
             is_deployed_contract: true
         };
         let serial_full_result = execute_case(Bytes::default(), "serial_full", serial_full_config);
@@ -2137,7 +2137,7 @@ mod erc20_tests {
             pre_determined_slots: vec![],
             input: Some(input.clone()),
             thread_number: None,
-            enable_tracer: false,
+            enable_tracer: true,
             is_deployed_contract: false
         };
         let serial_full_result = execute_case(runtime_code.clone(), "serial_full", serial_full_config);
@@ -2193,7 +2193,7 @@ mod erc20_tests {
             ],
             input: Some(input.clone()),
             thread_number: None,
-            enable_tracer: false,
+            enable_tracer: true,
             is_deployed_contract: false
         };
         let serial_full_result = execute_case(runtime_code.clone(), "serial_full", serial_full_config);

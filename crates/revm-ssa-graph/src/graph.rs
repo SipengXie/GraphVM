@@ -35,9 +35,7 @@ impl SsaGraph {
 
     /// Add a node
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
-        // if entry.lsn <= 3 {
-        //     eprintln!("entry: {:?}", entry);
-        // }
+        // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
         if is_storage_write!(entry.opcode) {
             // eprintln!("write_opcode:{}", lsn);

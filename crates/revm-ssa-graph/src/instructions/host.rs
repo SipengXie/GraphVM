@@ -1,10 +1,10 @@
 use std::cmp::min;
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
-    AccountStatus, Address, FixedBytes, Log, LogData, Spec, U256
+    AccountStatus, Address, Bytes, FixedBytes, Log, LogData, Spec, U256
 };
 use revm_ssa::{
-    output_account_info, output_account_status, SSAOutput, StorageKey, StorageValue
+    output_account_info, output_account_status, SSAInstructionResult, SSAInterpreterResult, SSAOutput, StorageKey, StorageValue
 };
 use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
 
@@ -219,6 +219,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             new_address_info.balance = U256::ZERO;
             outputs.push(output_account_info!(contract_address, new_address_info));
         }
+
+        let result = SSAOutput::InterpreterResult(SSAInterpreterResult{
+            result: SSAInstructionResult::Ok,
+            output: Bytes::default(),
+        });
+        outputs.push(result);
 
         Ok(outputs)
     }

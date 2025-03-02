@@ -200,7 +200,7 @@ pub enum SSAOutput {
 pub struct SSALogEntry {
     // The LSN of the log entry
     pub lsn: u16,
-    // The opcode of the instruction
+    // The opcode of the instruction 
     pub opcode: u8,
     // The inputs of the instruction
     pub inputs: Vec<SSAInput>,
@@ -208,4 +208,21 @@ pub struct SSALogEntry {
     // because when we construct the SSA graph, the paritially executed nodes may
     // access some nodes unnecessary to execute, thus we can give them the same value
     pub outputs: Vec<SSAOutput>,
+}
+
+impl std::fmt::Display for SSALogEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "SSALogEntry {{")?;
+        writeln!(f, "  LSN: {}", self.lsn)?;
+        writeln!(f, "  OPCODE: 0x{:02X}", self.opcode)?;
+        writeln!(f, "  Inputs:")?;
+        for (i, input) in self.inputs.iter().enumerate() {
+            writeln!(f, "    {}: {:?}", i, input)?;
+        }
+        writeln!(f, "  Outputs:")?;
+        for (i, output) in self.outputs.iter().enumerate() {
+            writeln!(f, "    {}: {:?}", i, output)?;
+        }
+        write!(f, "}}")
+    }
 }

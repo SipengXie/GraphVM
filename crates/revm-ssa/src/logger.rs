@@ -233,7 +233,7 @@ impl SSALogger {
     #[inline]
     pub fn log_deduct_caller(&mut self, caller: Address, new_info: AccountInfo, new_status: AccountStatus, gas_cost: U256, is_create: bool) {
         let mut ssa_inputs = Vec::with_capacity(5);
-        ssa_inputs.push(SSAInput::ContractEnv {source: self.get_entry_lsn() });
+        ssa_inputs.push(SSAInput::Constant(caller.into_word().into()));
         ssa_inputs.push(SSAInput::Constant(U256::from(is_create)));
         ssa_inputs.push(input_account_info!(self, caller));
         ssa_inputs.push(input_account_status!(self, caller));
@@ -254,7 +254,7 @@ impl SSALogger {
     #[inline]
     pub fn log_refund_gas(&mut self, caller: Address, new_info: AccountInfo, refund_gas : U256) {
         let mut ssa_inputs = Vec::with_capacity(3);
-        ssa_inputs.push(SSAInput::ContractEnv { source: self.get_entry_lsn() });
+        ssa_inputs.push(SSAInput::Constant(caller.into_word().into()));
         ssa_inputs.push(input_account_info!(self, caller));
         ssa_inputs.push(SSAInput::Constant(refund_gas));
 
@@ -524,10 +524,10 @@ impl SSALogger {
         let mut ssa_output = Vec::with_capacity(1);
         match opcode {
              0x30 => ssa_output.push(SSAOutput::Stack(contract_env.target_address.into_word().into())), // ADDRESS
-             0x51 => ssa_output.push(SSAOutput::Stack(contract_env.caller.into_word().into())), // CALLER
-             0x52 => ssa_output.push(SSAOutput::Stack(contract_env.call_value)), // CALLVALUE
-             0x54 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.input.len()))), // CALLDATASIZE
-             0x56 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.bytecode.len()))), // CODESIZE
+             0x33 => ssa_output.push(SSAOutput::Stack(contract_env.caller.into_word().into())), // CALLER
+             0x34 => ssa_output.push(SSAOutput::Stack(contract_env.call_value)), // CALLVALUE
+             0x36 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.input.len()))), // CALLDATASIZE
+             0x38 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.bytecode.len()))), // CODESIZE
              _ => unreachable!("Unsupported system operation: {}", opcode),
         }
         let lsn = self.log_operation(opcode, ssa_input, ssa_output);
@@ -811,6 +811,10 @@ impl SSALogger {
         ssa_outputs.push(output_account_status!(created_address, new_target_status));
         ssa_outputs.push(SSAOutput::ContractEnv(Box::new(contract_env)));
 
+        if self.first_create_input.is_none() {
+            self.first_create_input = Some(create_input.clone());
+        }
+
         self.log_storage_write(StorageKey::AccountInfo(caller), lsn);
         self.log_storage_write(StorageKey::AccountInfo(created_address), lsn);
         self.log_storage_write(StorageKey::AccountStatus(caller), lsn);
@@ -1032,7 +1036,7 @@ impl SSALogger {
         mem_length: Option<usize>,
         contract_caller: Address,
         contract_target: Address) {
-        let mut ssa_inputs = Vec::with_capacity(7);
+        let mut ssa_inputs = Vec::with_capacity(9);
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(local_gas_limit))); // local_gas_limit
         ssa_inputs.push(pop_stack_or_const!(self, to.into_word().into())); // to
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(in_offset))); // in_offset
@@ -1497,7 +1501,7 @@ impl SSALogger {
         self.log_load_account(address, lsn);
         self.log_load_account(target, lsn);
 
-        let mut ssa_outputs = Vec::with_capacity(4);
+        let mut ssa_outputs = Vec::with_capacity(5);
         if address != target {
             ssa_outputs.push(output_account_info!(target,target_info));
             ssa_outputs.push(output_account_status!(target,target_status));
@@ -1514,6 +1518,12 @@ impl SSALogger {
             ssa_outputs.push(output_account_info!(address,address_info));
             self.log_storage_write(StorageKey::AccountInfo(address), lsn); // clear balance
         }
+
+        let result = SSAOutput::InterpreterResult(SSAInterpreterResult{
+            result: SSAInstructionResult::Ok,
+            output: Bytes::default(),
+        });
+        ssa_outputs.push(result);
 
         self.last_interpreter_return = lsn;
         self.log_operation(opcode, ssa_inputs, ssa_outputs);

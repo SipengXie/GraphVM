@@ -21,12 +21,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "DEDUCT_CALLER requires at least 3 operands".to_string()
             ));
         }
-        let caller = match_input!(inputs, 0, SSAOutput::ContractEnv (value) => value.caller, "First");
+        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "First");
         let is_call = match_input!(inputs, 1, SSAOutput::Constant(value, ..) => u256_to_bool(*value)?, "Second");
         let caller_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
         let caller_status = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fourth");
         let gas_cost = match_input!(inputs, 4, SSAOutput::Constant ( value, .. )=> value, "Fifth");
 
+        let caller = Address::from_word(B256::from(*caller));
         let new_caller_info = AccountInfo {
             balance: caller_info.balance - gas_cost,
             nonce: if is_call { caller_info.nonce } else { caller_info.nonce + 1 },
@@ -57,10 +58,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "REFUND_GAS requires exactly 2 operands (caller, refund_gas)".to_string()
             ));
         }
-        let caller = match_input!(inputs, 0, SSAOutput::ContractEnv (value) => value.caller, "First");
+        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "First");
         let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
         let refund_gas = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Third");
         
+        let caller = Address::from_word(B256::from(*caller));
         let new_caller_info = AccountInfo {
             balance: caller_info.balance + refund_gas,
             nonce: caller_info.nonce,
@@ -567,20 +569,20 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute delegatecall operation
     #[inline]
     pub fn execute_delegatecall(&mut self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 10 {
+        if inputs.len() != 9 {
             return Err(ExecutionError::ExecutionError(
                 "DELEGATECALL requires exactly 10 operands (gas, to, in_offset, in_len, out_offset, out_len, input, value, caller, target)".to_string()
             ));
         }
         let gas_limit = match_ssa_output_stack_or_const!(&inputs[0], "First");
         let to = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-        let in_offset = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
-        let in_len = match_ssa_output_stack_or_const!(&inputs[4], "Fifth");
-        let out_offset = match_ssa_output_stack_or_const!(&inputs[5], "Sixth");
-        let out_len = match_ssa_output_stack_or_const!(&inputs[6], "Seventh");
-        let input = match_input!(inputs, 7, SSAOutput::Memory(value) => value, "Eighth");
-        let contract_address: Address = match_input!(inputs, 8, SSAOutput::ContractEnv(value) => value.target_address, "Ninth");
-        let caller = match_input!(inputs, 9, SSAOutput::ContractEnv(value) => value.caller, "Tenth");
+        let in_offset = match_ssa_output_stack_or_const!(&inputs[2], "Fourth");
+        let in_len = match_ssa_output_stack_or_const!(&inputs[3], "Fifth");
+        let out_offset = match_ssa_output_stack_or_const!(&inputs[4], "Sixth");
+        let out_len = match_ssa_output_stack_or_const!(&inputs[5], "Seventh");
+        let input = match_input!(inputs, 6, SSAOutput::Memory(value) => value, "Eighth");
+        let contract_address: Address = match_input!(inputs, 7, SSAOutput::ContractEnv(value) => value.target_address, "Ninth");
+        let caller = match_input!(inputs, 8, SSAOutput::ContractEnv(value) => value.caller, "Tenth");
 
         let gas_limit = as_u64_saturated(*gas_limit);
         let out_offset = as_usize_saturated(*out_offset);
