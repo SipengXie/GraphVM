@@ -23,10 +23,11 @@ use crate::inspector::{GetInspector, Inspector};
 use crate::inspector_handle_register;
 use crate::profiler;
 use std::sync::Arc;
+use metrics::histogram;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, EVMError, EvmStorageSlot, LatestSpec, U256};
+use revm_primitives::{Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256};
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
@@ -354,7 +355,11 @@ impl Occda {
                         let result = if is_prefetch {
                             evm.transact_preverified()
                         } else {
-                            evm.transact()
+                            let standard_transact_start = std::time::Instant::now();
+                            let ret = evm.transact();
+                            let standard_transact_end = std::time::Instant::now();
+                            histogram!("revm.transact.time", standard_transact_end - standard_transact_start);
+                            ret
                         };
                         let transact_end = std::time::Instant::now();
                         let this_transact_time = transact_end - transact_start;
@@ -443,10 +448,10 @@ impl Occda {
                     
                 });
         });
-        // for (thread_id, (db_read, init, transact, write)) in thread_times.read().iter().enumerate() {
-        //     println!("Thread {}: DB read time: {:?}, Init time: {:?}, Transaction time: {:?}, Write time: {:?}",
-        //         thread_id, db_read, init, transact, write);
-        // }
+        for (thread_id, (db_read, init, transact, write)) in thread_times.read().iter().enumerate() {
+            println!("Thread {}: DB read time: {:?}, Init time: {:?}, Transaction time: {:?}, Write time: {:?}",
+                thread_id, db_read, init, transact, write);
+        }
         let parallel_end = std::time::Instant::now();
         parallel_end - parallel_start
     }
@@ -760,19 +765,19 @@ impl Occda {
                     if !conflict.is_empty() && enable_ssa {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] = Self::get_storage_first_reads(first_reads, &conflict);
-                        if self.to_re_execution_store[task_idx].is_empty() {
-                            println!("\n[debug] to_re_execution_store is empty, detail:");
-                            println!("block_number: {}", h_tx[task_idx].env.block.number);
-                            println!("tx_hash: {}", h_tx[task_idx].tx_hash.unwrap());
-                            println!("first_reads: {:?}", first_reads);
-                            println!("conflict: {:?}", conflict);
-                        } else {
-                            println!("\n[debug] to_re_execution_store is not empty, detail:");
-                            println!("tx_idx: {}", task_idx);
-                            println!("to_re_execution_store: {:?}", self.to_re_execution_store[task_idx]);
-                            println!("first_reads: {:?}", first_reads);
-                            println!("conflict: {:?}", conflict);
-                        }
+                        // if self.to_re_execution_store[task_idx].is_empty() {
+                        //     println!("\n[debug] to_re_execution_store is empty, detail:");
+                        //     println!("block_number: {}", h_tx[task_idx].env.block.number);
+                        //     println!("tx_hash: {}", h_tx[task_idx].tx_hash.unwrap());
+                        //     println!("first_reads: {:?}", first_reads);
+                        //     println!("conflict: {:?}", conflict);
+                        // } else {
+                        //     println!("\n[debug] to_re_execution_store is not empty, detail:");
+                        //     println!("tx_idx: {}", task_idx);
+                        //     println!("to_re_execution_store: {:?}", self.to_re_execution_store[task_idx]);
+                        //     println!("first_reads: {:?}", first_reads);
+                        //     println!("conflict: {:?}", conflict);
+                        // }
                     }
                     !conflict.is_empty()
                 };
@@ -938,11 +943,12 @@ impl Occda {
                         })
                         .unwrap_or_else(|_| Account::new_not_existing())
                     );
+                    account.status |= AccountStatus::Touched;
                     if let Some(info) = storage_value.as_account_info() {
                         account.info = info.clone();
                     }
                     if let Some(status) = storage_value.as_account_status() {
-                        account.status = *status;
+                        account.status |= *status;
                     }
                 },
                 StorageKey::Slot(address, index) => {
@@ -956,6 +962,7 @@ impl Occda {
                         })
                         .unwrap_or_else(|_| Account::new_not_existing())
                     );
+                    account.status |= AccountStatus::Touched;
                     match **storage_value {
                         StorageValue::Slot(new_value) => {
                             let evm_storage = account.storage.entry(index).or_insert_with(|| {

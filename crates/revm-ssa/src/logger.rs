@@ -230,7 +230,7 @@ impl SSALogger {
         self.current_lsn - 1
     }
 
-    /// Corresponding Execution Function: file://./../../revm-ssa-graph/src/instructions/contract.rs
+    /// Corresponding Execution Function: file://./../../revm-ssa-graph/src/instructions/contract.rs#L18
     #[inline]
     pub fn log_deduct_caller(&mut self, caller: Address, new_info: AccountInfo, gas_cost: U256, is_create: bool) {
         let mut ssa_inputs = Vec::with_capacity(4);

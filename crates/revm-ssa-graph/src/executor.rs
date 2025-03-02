@@ -2,12 +2,13 @@
 use std::{
     collections::HashSet,
     marker::PhantomData,
-    sync::{atomic::{AtomicU64, Ordering}, Arc}
+    sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Instant
 };
 
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result
 };
+use metrics::histogram;
 use rayon::ThreadPool;
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
 use revm_ssa::{
@@ -165,9 +166,11 @@ where
         };
 
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
+        let execute_start = Instant::now();
         for node in &nodes_to_execute {
             Self::execute_node(node, graph, &self.context)?;
         }
+        histogram!("revm.ssa.executor.execute_time", execute_start.elapsed());
 
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();

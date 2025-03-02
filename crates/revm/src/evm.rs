@@ -459,31 +459,31 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
         // Reward beneficiary
-        // TODO: Extra work is needed to compelete the logic here.
-        if ctx.evm.inner.ssa_logger.is_some() {
-            let origin_balance = ctx
-            .evm
-            .inner
-            .journaled_state
-            .load_account(ctx.evm.inner.env.block.coinbase, &mut ctx.evm.inner.db)?
-            .info.balance;
+        // // TODO: Extra work is needed to compelete the logic here.
+        // if ctx.evm.inner.ssa_logger.is_some() {
+        //     let origin_balance = ctx
+        //     .evm
+        //     .inner
+        //     .journaled_state
+        //     .load_account(ctx.evm.inner.env.block.coinbase, &mut ctx.evm.inner.db)?
+        //     .info.balance;
             
-            post_exec.reward_beneficiary(ctx, result.gas())?;
+        //     post_exec.reward_beneficiary(ctx, result.gas())?;
 
-            let after_account = ctx
-            .evm
-            .inner
-            .journaled_state
-            .account(ctx.evm.inner.env.block.coinbase);
+        //     let after_account = ctx
+        //     .evm
+        //     .inner
+        //     .journaled_state
+        //     .account(ctx.evm.inner.env.block.coinbase);
 
-            let gas_reward = origin_balance - after_account.info.balance;
+        //     let gas_reward = origin_balance - after_account.info.balance;
 
-            let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_reward_beneficiary(ctx.evm.inner.env.block.coinbase, after_account.info.clone(), gas_reward);
-        } else {
-            post_exec.reward_beneficiary(ctx, result.gas())?;
-        }
-        // post_exec.reward_beneficiary(ctx, result.gas())?;
+        //     let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
+        //     logger.log_reward_beneficiary(ctx.evm.inner.env.block.coinbase, after_account.info.clone(), gas_reward);
+        // } else {
+        //     post_exec.reward_beneficiary(ctx, result.gas())?;
+        // }
+        post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
 
         post_exec.output(ctx, result)
