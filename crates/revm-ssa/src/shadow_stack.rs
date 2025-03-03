@@ -1,6 +1,8 @@
 use core::{fmt, ptr};
 use std::vec::Vec;
 
+use crate::logger::LsnType;
+
 pub const STACK_LIMIT: usize = 1024;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -9,12 +11,36 @@ pub enum InstructionResult {
     StackUnderflow,
 }
 
+macro_rules! debug_unreachable {
+    ($($t:tt)*) => {
+        if cfg!(debug_assertions) {
+            unreachable!($($t)*);
+        } else {
+            unsafe { core::hint::unreachable_unchecked() };
+        }
+    };
+}
+
+macro_rules! assume {
+    ($e:expr $(,)?) => {
+        if !$e {
+            debug_unreachable!(stringify!($e));
+        }
+    };
+
+    ($e:expr, $($t:tt)+) => {
+        if !$e {
+            debug_unreachable!($($t)+);
+        }
+    };
+}
+
 /// Shadow stack for tracking LSN definitions, with same capacity as EVM stack
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ShadowStack {
     /// The underlying data of the shadow stack, storing LSN definitions
-    data: Vec<u16>, // 0 means constant, else means lsn
+    data: Vec<LsnType>, // 0 means constant, else means lsn
 }
 
 impl fmt::Display for ShadowStack {
@@ -46,7 +72,7 @@ impl ShadowStack {
     #[inline]
     pub fn new() -> Self {
         Self {
-            data: Vec::with_capacity(4*STACK_LIMIT),
+            data: Vec::with_capacity(STACK_LIMIT),
         }
     }
 
@@ -65,7 +91,7 @@ impl ShadowStack {
     /// Removes the topmost element from the stack and returns it, or `StackUnderflow` if it is
     /// empty.
     #[inline]
-    pub fn pop(&mut self) -> Result<u16, InstructionResult> {
+    pub fn pop(&mut self) -> Result<LsnType, InstructionResult> {
         self.data.pop().ok_or(InstructionResult::StackUnderflow)
     }
 
@@ -74,7 +100,12 @@ impl ShadowStack {
     /// If it will exceed the stack limit, returns `StackOverflow` error and leaves the stack
     /// unchanged.
     #[inline]
-    pub fn push(&mut self, value: u16) -> Result<(), InstructionResult> {
+    pub fn push(&mut self, value: LsnType) -> Result<(), InstructionResult> {
+        // Allows the compiler to optimize out the `Vec::push` capacity check.
+        assume!(self.data.capacity() == STACK_LIMIT);
+        if self.data.len() == STACK_LIMIT {
+            return Err(InstructionResult::StackOverflow);
+        }
         self.data.push(value);
         Ok(())
     }
@@ -82,13 +113,23 @@ impl ShadowStack {
     /// Duplicates the `N`th value from the top of the stack.
     #[inline]
     pub fn dup(&mut self, n: usize) -> Result<(), InstructionResult> {
+        assume!(n > 0, "attempted to dup 0");
         let len = self.data.len();
-        unsafe {
-            let ptr = self.data.as_mut_ptr().add(len);
-            ptr::copy_nonoverlapping(ptr.sub(n), ptr, 1);
-            self.data.set_len(len + 1);
+        if len < n {
+            println!("Stack underflow in dup: n={}, stack_len={}", n, len);
+            Err(InstructionResult::StackUnderflow)
+        } else if len + 1 > STACK_LIMIT {
+            println!("Stack overflow in dup: stack_len={}, limit={}", len, STACK_LIMIT);
+            Err(InstructionResult::StackOverflow)
+        } else {
+            // SAFETY: check for out of bounds is done above and it makes this safe to do.
+            unsafe {
+                let ptr = self.data.as_mut_ptr().add(len);
+                ptr::copy_nonoverlapping(ptr.sub(n), ptr, 1);
+                self.data.set_len(len + 1);
+            }
+            Ok(())
         }
-        Ok(())
     }
 
     /// Swaps the topmost value with the `N`th value from the top.
@@ -102,9 +143,19 @@ impl ShadowStack {
     /// `n` is the first index, and the second index is calculated as `n + m`.
     #[inline]
     pub fn exchange(&mut self, n: usize, m: usize) -> Result<(), InstructionResult> {
+        assume!(m > 0, "overlapping exchange");
         let len = self.data.len();
         let n_m_index = n + m;
+        if n_m_index >= len {
+            println!("Stack underflow in exchange: n={}, m={}, n+m={}, stack_len={}", n, m, n_m_index, len);
+            return Err(InstructionResult::StackUnderflow);
+        }
+        // SAFETY: `n` and `n_m` are checked to be within bounds, and they don't overlap.
         unsafe {
+            // NOTE: `ptr::swap_nonoverlapping` is more efficient than `slice::swap` or `ptr::swap`
+            // because it operates under the assumption that the pointers do not overlap,
+            // eliminating an intemediate copy,
+            // which is a condition we know to be true in this context.
             let top = self.data.as_mut_ptr().add(len - 1);
             core::ptr::swap_nonoverlapping(top.sub(n), top.sub(n_m_index), 1);
         }
@@ -119,7 +170,7 @@ impl<'de> serde::Deserialize<'de> for ShadowStack {
     where
         D: serde::Deserializer<'de>,
     {
-        let mut data = Vec::<u16>::deserialize(deserializer)?;
+        let mut data = Vec::<LsnType>::deserialize(deserializer)?;
         if data.len() > STACK_LIMIT {
             return Err(serde::de::Error::custom(std::format!(
                 "stack size exceeds limit: {} > {}",

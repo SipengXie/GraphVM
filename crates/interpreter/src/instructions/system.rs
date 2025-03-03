@@ -60,11 +60,24 @@ pub fn codecopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     pop!(interpreter, memory_offset, code_offset, len);
     let len = as_usize_or_fail!(interpreter, len);
     gas_or_fail!(interpreter, gas::verylowcopy_cost(len as u64));
-    if len == 0 {
-        return;
-    }
     let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let code_offset = as_usize_saturated!(code_offset);
+    
+    if len == 0 {
+        if let Some(logger) = interpreter.ssa_logger.as_mut() {
+            let mem_length = None;
+            let lsn = logger.log_codecopy(
+                CODECOPY, 
+                memory_offset, 
+                code_offset, 
+                len, 
+                interpreter.contract.bytecode.bytes(), 
+                mem_length);   
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        }
+        return;
+    }
+    
     let resized = resize_memory!(interpreter, memory_offset, len);
 
     // Inform the optimizer that the bytecode cannot be EOF to remove a bounds check.
@@ -79,7 +92,7 @@ pub fn codecopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        let lsn = logger.log_code_copy(
+        let lsn = logger.log_codecopy(
             CODECOPY, 
             memory_offset, 
             code_offset, 
@@ -142,11 +155,17 @@ pub fn calldatacopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     pop!(interpreter, memory_offset, data_offset, len);
     let len = as_usize_or_fail!(interpreter, len);
     gas_or_fail!(interpreter, gas::verylowcopy_cost(len as u64));
-    if len == 0 {
-        return;
-    }
     let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let data_offset = as_usize_saturated!(data_offset);
+    if len == 0 {
+        if let Some(logger) = interpreter.ssa_logger.as_mut() {
+            let mem_length = None;
+            let lsn = logger.log_call_data_copy(CALLDATACOPY, memory_offset, data_offset, len, interpreter.contract.input.clone(), mem_length);
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        }
+        return;
+    }
+    
     let resized = resize_memory!(interpreter, memory_offset, len);
 
     // Note: this can't panic because we resized memory to fit.
@@ -194,13 +213,18 @@ pub fn returndatacopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interprete
         return;
     }
 
+    let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     // if len is zero memory is not resized.
     if len == 0 {
+        if let Some(logger) = interpreter.ssa_logger.as_mut() {
+            let mem_length = None;    
+            let lsn =  logger.log_return_data_cpy_operation(RETURNDATACOPY, memory_offset, data_offset, len, interpreter.return_data_buffer.clone(), mem_length);
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        }
         return;
     }
 
     // resize memory
-    let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let resized = resize_memory!(interpreter, memory_offset, len);
 
     // Note: this can't panic because we resized memory to fit.

@@ -419,6 +419,9 @@ impl<DB: Database> InnerEvmContext<DB> {
         // if return is not ok revert and return.
         if !matches!(interpreter_result.result, return_ok!()) {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
+            if let Some(logger) = self.ssa_logger.as_mut() {
+                logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+            }
             return;
         }
         // Host error if present on execution
@@ -428,6 +431,9 @@ impl<DB: Database> InnerEvmContext<DB> {
         if SPEC::enabled(LONDON) && interpreter_result.output.first() == Some(&0xEF) {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
             interpreter_result.result = InstructionResult::CreateContractStartingWithEF;
+            if let Some(logger) = self.ssa_logger.as_mut() {
+                logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+            }
             return;
         }
 
@@ -438,6 +444,9 @@ impl<DB: Database> InnerEvmContext<DB> {
         {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
             interpreter_result.result = InstructionResult::CreateContractSizeLimit;
+            if let Some(logger) = self.ssa_logger.as_mut() {
+                logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+            }
             return;
         }
         let gas_for_code = interpreter_result.output.len() as u64 * gas::CODEDEPOSIT;
@@ -449,6 +458,9 @@ impl<DB: Database> InnerEvmContext<DB> {
             if SPEC::enabled(HOMESTEAD) {
                 self.journaled_state.checkpoint_revert(journal_checkpoint);
                 interpreter_result.result = InstructionResult::OutOfGas;
+                if let Some(logger) = self.ssa_logger.as_mut() {
+                    logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+                }
                 return;
             } else {
                 interpreter_result.output = Bytes::new();

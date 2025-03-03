@@ -232,7 +232,6 @@ impl JournaledState {
         let account = self.state.get_mut(&address).unwrap();
         self.read_write_set.add_write(address, AccessType::AccountInfo);
         Self::touch_account(self.journal.last_mut().unwrap(), &address, account);
-        self.read_write_set.add_write(address, AccessType::AccountStatus);
 
         self.journal
             .last_mut()
@@ -260,7 +259,6 @@ impl JournaledState {
             return None;
         }
         Self::touch_account(self.journal.last_mut().unwrap(), &address, account);
-        self.read_write_set.add_write(address, AccessType::AccountStatus);
         self.journal
             .last_mut()
             .unwrap()
@@ -287,7 +285,6 @@ impl JournaledState {
         // sub balance from
         let from_account = &mut self.state.get_mut(from).unwrap();
         Self::touch_account(self.journal.last_mut().unwrap(), from, from_account);
-        self.read_write_set.add_write(*from, AccessType::AccountStatus);
         let from_balance = &mut from_account.info.balance;
 
         let Some(from_balance_incr) = from_balance.checked_sub(balance) else {
@@ -299,7 +296,6 @@ impl JournaledState {
         // add balance to
         let to_account = &mut self.state.get_mut(to).unwrap();
         Self::touch_account(self.journal.last_mut().unwrap(), to, to_account);
-        self.read_write_set.add_write(*to, AccessType::AccountStatus);
         let to_balance = &mut to_account.info.balance;
         let Some(to_balance_decr) = to_balance.checked_add(balance) else {
             return Ok(Some(InstructionResult::OverflowPayment));

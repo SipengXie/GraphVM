@@ -1,5 +1,5 @@
 use revm_primitives::{AccountInfo, AccountStatus, Address, Bytecode, Bytes, Log, B256, U256};
-use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, SSAInterpreterResult};
+use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, logger::LsnType, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +54,7 @@ impl From<InternalOp> for u8 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MemoryDep {
-    pub lsn: u16,
+    pub lsn: LsnType,
     pub self_offset: usize,
     pub lsn_offset: usize,
     pub length: usize,
@@ -131,38 +131,38 @@ impl StorageValue {
 pub enum SSAInput {
     Constant(U256),
     Stack {
-        source: u16,
+        source: LsnType,
     },
     Memory {
         source: Vec<MemoryDep>,
     },
     Storage {
         key: Box<StorageKey>,
-        source: u16,
+        source: LsnType,
     },
     ReturnDataBuffer {
-        source: u16,
+        source: LsnType,
     },
     InterpreterResult {
-        source: u16,
+        source: LsnType,
     },
     CallOutcome {
-        source: u16,
+        source: LsnType,
     },
     CreateOutcome {
-        source: u16,
+        source: LsnType,
     },
     MemorySizeChange {
-        source: u16,
+        source: LsnType,
     },
     CreateInput {
-        source: u16,
+        source: LsnType,
     },
     CallInput {
-        source: u16,
+        source: LsnType,
     },
     ContractEnv {
-        source: u16,
+        source: LsnType,
     }
 }
 
@@ -199,7 +199,7 @@ pub enum SSAOutput {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SSALogEntry {
     // The LSN of the log entry
-    pub lsn: u16,
+    pub lsn: LsnType,
     // The opcode of the instruction 
     pub opcode: u8,
     // The inputs of the instruction

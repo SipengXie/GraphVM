@@ -2,17 +2,18 @@
 use std::{
     collections::HashSet,
     marker::PhantomData,
-    sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Instant
+    sync::{atomic::{AtomicU64, Ordering}, Arc}, 
+    // time::Instant
 };
 
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result
 };
-use metrics::histogram;
+// use metrics::histogram;
 use rayon::ThreadPool;
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
 use revm_ssa::{
-    MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
+    logger::LsnType, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
 };
 
 /// Execution mode
@@ -21,7 +22,7 @@ pub enum ExecutionMode {
     /// Execute all operations
     Full,
     /// Start execution from specified LSN
-    Partial(Vec<u16>),
+    Partial(Vec<LsnType>),
 }
 
 
@@ -36,7 +37,7 @@ impl AtomicBitMap {
    /// Create new bitmap with specified initialization state
     /// - max_lsn: Maximum LSN to support
     /// - initial_state: true = all bits set (mark as completed), false = all bits cleared
-    fn new(max_lsn: u16, initial_state: bool) -> Self {
+    fn new(max_lsn: LsnType, initial_state: bool) -> Self {
         let size = (max_lsn as usize + 63) / 64;
         let init_value = if initial_state { u64::MAX } else { 0 };
         
@@ -49,7 +50,7 @@ impl AtomicBitMap {
 
     /// Check if specified LSN is marked as completed
     // #[inline]
-    // fn check(&self, lsn: u16) -> bool {
+    // fn check(&self, lsn: LsnType) -> bool {
     //     let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
     //     self.bits.get(idx)
     //         .map(|a| a.load(std::sync::atomic::Ordering::Acquire) & mask != 0)
@@ -58,7 +59,7 @@ impl AtomicBitMap {
 
     /// Atomically mark an LSN as completed
     #[inline]
-    fn mark(&self, lsn: u16) {
+    fn mark(&self, lsn: LsnType) {
         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
         if let Some(atomic) = self.bits.get(idx) {
             // Modifying bits[idx] won't affect other elements in bits
@@ -68,7 +69,7 @@ impl AtomicBitMap {
 
     /// Atomically clear a bit (set to 0)
     #[inline]
-    fn unmark(&self, lsn: u16) {
+    fn unmark(&self, lsn: LsnType) {
         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
         if let Some(atomic) = self.bits.get(idx) {
             atomic.0.fetch_and(!mask, std::sync::atomic::Ordering::Release);
@@ -121,7 +122,7 @@ where
             mode: ExecutionMode::Full,
             spec: PhantomData,
             thread_pool,
-            completed_nodes: Arc::new(AtomicBitMap::new(max_lsn as u16, false)),
+            completed_nodes: Arc::new(AtomicBitMap::new(max_lsn as LsnType, false)),
         }
     }
 
@@ -176,11 +177,11 @@ where
         //     );
         // }
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
-        let execute_start = Instant::now();
+        // let execute_start = Instant::now();
         for node in &nodes_to_execute {
             Self::execute_node(node, graph, &self.context)?;
         }
-        histogram!("revm.ssa.executor.execute_time", execute_start.elapsed());
+        // histogram!("revm.ssa.executor.execute_time", execute_start.elapsed());
 
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
@@ -210,7 +211,7 @@ where
                 }
 
                 let max_lsn = self.graph.num_nodes();
-                let bitmap = AtomicBitMap::new(max_lsn as u16, true);
+                let bitmap = AtomicBitMap::new(max_lsn as LsnType, true);
                 // Mark all non-reachable nodes as completed
                 let reachable_lsns: HashSet<_> = reachable_nodes.iter().map(|node| node.lsn).collect();
                 for lsn in reachable_lsns {
@@ -290,6 +291,27 @@ where
         let lsn = node.lsn;
         let inputs = Self::resolve_dependencies(graph, &context, &node)?;
         let outputs = Self::execute_operation(&context, node.opcode, inputs)?;
+        
+        // let outputs = match Self::execute_operation(&context, node.opcode, inputs.clone()) {
+        //     Ok(outputs) => outputs,
+        //     Err(err) => {
+        //         println!("Node: {:?}", node);
+        //         if node.opcode == 0xD7 {
+        //             println!("执行节点 MAKE_CALL_FRAME 时出错: {:?}", err);
+        //             println!("当前节点: {:?}", node);
+        //             // 查找 CallInput 输入
+        //             if let Some(SSAInput::CallInput { source }) = node.inputs.get(0) {
+        //                 let original_node = graph.get_node(*source);
+        //                 let current_result = graph.get_result_by_lsn(*source);
+                        
+        //                 println!("原始 CallInput 节点: {:?}", original_node);
+        //                 println!("当前 CallInput 结果: {:?}", current_result);
+        //             }
+        //         }
+        //         panic!("Execution failed: {:?}", err);
+        //     }
+        // };
+        
 
         if node.opcode == 0x56 || node.opcode == 0x57 {
             Self::verify_control_flow(node, &outputs)?;
@@ -475,15 +497,25 @@ where
     /// Generic function for getting results and type conversion
     fn get_dependency_result<T, F>(
         graph: &SsaGraph,
-        lsn: u16,
+        lsn: LsnType,
         extractor: F,
         error_msg: &str
     ) -> Result<T>
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
     {
-        let result = graph.get_result(lsn, extractor)?
-            .ok_or_else(|| ExecutionError::ExecutionError(format!("{} dependency must exist", error_msg)))?;
+        let result = match graph.get_result(lsn, extractor)? {
+            Some(value) => value,
+            None => {
+                let original_outputs = graph.get_result_by_lsn(lsn)?
+                    .map(|outputs| format!("{:?}", outputs))
+                    .unwrap_or_else(|| "No outputs".to_string());
+                return Err(ExecutionError::ExecutionError(
+                    format!("{} dependency must exist in the inputs. LSN: {}, Actual outputs: {}", 
+                        error_msg, lsn, original_outputs)
+                ));
+            }
+        };
         
         Ok(result)
     }
@@ -491,7 +523,7 @@ where
     /// Handle Stack type input
     fn resolve_stack_input(
         graph: &SsaGraph,
-        source: u16 
+        source: LsnType 
     ) -> Result<SSAOutput> {
         if source == 0 {
             return Err(ExecutionError::ExecutionError("Stack input must have a source".to_string()));
@@ -529,7 +561,7 @@ where
     fn resolve_storage_input(
         graph: &SsaGraph,
         context: &Arc<ExecutionContext<'a, DB, SPEC>>,
-        source: u16,
+        source: LsnType,
         key: &StorageKey
     ) -> Result<SSAOutput> {
         // eprintln!("resolve_storage_input: {:?}", source);
@@ -541,6 +573,11 @@ where
                     SSAOutput::Storage{key: _key, value} if **_key == *key => Some(value.clone()),
                     _ => None
                 }),
+                // &format!(
+                //     "Storage for node <with Old Output> {:?}, node <corresponding result> {:?}", 
+                //     graph.get_node(source)?, 
+                //     graph.get_result_by_lsn(source)?.unwrap()
+                // ),
                 "Storage"
             )?;
             Ok(SSAOutput::Storage {
@@ -561,7 +598,7 @@ where
     /// Handle ReturnDataBuffer type input
     fn resolve_return_data_input(
         graph: &SsaGraph,
-        source: u16
+        source: LsnType
     ) -> Result<SSAOutput> {
         let result = if source != 0 {
             let return_data = Self::get_dependency_result(
@@ -587,7 +624,7 @@ where
     /// Handle MemorySizeChange type input
     fn resolve_memory_size_input(
         graph: &SsaGraph,
-        last_memory: u16 
+        last_memory: LsnType 
     ) -> Result<SSAOutput> {
         let result = if last_memory != 0 {
             let memory_size = Self::get_dependency_result(
@@ -613,7 +650,7 @@ where
     /// Handle ContractEntry type input
     fn resolve_contract_env_input(
         graph: &SsaGraph,
-        entry_lsn: u16 
+        entry_lsn: LsnType 
     ) -> Result<SSAOutput> {
         let result = if entry_lsn != 0 {
             let contract_env = Self::get_dependency_result(
@@ -641,7 +678,7 @@ where
     /// Handle CreateInput type input
     fn resolve_create_input(
         graph: &SsaGraph,
-        entry: u16
+        entry: LsnType
     ) -> Result<SSAOutput> {
         if entry == 0 {
             return Err(ExecutionError::ExecutionError(
@@ -668,7 +705,7 @@ where
     /// Handle CallInput type input
     fn resolve_call_input(
         graph: &SsaGraph,
-        entry: u16
+        entry: LsnType
     ) -> Result<SSAOutput> {
         if entry == 0 {
             return Err(ExecutionError::ExecutionError(
@@ -695,7 +732,7 @@ where
     /// Handle InterpreterResult type input
     fn resolve_interpreter_result(
         graph: &SsaGraph,
-        source: u16 
+        source: LsnType 
     ) -> Result<SSAOutput> {
         if source == 0 {
             return Err(ExecutionError::ExecutionError(
@@ -722,7 +759,7 @@ where
     /// Handle CallOutcome type input
     fn resolve_call_outcome(
         graph: &SsaGraph,
-        source: u16 
+        source: LsnType 
     ) -> Result<SSAOutput> {
         if source == 0 {
             return Err(ExecutionError::ExecutionError(
@@ -749,7 +786,7 @@ where
     /// Handle CreateOutcome type input
     fn resolve_create_outcome(
         graph: &SsaGraph,
-        source: u16
+        source: LsnType
     ) -> Result<SSAOutput> {
         if source == 0 {
             return Err(ExecutionError::ExecutionError(

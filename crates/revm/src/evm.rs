@@ -14,6 +14,30 @@ use std::{boxed::Box, vec::Vec};
 /// EVM call stack limit.
 pub const CALL_STACK_LIMIT: u64 = 1024;
 
+
+/// Recovers the SSA logger from the frame.
+#[macro_export]
+macro_rules! recover_ssa_logger_from_frame {
+    ($self:expr, $stack_frame:expr) => {
+        let interpreter = &mut $stack_frame.frame_data_mut().interpreter;
+        if interpreter.ssa_logger.is_some() {
+            $self.context
+                .evm
+                .recover_ssa_logger_from_interpreter(interpreter);
+        }
+    };
+}
+
+/// Transfers the SSA logger to the frame.
+#[macro_export]
+macro_rules! transfer_ssa_logger_to_frame {
+    ($self:expr, $stack_frame:expr) => {
+        let interpreter = &mut $stack_frame.frame_data_mut().interpreter;
+        if $self.context.evm.ssa_logger.is_some() {
+            $self.context.evm.transfer_ssa_logger_to_interpreter(interpreter);
+        }
+    };
+}
 /// EVM instance containing both internal EVM context and external context
 /// and the handler that dictates the logic of EVM (or hardfork specification).
 pub struct Evm<'a, EXT, DB: Database> {
@@ -69,17 +93,6 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
         EvmBuilder::new(self)
     }
 
-    /// Recovers the SSA logger from the frame.
-    #[inline]
-    fn recover_ssa_logger_from_frame(&mut self, stack_frame: &mut Frame) {
-        let interpreter = &mut stack_frame.frame_data_mut().interpreter;
-        if interpreter.ssa_logger.is_some() {
-            self.context
-                .evm
-                .recover_ssa_logger_from_interpreter(interpreter);
-        }
-    }
-
     /// Take ownership of the SSA logger, leaving None in its place
     #[inline]
     pub fn take_ssa_logger(&mut self) -> Option<SSALogger> {
@@ -112,7 +125,22 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
                 self.handler
                     .execute_frame(stack_frame, &mut shared_memory, &mut self.context)?;
             // ! recover ssa logger from frame if it has one, it will return to the frame we back to the frame logic
-            self.recover_ssa_logger_from_frame(stack_frame);
+            recover_ssa_logger_from_frame!(self, stack_frame);
+
+            // !!!
+            if let Some(logger) = &self.context.evm.ssa_logger {
+                let js_depth = self.context.evm.journaled_state.depth;
+                let logger_stack_depth = logger.stack_pool.len();
+                
+                if js_depth != logger_stack_depth-1 {
+                    assert!(
+                        js_depth == logger_stack_depth,
+                        "Depth mismatch: journaled_state.depth={}, logger.stack_pool.len()={}",
+                        js_depth,
+                        logger_stack_depth
+                    );
+                }
+            }
 
             // Take error and break the loop, if any.
             // This error can be set in the Interpreter when it interacts with the context.
@@ -165,6 +193,8 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
                         return Ok(result);
                     };
                     stack_frame = top_frame;
+                    // ! transfer ssa logger to the top frame
+                    transfer_ssa_logger_to_frame!(self, stack_frame);
                     let ctx = &mut self.context;
                     // Insert result to the top frame.
                     match result {

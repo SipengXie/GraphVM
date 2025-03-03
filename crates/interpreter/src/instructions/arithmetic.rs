@@ -65,15 +65,15 @@ pub fn div<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     let (orig1, orig2) = (op1, *op2);
     if !op2.is_zero() {
         *op2 = op1.wrapping_div(*op2);
-        
-        if let Some(logger) = interpreter.ssa_logger.as_mut() {
-            logger.log_binary_operation(
-                DIV,
-                orig1,
-                orig2,
-                *op2
-            );
-        }
+    }
+
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_binary_operation(
+            DIV,
+            orig1,
+            orig2,
+            *op2
+        );
     }
 }
 
@@ -101,15 +101,14 @@ pub fn rem<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     let (orig1, orig2) = (op1, *op2);
     if !op2.is_zero() {
         *op2 = op1.wrapping_rem(*op2);
-        
-        if let Some(logger) = interpreter.ssa_logger.as_mut() {
-            logger.log_binary_operation(
-                MOD,
-                orig1,
-                orig2,
-                *op2
-            );
-        }
+    }
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_binary_operation(
+            MOD,
+            orig1,
+            orig2,
+            *op2
+        );
     }
 }
 

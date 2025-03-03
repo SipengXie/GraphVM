@@ -5,7 +5,7 @@ use revm_primitives::{
 };
 
 use revm::{db::{CacheDB, EmptyDB}, Evm};
-use revm_ssa::{SSACallInput, SSACreateInput, SSALogEntry, SSALogger};
+use revm_ssa::{logger::LsnType, SSACallInput, SSACreateInput, SSALogEntry, SSALogger};
 use revm_ssa_graph::{SsaGraph, SSAExecutor, ExecutionTracer, ExecutionMode};
 
 #[derive(Debug, Clone)]
@@ -189,7 +189,7 @@ fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut Ca
     let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     
     // Collect all LSNs first
-    let lsns: Vec<u16> = entries.iter().map(|entry| entry.lsn).collect();
+    let lsns: Vec<LsnType> = entries.iter().map(|entry| entry.lsn).collect();
     
     // Record original results
     let tracer = if config.enable_tracer {
@@ -244,7 +244,7 @@ fn graph_execute_parallel(entries: Vec<SSALogEntry>, config: ExecutionConfig, db
     let mut graph = SsaGraph::new(entries.len(), 2*entries.len());
     
     // Collect all LSNs first
-    let lsns: Vec<u16> = entries.iter().map(|entry| entry.lsn).collect();
+    let lsns: Vec<LsnType> = entries.iter().map(|entry| entry.lsn).collect();
     
     // Record original results
     let tracer = if config.enable_tracer {
@@ -2250,4 +2250,15 @@ mod erc20_tests {
             println!("{:30} : {} bytes", name, size);
         }
     }
+
+    #[test]
+    fn test_vec_capacity() {
+        let mut vec = Vec::with_capacity(2);
+        vec.push(1);
+        vec.push(2);
+        vec.push(3);
+        vec.push(4);
+        eprintln!("vec: {:?}", vec);
+    }
+
 }

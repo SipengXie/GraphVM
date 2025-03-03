@@ -1,7 +1,7 @@
 use std::cmp::min;
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
-    AccountStatus, Address, Bytes, FixedBytes, Log, LogData, Spec, U256
+    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
 };
 use revm_ssa::{
     output_account_info, output_account_status, SSAInstructionResult, SSAInterpreterResult, SSAOutput, StorageKey, StorageValue
@@ -85,10 +85,15 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "EXTCODESIZE requires exactly 2 operand".to_string()
             ));
         }
-        match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let _address = match_ssa_output_stack_or_const!(&inputs[0], "First");
         let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
         // we ignore EIP 7702 here
-        let code = account_info.code.as_ref().unwrap().original_bytes();
+        let code = match &account_info.code {
+            Some(code) => code,
+            None => {
+                &Bytecode::default()
+            }
+        };
         Ok(vec![SSAOutput::Stack(U256::from(code.len()))])
     }
 

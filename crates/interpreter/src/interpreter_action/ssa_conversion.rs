@@ -1,7 +1,7 @@
 use revm_primitives::CreateScheme;
 use revm_ssa::{
     ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
-use crate::{return_error, return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
+use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
 use super::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, CallScheme};
 
 /// Convert interpreter's Contract to SSA's ContractEnv
@@ -22,7 +22,7 @@ pub fn convert_call_input(input: &CallInputs) -> SSACallInput {
     SSACallInput {
         input: input.input.clone(),
         target_address: input.target_address,
-        bytecode_address: input.target_address,
+        bytecode_address: input.bytecode_address,
         caller: input.caller,
         transfer_value: input.transfer_value().unwrap_or_default(),
         scheme: convert_call_scheme(input.scheme),
@@ -84,8 +84,8 @@ pub fn convert_interpreter_result(result: &InterpreterResult) -> SSAInterpreterR
         result: match result.result {
             return_ok!() => SSAInstructionResult::Ok,
             return_revert!() => SSAInstructionResult::Revert,
-            return_error!() => SSAInstructionResult::Error,
-            _ => SSAInstructionResult::Error,
+            InstructionResult::FatalExternalError => SSAInstructionResult::Error,
+            _ => SSAInstructionResult::Revert,
         },
         output: result.output.clone(),
     }

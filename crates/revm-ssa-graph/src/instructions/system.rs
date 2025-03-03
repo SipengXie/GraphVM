@@ -74,7 +74,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let memory_offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
         let code_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
         let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
-        let code = match_input!(inputs, 3, SSAOutput::ContractEnv(value) => value.bytecode.original_bytes(), "Fourth");
+        let code = match_input!(inputs, 3, SSAOutput::ContractEnv(value) => value.bytecode.original_byte_slice(), "Fourth");
         let memory_offset = as_usize_saturated(*memory_offset);
         let code_offset = as_usize_saturated(*code_offset);
         let len = as_usize_saturated(*len);

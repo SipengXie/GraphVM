@@ -101,13 +101,26 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         interpreter,
         gas::extcodecopy_cost(SPEC::SPEC_ID, len as u64, load)
     );
-    if len == 0 {
-        return;
-    }
     let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let code_offset = min(as_usize_saturated!(code_offset), code.len());
-    let resized = resize_memory!(interpreter, memory_offset, len);
 
+    if len == 0 {
+        if let Some(logger) = interpreter.ssa_logger.as_mut() {
+            let mem_length = None;
+            let lsn = logger.log_extcodecopy(EXTCODECOPY,
+                address,
+                memory_offset,
+                code_offset,
+                len,
+                code,
+                mem_length);
+            // record the shadow_memory
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        }
+        return;
+    }
+
+    let resized = resize_memory!(interpreter, memory_offset, len);
     // Note: this can't panic because we resized memory to fit.
     interpreter
         .shared_memory
@@ -207,7 +220,6 @@ pub fn tload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
 
 pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     require_non_staticcall!(interpreter);
-
     pop!(interpreter, offset, len);
     let len = as_usize_or_fail!(interpreter, len);
     gas_or_fail!(interpreter, gas::log_cost(N as u8, len as u64));
@@ -232,7 +244,7 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
     }
 
     let log = if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let log_data = LogData::new(topics.clone(), data.clone()).expect("LogData should have <=4 topics");
+        let log_data = LogData::new(topics.clone(), data).expect("LogData should have <=4 topics");
         let log_to_record = Log {
             address: interpreter.contract.target_address,
             data: log_data,
@@ -247,6 +259,7 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
             mem_deps,
             log_to_record.clone(),
             mem_length);
+
         log_to_record
     } else {
         let log_data = LogData::new(topics, data).expect("LogData should have <=4 topics");

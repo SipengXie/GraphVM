@@ -181,11 +181,26 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
         let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
         let bytecode_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
-  
+        
         let value = call_input.transfer_value;
         let caller = call_input.caller;
         let target_address = call_input.target_address;
         let bytecode_address = call_input.bytecode_address;
+
+        // Extract address from storage key and verify it matches bytecode_address
+        let storage_key_address = match_input!(inputs, 3, SSAOutput::Storage { key, .. } => {
+            if let StorageKey::AccountInfo(addr) = key.as_ref() { addr } 
+            else { return Err(ExecutionError::ExecutionError(
+                "Fourth operand must be Storage with AccountInfo key".to_string()
+            ))}
+        }, "Storage");
+        
+        if *storage_key_address != bytecode_address {
+            return Err(ExecutionError::ExecutionError(
+                format!("Control flow uncertain, accessed different contract addresses, initial contract address: {:?}, current contract address: {:?}", 
+                    storage_key_address, bytecode_address)
+            ));
+        }
 
         let mut outputs = Vec::with_capacity(3);
 
@@ -226,7 +241,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 bytecode: bytecode_info.code.clone().unwrap_or_default(),
                 hash: Some(bytecode_info.code_hash()),
                 target_address: target_address,
-                bytecode_address: Some(target_address),
+                bytecode_address: Some(bytecode_address),
                 caller: caller,
                 call_value: value,
             };

@@ -9,7 +9,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Check if memory size needs to be extended, return new memory size
     pub fn check_memory_size(&self, offset: usize, size: usize) -> usize {
         let required_size = if size == 0 {
-            offset
+            0
         } else {
             offset.saturating_add(size)
         };

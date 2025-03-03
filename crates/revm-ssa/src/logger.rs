@@ -68,42 +68,48 @@ macro_rules! output_account_status {
     }};
 }
 
+// 定义一个类型别名用于标记LSN（Log Sequence Number）
+/// Type alias for Log Sequence Number (LSN)
+/// 
+/// LSN is used to uniquely identify each operation in the execution trace.
+/// It helps with dependency tracking and conflict detection in the SSA form.
+pub type LsnType = u32;
 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SSALogger {
     // Current LSN
-    pub current_lsn: u16,
+    pub current_lsn: LsnType,
     // Log entries
     logs: Vec<SSALogEntry>,
     // Shadow stack for tracking stack item definitions
-    pub stack: ShadowStack,
+    pub stack_pool: Vec<ShadowStack>,
     // Latest writes to storage slots
     // records the latest lsn of sstore that write to the slot
     // used for dependency tracking
-    latest_writes: HashMap<StorageKey, u16>,
+    latest_writes: HashMap<StorageKey, LsnType>,
     // First reads of storage slots
     // records the first lsn of sload that read the slot
     // used for identifying storage conflicts
-    first_reads: HashMap<StorageKey, u16>,
+    first_reads: HashMap<StorageKey, LsnType>,
     // to record the latest lsn that modifies memory
-    last_memory: u16,
+    last_memory: LsnType,
     // to record the latest lsn that modifies return data buffer
-    last_return_data_buffer: u16,
+    last_return_data_buffer: LsnType,
     // last_interpreter_return
-    last_interpreter_return: u16,
+    last_interpreter_return: LsnType,
     // last_call
-    last_call: Vec<u16>,
+    last_sub_call: Vec<LsnType>,
     // last_create
-    last_create: Vec<u16>,
+    last_sub_create: Vec<LsnType>,
     // last_call_return
-    last_call_return: Vec<u16>,
+    last_call_return: Vec<LsnType>,
     // last_create_return
-    last_create_return: Vec<u16>,
+    last_create_return: Vec<LsnType>,
     // Initial LSN
     // Use stack to track entry_lsn at different levels
-    pub entry_lsn: Vec<u16>,
+    pub entry_lsn: Vec<LsnType>,
     // we need call_inputs to get return range
     pub call_inputs: Vec<SSACallInput>,
     pub first_call_input: Option<SSACallInput>,
@@ -116,7 +122,7 @@ pub struct SSALogger {
 
 #[derive(Clone, Debug)]
 pub struct SsaRwSet {
-    pub read_set: HashMap<StorageKey, u16>,
+    pub read_set: HashMap<StorageKey, LsnType>,
     pub write_set: HashSet<StorageKey>,
 }
 
@@ -136,11 +142,11 @@ impl SsaRwSet {
 
 impl SSALogger {
 
-    fn get_entry_lsn(&mut self) -> u16 {
+    fn get_entry_lsn(&mut self) -> LsnType {
         if self.entry_lsn.len() > 0 {
             *self.entry_lsn.last().unwrap()
         } else {
-            0
+            panic!("entry_lsn is empty");
         }
     }
 
@@ -150,14 +156,14 @@ impl SSALogger {
             current_lsn: 1,
             entry_lsn: Vec::new(),
             logs: Vec::with_capacity(512),
-            stack: ShadowStack::new(),
+            stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
             first_reads: HashMap::default(),
             last_memory: 0,
             last_return_data_buffer: 0,
             last_interpreter_return: 0,
-            last_call: vec![],
-            last_create: vec![],
+            last_sub_call: vec![],
+            last_sub_create: vec![],
             last_call_return: vec![],
             last_create_return: vec![],
             call_inputs: vec![],
@@ -174,14 +180,14 @@ impl SSALogger {
             current_lsn: 1,
             entry_lsn: Vec::new(),
             logs: Vec::with_capacity(capacity),
-            stack: ShadowStack::new(),
+            stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
             first_reads: HashMap::default(),
             last_memory: 0,
             last_return_data_buffer: 0,
             last_interpreter_return: 0,
-            last_call: vec![],
-            last_create: vec![],
+            last_sub_call: vec![],
+            last_sub_create: vec![],
             last_call_return: vec![],
             last_create_return: vec![],
             call_inputs: vec![],
@@ -199,12 +205,16 @@ impl SSALogger {
     }
 
     /// Get the current LSN
-    pub fn get_current_lsn(&self) -> u16 {
+    pub fn get_current_lsn(&self) -> LsnType {
         self.current_lsn
     }
 
     #[inline]
-    pub fn log_operation(&mut self, opcode: u8, inputs: Vec<SSAInput>, outputs: Vec<SSAOutput>) -> u16 {
+    pub fn log_operation(&mut self, opcode: u8, inputs: Vec<SSAInput>, outputs: Vec<SSAOutput>) -> LsnType {
+        if self.current_lsn == LsnType::MAX {
+            panic!("LSN overflow: reached maximum LsnType value");
+        }
+        
         let entry = SSALogEntry {
             lsn: self.current_lsn,
             opcode,
@@ -218,7 +228,11 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_operation_with_buffer(&mut self, opcode: u8, input_size: usize, output_size: usize) -> u16 {
+    pub fn log_operation_with_buffer(&mut self, opcode: u8, input_size: usize, output_size: usize) -> LsnType {
+        if self.current_lsn == LsnType::MAX {
+            panic!("LSN overflow: reached maximum LsnType value");
+        }
+
         let entry = SSALogEntry {
             lsn: self.current_lsn,
             opcode,
@@ -388,7 +402,7 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_mstore_operation(&mut self, opcode: u8, offset: usize, value: U256, mem_length: Option<usize>) -> u16 {
+    pub fn log_mstore_operation(&mut self, opcode: u8, offset: usize, value: U256, mem_length: Option<usize>) -> LsnType {
         let mut ssa_inputs = Vec::with_capacity(2);
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(offset)));
         ssa_inputs.push(pop_stack_or_const!(self, value));
@@ -421,7 +435,7 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_mcopy_operation(&mut self, opcode: u8, dst: usize, src: usize, len: usize, result: Bytes, memory_deps: Vec<MemoryDep>, mem_length: Option<usize>) -> u16 {
+    pub fn log_mcopy_operation(&mut self, opcode: u8, dst: usize, src: usize, len: usize, result: Bytes, memory_deps: Vec<MemoryDep>, mem_length: Option<usize>) -> LsnType {
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(dst)));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(src)));
@@ -430,7 +444,7 @@ impl SSALogger {
             source: memory_deps,
         });
         assert_eq!(result.len(), len,"mcopy result len not equal to len");
-        let mut ssa_outputs = Vec::with_capacity(1);
+        let mut ssa_outputs = Vec::with_capacity(2);
         ssa_outputs.push(SSAOutput::Memory(result.clone()));
 
         if let Some(mem_length) = mem_length {
@@ -548,7 +562,7 @@ impl SSALogger {
         data_offset: usize, 
         len: usize, 
         return_data: Bytes, 
-        mem_length: Option<usize>) -> u16 {
+        mem_length: Option<usize>) -> LsnType {
 
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(meme_offset)));
@@ -575,13 +589,13 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_code_copy(&mut self, 
+    pub fn log_codecopy(&mut self, 
         opcode: u8, 
         memory_offset: usize, 
         code_offset: usize, 
         len: usize, 
         code: Bytes, 
-        mem_length: Option<usize>) -> u16 {
+        mem_length: Option<usize>) -> LsnType {
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(memory_offset)));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(code_offset)));
@@ -606,7 +620,7 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_call_data_copy(&mut self, opcode: u8, memory_offset: usize, data_offset: usize, len: usize, data: Bytes, mem_length: Option<usize>) -> u16 {
+    pub fn log_call_data_copy(&mut self, opcode: u8, memory_offset: usize, data_offset: usize, len: usize, data: Bytes, mem_length: Option<usize>) -> LsnType {
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(memory_offset)));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(data_offset)));
@@ -765,7 +779,7 @@ impl SSALogger {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
             self.last_memory = self.current_lsn;
         }
-        self.last_create.push(self.current_lsn);
+        self.last_sub_create.push(self.current_lsn);
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
@@ -780,14 +794,13 @@ impl SSALogger {
     {
         let opcode = InternalOp::MAKE_CREATE_FRAME;
         let lsn = self.current_lsn;
-        self.entry_lsn.push(lsn);
         let caller = create_input.caller;
         let created_address = contract_env.target_address;
 
         let mut ssa_inputs = Vec::with_capacity(3);
         ssa_inputs.push(
             SSAInput::CreateInput { 
-                source: self.last_create.pop().unwrap_or_default()
+                source: self.last_sub_create.pop().unwrap_or_default()
             }
         );
         ssa_inputs.push(input_account_info!(self, caller));
@@ -801,9 +814,11 @@ impl SSALogger {
         ssa_outputs.push(output_account_info!(created_address, new_target_info));
         ssa_outputs.push(output_account_status!(created_address, new_target_status));
         ssa_outputs.push(SSAOutput::ContractEnv(Box::new(contract_env)));
+        self.entry_lsn.push(lsn);
+        self.generate_new_stack();
 
         if self.first_create_input.is_none() {
-            self.first_create_input = Some(create_input.clone());
+            self.first_create_input = Some(create_input);
         }
 
         self.log_storage_write(StorageKey::AccountInfo(caller), lsn);
@@ -811,6 +826,23 @@ impl SSALogger {
         self.log_storage_write(StorageKey::AccountStatus(created_address), lsn);
 
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
+    }
+
+    #[inline]
+    pub fn log_create_return_failed(&mut self, result: &SSAInterpreterResult) {
+        let opcode = InternalOp::CREATE_RETURN;
+        let lsn = self.current_lsn;
+        self.entry_lsn.pop();
+        let create_outcome = SSACreateOutcome {
+            result: result.clone(),
+            address: None,
+        };
+        let mut ssa_outputs = Vec::with_capacity(1);
+
+        ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
+        self.last_create_return.push(lsn);
+        self.remove_last_stack();
+        self.log_operation(opcode.into(), vec![], ssa_outputs);
     }
 
     #[inline]
@@ -852,6 +884,7 @@ impl SSALogger {
 
         ssa_outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
         self.last_create_return.push(lsn);
+        self.remove_last_stack();
         ssa_outputs.push(output_account_info!(address, target_info));
         self.log_storage_write(StorageKey::AccountInfo(address), lsn);
 
@@ -939,6 +972,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
+        self.call_inputs.push(ssa_call_input.clone());
         ssa_outputs.push(
             SSAOutput::CallInput(Box::new(ssa_call_input))
         );
@@ -948,7 +982,7 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-        self.last_call.push(self.current_lsn);
+        self.last_sub_call.push(self.current_lsn);
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
@@ -995,6 +1029,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
+        self.call_inputs.push(ssa_call_input.clone());
         ssa_outputs.push(
             SSAOutput::CallInput(Box::new(ssa_call_input))
         );
@@ -1005,7 +1040,7 @@ impl SSALogger {
             self.last_memory = self.current_lsn;
         }
 
-        self.last_call.push(self.current_lsn);
+        self.last_sub_call.push(self.current_lsn);
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
         
     }   
@@ -1055,6 +1090,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
+        self.call_inputs.push(ssa_call_input.clone());
         ssa_outputs.push(
             SSAOutput::CallInput(Box::new(ssa_call_input))
         );
@@ -1064,7 +1100,7 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-        self.last_call.push(self.current_lsn);
+        self.last_sub_call.push(self.current_lsn);
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
 
     }
@@ -1110,6 +1146,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
+        self.call_inputs.push(ssa_call_input.clone());
         ssa_outputs.push(
             SSAOutput::CallInput(Box::new(ssa_call_input))
         );
@@ -1119,7 +1156,7 @@ impl SSALogger {
             );
             self.last_memory = self.current_lsn;
         }
-        self.last_call.push(self.current_lsn);
+        self.last_sub_call.push(self.current_lsn);
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
@@ -1135,7 +1172,6 @@ impl SSALogger {
     {
         let opcode = InternalOp::MAKE_CALL_FRAME;
         let lsn = self.current_lsn;
-        self.entry_lsn.push(lsn);
         let value = call_input.transfer_value;
         let caller = call_input.caller;
         let target_address = call_input.target_address;
@@ -1144,7 +1180,7 @@ impl SSALogger {
         let mut ssa_inputs = Vec::with_capacity(6);
         ssa_inputs.push(
             SSAInput::CallInput {
-                source: self.last_call.pop().unwrap_or_default(),
+                source: *self.last_sub_call.last().unwrap_or(&0) // 0 if it is the first call
             }
         );
         ssa_inputs.push(input_account_info!(self, caller));
@@ -1177,13 +1213,15 @@ impl SSALogger {
         } else {
             // if the call is a contract call, we should generate a result
             ssa_outputs.push(SSAOutput::ContractEnv(Box::new(contract_env.unwrap())));
+            self.entry_lsn.push(lsn);
+            self.generate_new_stack();
         }
 
-        if self.call_inputs.is_empty() {
-            self.first_call_input = Some(call_input.clone());
+        if self.first_call_input.is_none() {
+            self.call_inputs.push(call_input.clone());
+            self.first_call_input = Some(call_input);
         }
 
-        self.call_inputs.push(call_input);
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
@@ -1201,7 +1239,7 @@ impl SSALogger {
         );
         ssa_inputs.push(
             SSAInput::CallInput {
-                source: self.last_call.pop().unwrap_or_default(),
+                source: self.last_sub_call.pop().unwrap_or_default(), // 0 if it is the first call
             }
         );
 
@@ -1214,11 +1252,12 @@ impl SSALogger {
         );
         self.last_call_return.push(self.current_lsn);
         self.entry_lsn.pop();
+        self.remove_last_stack();
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
     #[inline]
-    pub fn log_insert_call_outcome(&mut self, call_outcome: SSACallOutcome) -> u16 {
+    pub fn log_insert_call_outcome(&mut self, call_outcome: SSACallOutcome) -> LsnType {
         let opcode = InternalOp::INSERT_CALL_OUTCOME;
         let lsn = self.current_lsn;
         let out_len = call_outcome.ret_range.len();
@@ -1339,7 +1378,7 @@ impl SSALogger {
         len: usize, 
         code: Bytes,
         mem_length: Option<usize>
-    ) -> u16 {
+    ) -> LsnType {
         let mut ssa_inputs = Vec::with_capacity(5);
         ssa_inputs.push(pop_stack_or_const!(self, address.into_word().into()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(mem_offset)));
@@ -1502,46 +1541,103 @@ impl SSALogger {
     }
 
     #[inline]
-    pub fn log_storage_write(&mut self, key: StorageKey, lsn: u16) {
+    pub fn log_storage_write(&mut self, key: StorageKey, lsn: LsnType) {
         // eprintln!("log_storage_write: {:?}, {}", key, lsn);
         self.latest_writes.insert(key, lsn);
     }
 
     #[inline]
-    pub fn log_storage_read(&mut self, key: StorageKey, lsn: u16) {
+    pub fn log_storage_read(&mut self, key: StorageKey, lsn: LsnType) {
         if !self.latest_writes.contains_key(&key) {
             self.first_reads.entry(key).or_insert(lsn);
         }
     }
     
     #[inline]
-    pub fn get_storage_def(&self, key: StorageKey) -> u16 {
+    pub fn get_storage_def(&self, key: StorageKey) -> LsnType {
         *self.latest_writes.get(&key).unwrap_or(&0)
     }
 
     #[inline]
-    pub fn push_stack_def(&mut self, def: u16) -> Result<(), crate::shadow_stack::InstructionResult> {
-        self.stack.push(def)
+    pub fn generate_new_stack(&mut self) {
+        self.stack_pool.push(ShadowStack::new());
     }
 
     #[inline]
-    pub fn pop_stack_def(&mut self) -> Result<u16, crate::shadow_stack::InstructionResult> {
-        self.stack.pop()
+    pub fn remove_last_stack(&mut self) {
+        self.stack_pool.pop();
+    }
+
+    #[inline]
+    pub fn push_stack_def(&mut self, def: LsnType) -> Result<(), crate::shadow_stack::InstructionResult> {
+        let stack = self.stack_pool.last_mut().unwrap();
+        let result = stack.push(def);
+        if result.is_err() {
+            println!("Stack overflow in push: def={}, stack_len={}, limit={}", 
+                def, 
+                stack.len(), 
+                crate::shadow_stack::STACK_LIMIT
+            );
+        }
+        result
+    }
+
+    #[inline]
+    pub fn pop_stack_def(&mut self) -> Result<LsnType, crate::shadow_stack::InstructionResult> {
+        let stack = self.stack_pool.last_mut().unwrap();
+        let result = stack.pop()?;
+        if result >= self.current_lsn {
+            panic!("Invalid stack definition: LSN {} >= current LSN {}\nStack trace: {:?}", 
+                result, 
+                self.current_lsn,
+                self.stack_pool
+            );
+        }
+        Ok(result)
     }
 
     #[inline]
     pub fn dup_stack_def(&mut self, n: usize) -> Result<(), crate::shadow_stack::InstructionResult> {
-        self.stack.dup(n)
+        let stack = self.stack_pool.last_mut().unwrap();
+        let result = stack.dup(n);
+        if result.is_err() {
+            panic!("Stack error in dup: n={}, stack_len={}, limit={}", 
+                n, 
+                stack.len(), 
+                crate::shadow_stack::STACK_LIMIT
+            );
+        }
+        result
     }
 
     #[inline]
     pub fn swap_stack_def(&mut self, n: usize) -> Result<(), crate::shadow_stack::InstructionResult> {
-        self.stack.swap(n)
+        let stack = self.stack_pool.last_mut().unwrap();
+        let result = stack.swap(n);
+        if result.is_err() {
+            panic!("Stack error in swap: n={}, stack_len={}, limit={}", 
+                n, 
+                stack.len(),
+                crate::shadow_stack::STACK_LIMIT
+            );
+        }
+        result
     }
 
     #[inline]
     pub fn exchange_stack_def(&mut self, n: usize, m: usize) -> Result<(), crate::shadow_stack::InstructionResult> {
-        self.stack.exchange(n, m)
+        let stack = self.stack_pool.last_mut().unwrap();
+        let result = stack.exchange(n, m);
+        if result.is_err() {
+            panic!("Stack error in exchange: n={}, m={}, n+m={}, stack_len={}, limit={}", 
+                n, 
+                m, 
+                n + m, 
+                stack.len(),
+                crate::shadow_stack::STACK_LIMIT
+            );
+        }
+        result
     }
 
     pub fn take_logs(&mut self) -> Vec<SSALogEntry> {
@@ -1552,15 +1648,15 @@ impl SSALogger {
         &self.logs[lsn]
     }
 
-    pub fn get_latest_writes(&self) -> &HashMap<StorageKey, u16> {
+    pub fn get_latest_writes(&self) -> &HashMap<StorageKey, LsnType> {
         &self.latest_writes
     }
 
-    pub fn get_first_reads(&self) -> &HashMap<StorageKey, u16> {
+    pub fn get_first_reads(&self) -> &HashMap<StorageKey, LsnType> {
         &self.first_reads
     }
 
-    pub fn take_first_reads(&mut self) -> HashMap<StorageKey, u16> {
+    pub fn take_first_reads(&mut self) -> HashMap<StorageKey, LsnType> {
         std::mem::take(&mut self.first_reads)
     }
 
@@ -1575,7 +1671,7 @@ impl SSALogger {
     pub fn clear(&mut self) {
         self.current_lsn = 0;
         self.logs.clear();
-        self.stack = ShadowStack::new();
+        self.stack_pool = vec![ShadowStack::new()];
         self.latest_writes.clear();
         self.first_reads.clear();
     }
