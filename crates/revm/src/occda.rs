@@ -275,6 +275,7 @@ impl Occda {
                         // Each transaction needs its own inspector to track execution
                         let mut inspector = inspector_setup();
                         let db_ref = &*db;
+                        let tx_hash = format!("{}", task.tx_hash.unwrap());
                         
                         // use ssa to re-execute the transaction
                         if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
@@ -322,7 +323,7 @@ impl Occda {
                                     drop(executor);
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
-                                        &format!("{}", task.tx_hash.unwrap()), 
+                                        &tx_hash, 
                                         &nodes_to_execute_len.to_string()
                                     );
                                     continue;
@@ -332,7 +333,7 @@ impl Occda {
                                     drop(executor);
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
-                                        &format!("{}", task.tx_hash.unwrap()), 
+                                        &tx_hash, 
                                         &opcode_counts_store[idx].to_string()
                                     );
                                     // fall through to EVM re-execution path below
@@ -395,16 +396,21 @@ impl Occda {
                         let read_write_set = evm.get_read_write_set();
                         task_result.read_write_set = Some(read_write_set);
 
-
+                        let tx_hash_clone = tx_hash.clone();
                         if let Some(mut logger) = evm.take_ssa_logger() {
                             profiler::start("ssa-logger");
                             let logs = logger.take_logs();
                             let graph_wrapper = self.dag_store[idx].clone();
                             self.thread_pool.spawn(move || {
-                                profiler::start("build-dag");
+                                let start_time = std::time::Instant::now();
                                 let mut graph = graph_wrapper.write();
                                 graph.build(logs);
-                                profiler::end("build-dag");
+                                let end_time = std::time::Instant::now();
+                                profiler::note_str_unchecked(
+                                    "build-dag",
+                                    &tx_hash_clone, 
+                                    &end_time.duration_since(start_time).as_secs_f64().to_string()
+                                );
                             });
                             let reads_raw_ptr = reads_ptr as *mut HashMap<StorageKey, LsnType>;
                             unsafe {
@@ -433,7 +439,7 @@ impl Occda {
                                 let ResultAndState { state, result } = result_and_state;
                                 profiler::note_str_unchecked(
                                     "gas-used", 
-                                    &format!("{}", task.tx_hash.unwrap()), 
+                                    &tx_hash, 
                                     &result.gas_used().to_string(),
                                 );
                                 task_result.state = Some(state);
@@ -442,7 +448,7 @@ impl Occda {
                             Err(_) => {
                                 profiler::note_str_unchecked(
                                     "gas-used", 
-                                    &format!("{}", task.tx_hash.unwrap()), 
+                                    &tx_hash, 
                                     &"failure",
                                 );
                                 task_result.state = None;
@@ -638,6 +644,7 @@ impl Occda {
                 for &idx in &ready_tasks {
                     let task = &mut h_tx[idx];
                     let mut inspector = inspector_setup();
+                    let tx_hash = format!("{}", task.tx_hash.unwrap());
 
                     // Handle re-execution case (using SSA)
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
@@ -682,7 +689,7 @@ impl Occda {
                                 drop(executor);
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
-                                    &format!("{}", task.tx_hash.unwrap()), 
+                                    &tx_hash, 
                                     &nodes_to_execute_len.to_string()
                                 );
                                 continue;
@@ -692,7 +699,7 @@ impl Occda {
                                 drop(executor);
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
-                                    &format!("{}", task.tx_hash.unwrap()), 
+                                    &tx_hash, 
                                     &opcode_counts_store[idx].to_string()
                                 );
                                 // fall through to EVM re-execution path below
@@ -725,7 +732,7 @@ impl Occda {
                             let ResultAndState { state, result } = result_and_state;
                             profiler::note_str_unchecked(
                                 "redo-gas-used", 
-                                &format!("{}", task.tx_hash.unwrap()), 
+                                &tx_hash, 
                                 &result.gas_used().to_string(),
                             );
                             task_result.state = Some(state);
@@ -734,7 +741,7 @@ impl Occda {
                         Err(_) => {
                             profiler::note_str_unchecked(
                                 "redo-gas-used", 
-                                &format!("{}", task.tx_hash.unwrap()), 
+                                &tx_hash, 
                                 &"failure",
                             );
                             task_result.state = None;
