@@ -332,7 +332,7 @@ impl Occda {
                                     drop(executor);
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
-                                        &format!("tx-{}", idx), 
+                                        &format!("{}", task.tx_hash.unwrap()), 
                                         &opcode_counts_store[idx].to_string()
                                     );
                                     // fall through to EVM re-execution path below
@@ -411,11 +411,6 @@ impl Occda {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
                             profiler::end("ssa-logger");
-                            profiler::note_str_unchecked(
-                                "total-opcodes", 
-                                &format!("{}", task.tx_hash.unwrap()), 
-                                &logger.current_lsn.to_string()
-                            );
                             let first_call_input_raw_ptr = first_call_input_ptr as *mut Option<SSACallInput>;
                             let first_create_input_raw_ptr = first_create_input_ptr as *mut Option<SSACreateInput>;
                             unsafe {
@@ -697,7 +692,7 @@ impl Occda {
                                 drop(executor);
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
-                                    &format!("tx-{}", idx), 
+                                    &format!("{}", task.tx_hash.unwrap()), 
                                     &opcode_counts_store[idx].to_string()
                                 );
                                 // fall through to EVM re-execution path below
@@ -839,7 +834,7 @@ impl Occda {
                     if enable_ssa {
                         profiler::note_str_unchecked(
                             "total-opcodes", 
-                            &format!("tx-{}", task_idx), 
+                            &format!("{}", h_tx[task_idx].tx_hash.unwrap()), 
                             &opcode_counts_store[task_idx].to_string()
                         );
                     }
