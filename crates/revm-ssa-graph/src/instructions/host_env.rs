@@ -1,14 +1,14 @@
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{Spec, U256};
-use revm_ssa::{SSAInput, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use revm_ssa::SSAOutput;
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_output_stack_or_const};
 
 use super::as_usize_saturated;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute host environment operation
     #[inline]
-    pub fn execute_host_env(&self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
+    pub fn execute_host_env(&self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
         if !inputs.is_empty() {
             return Err(ExecutionError::ExecutionError(
                 format!("opcode 0x{:x} requires 0 operands", opcode)
@@ -53,13 +53,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute BLOBHASH operation
     #[inline]
-    pub fn execute_blobhash(&self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
+    pub fn execute_blobhash(&self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 format!("opcode 0x{:x} requires 1 operand", opcode)
             ));
         }
-        let value = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let value = match_ssa_output_stack_or_const!(&inputs[0], "First");
         let index = as_usize_saturated(*value);
         let tx = &self.env().tx;
         let value = match tx.blob_hashes.get(index) {

@@ -3,14 +3,12 @@
 //! They handle initial setup of the EVM, call loop and the final return of the EVM
 
 use crate::{
-    precompile::PrecompileSpecId,
-    primitives::{
+    journaled_state::AccessType, precompile::PrecompileSpecId, primitives::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
         SpecId::{CANCUN, PRAGUE, SHANGHAI},
         TxKind, BLOCKHASH_STORAGE_ADDRESS, KECCAK_EMPTY, U256,
-    },
-    Context, ContextPrecompiles,
+    }, Context, ContextPrecompiles
 };
 
 /// Main precompile load
@@ -54,6 +52,7 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
 }
 
 /// Helper function that deducts the caller balance.
+/// TODO: Add rwset here
 #[inline]
 pub fn deduct_caller_inner<SPEC: Spec>(caller_account: &mut Account, env: &Env) {
     // Subtract gas costs from the caller's account.
@@ -93,6 +92,10 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
 
     // deduct gas cost from caller's account.
     deduct_caller_inner::<SPEC>(caller_account.data, &context.evm.inner.env);
+    let journaled_state = &mut context.evm.inner.journaled_state;
+    // ! newly added logic
+    // mark write caller's balance and nonce
+    journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
 
     Ok(())
 }

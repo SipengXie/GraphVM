@@ -40,6 +40,9 @@ pub fn push<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, _ho
     interpreter.instruction_pointer = unsafe { ip.add(N) };
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_push_operation(PUSH1 + N as u8 - 1, slice);
+        if logger.stack_pool.last().unwrap().len() != interpreter.stack.len() {
+            panic!("Stack length mismatch: shadow_stack.len() = {}, stack.len() = {}, N = {}", logger.stack_pool.last().unwrap().len(), interpreter.stack.len(), N);
+        }
     }
 }
 

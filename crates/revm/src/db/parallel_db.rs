@@ -1,7 +1,5 @@
 use std::sync::Arc;
 use parking_lot::RwLock;
-use revm_ssa::{SSAOutput, StorageKey, StorageValue};
-use revm_ssa_graph::SsaDatabaseCommit;
 use std::time::{Duration, Instant};
 use crate::primitives::{Address, Account, AccountInfo, U256, Bytecode, B256, HashMap};
 use crate::db::{DatabaseRef, DatabaseCommit, CacheDB, AccountState, DbAccount, EmptyDB};
@@ -347,69 +345,3 @@ impl<DB> DatabaseCommit for ParallelDB<DB> {
         }
     }
 }
-
-impl<DB> SsaDatabaseCommit for ParallelDB<DB> {
-    fn commit_ssa_storage(&mut self, changes: Vec<SSAOutput>) {
-        let mut cache = self.cache.write();
-        for change in changes {
-            if let SSAOutput::Storage{key, value} = change {
-                match *key {
-                    StorageKey::Balance(address) => {
-                        let account = cache.accounts.entry(address).or_insert_with(|| {
-                            let mut account = DbAccount::default();
-                            account.account_state = AccountState::Touched;
-                            account
-                        });
-                        if let StorageValue::Balance(balance) = *value {
-                            account.info.balance = balance;
-                        }
-                    },
-                    StorageKey::Nonce(address) => {
-                        let account = cache.accounts.entry(address).or_insert_with(|| {
-                            let mut account = DbAccount::default();
-                            account.account_state = AccountState::Touched;
-                            account
-                        });
-                        if let StorageValue::Nonce(nonce) = *value {
-                            account.info.nonce = nonce;
-                        }
-                    },
-                    StorageKey::CodeSize(_) => {
-                    },
-                    StorageKey::Code(address) => {
-                        let account = cache.accounts.entry(address).or_insert_with(|| {
-                            let mut account = DbAccount::default();
-                            account.account_state = AccountState::Touched;
-                            account
-                        });
-                        if let StorageValue::Code(code) = *value {
-                            account.info.code = Some(Bytecode::new_raw(code));
-                        }
-                    },
-                    StorageKey::CodeHash(address) => {
-                        let account = cache.accounts.entry(address).or_insert_with(|| {
-                            let mut account = DbAccount::default();
-
-                            account.account_state = AccountState::Touched;
-                            account
-                        });
-                        if let StorageValue::CodeHash(code_hash) = *value {
-                            account.info.code_hash = code_hash.into();
-                        }
-                    },
-                    StorageKey::Slot(address, index) => {
-                        let account = cache.accounts.entry(address).or_insert_with(|| {
-                            let mut account = DbAccount::default();
-                            account.account_state = AccountState::Touched;
-                            account
-                        });
-                        if let StorageValue::Slot(slot) = *value {
-                            account.storage.insert(index, slot);
-                        }
-                    },
-                }
-            }
-        }
-    }
-}
-

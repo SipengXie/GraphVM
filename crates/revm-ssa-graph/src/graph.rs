@@ -2,6 +2,7 @@
 // use metrics::histogram;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
+use revm_ssa::logger::LsnType;
 use std::collections::{HashMap, HashSet};
 use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
@@ -11,11 +12,11 @@ pub struct SsaGraph {
     /// Graph structure
     graph: DiGraph<SSALogEntry, ()>,
     /// Mapping from LSN to node index
-    lsn_to_node: HashMap<u16, NodeIndex>,
+    lsn_to_node: HashMap<LsnType, NodeIndex>,
     /// Mapping from node index to results
     results: HashMap<NodeIndex, Vec<SSAOutput>>,
     /// Mapping from lsn to node index with storage write
-    storage_write: Vec<u16>,
+    storage_write: Vec<LsnType>,
 }
 
 
@@ -35,9 +36,7 @@ impl SsaGraph {
 
     /// Add a node
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
-        // if entry.lsn <= 3 {
-        //     eprintln!("entry: {:?}", entry);
-        // }
+        // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
         if is_storage_write!(entry.opcode) {
             // eprintln!("write_opcode:{}", lsn);
@@ -50,7 +49,7 @@ impl SsaGraph {
 
     /// Get LSN dependencies from SSAInput
 
-    pub fn get_lsn_from_input(input: &SSAInput) -> Vec<u16> {
+    pub fn get_lsn_from_input(input: &SSAInput) -> Vec<LsnType> {
         let mut lsn_vec = Vec::with_capacity(1);
         match input {
             SSAInput::Constant(_) => lsn_vec.push(0),
@@ -66,10 +65,14 @@ impl SsaGraph {
             },
             SSAInput::Storage { source, .. } => lsn_vec.push(*source),
             SSAInput::ReturnDataBuffer { source, .. } => lsn_vec.push(*source),
-            SSAInput::ContractEntry { entry_lsn, .. } => lsn_vec.push(*entry_lsn),
-            SSAInput::MemorySizeChange { last_memory, .. } => lsn_vec.push(*last_memory),
-            SSAInput::CreateInput { entry, .. } => lsn_vec.push(*entry),
-            SSAInput::CallInput { entry, .. } => lsn_vec.push(*entry),
+            SSAInput::ContractEnv { source: entry_lsn, .. } => {
+                if *entry_lsn != 2 {
+                    lsn_vec.push(*entry_lsn) // we should consider the first contract_env(lsn:2) as a constant
+                }
+            },
+            SSAInput::MemorySizeChange { source: last_memory, .. } => lsn_vec.push(*last_memory),
+            SSAInput::CreateInput { source, .. } => lsn_vec.push(*source),
+            SSAInput::CallInput { source, .. } => lsn_vec.push(*source),
             SSAInput::InterpreterResult { source, .. } => lsn_vec.push(*source),
             SSAInput::CallOutcome { source, .. } => lsn_vec.push(*source),
             SSAInput::CreateOutcome { source, .. } => lsn_vec.push(*source),
@@ -78,7 +81,7 @@ impl SsaGraph {
     }
 
     /// Set execution result for a node
-    pub fn set_result(&mut self, lsn: u16, outputs: Vec<SSAOutput>) -> Result<()> {
+    pub fn set_result(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>) -> Result<()> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
@@ -95,7 +98,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Option<&[SSAOutput]>>` - A reference to execution results if found
-    pub fn get_original_outputs(&self, lsn: u16) -> Result<Option<&[SSAOutput]>> {
+    pub fn get_original_outputs(&self, lsn: LsnType) -> Result<Option<&[SSAOutput]>> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
@@ -114,7 +117,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Option<T>>` - The extracted result if found
-    pub fn get_result<T, F>(&self, lsn: u16, extractor: F) -> Result<Option<T>>
+    pub fn get_result<T, F>(&self, lsn: LsnType, extractor: F) -> Result<Option<T>>
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
     {
@@ -129,15 +132,15 @@ impl SsaGraph {
         Ok(extractor(&self.graph[node_idx].outputs))
     }
 
-    pub fn get_result_by_lsn(&self, lsn: u16) -> Result<Option<&Vec<SSAOutput>>> {
+    pub fn get_result_by_lsn(&self, lsn: LsnType) -> Result<Option<&Vec<SSAOutput>>> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
-        Ok(self.results.get(&node_idx))
+        Ok(self.results.get(&node_idx).or(Some(&self.graph[node_idx].outputs)))
     }
 
     /// Add edges
-    pub fn add_edges(&mut self, lsn: u16) -> Result<()> {
+    pub fn add_edges(&mut self, lsn: LsnType) -> Result<()> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
@@ -182,7 +185,7 @@ impl SsaGraph {
     }
 
     /// Get mutable node
-    pub fn get_node_mut(&mut self, lsn: u16) -> Result<&mut SSALogEntry> {
+    pub fn get_node_mut(&mut self, lsn: LsnType) -> Result<&mut SSALogEntry> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
@@ -190,7 +193,7 @@ impl SsaGraph {
     }
 
     /// Get immutable node
-    pub fn get_node(&self, lsn: u16) -> Result<&SSALogEntry> {
+    pub fn get_node(&self, lsn: LsnType) -> Result<&SSALogEntry> {
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
@@ -204,7 +207,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Vec<SSALogEntry>>` - A vector of reachable nodes in dependency order
-    pub fn get_reachable_nodes(&self, start_lsn: u16) -> Result<Vec<SSALogEntry>> {
+    pub fn get_reachable_nodes(&self, start_lsn: LsnType) -> Result<Vec<SSALogEntry>> {
         // Get the starting node index
         let start_idx = *self.lsn_to_node.get(&start_lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", start_lsn))
@@ -224,8 +227,8 @@ impl SsaGraph {
     /// Get all LSNs in the graph
     /// 
     /// # Returns
-    /// * `Vec<u16>` - A vector of all LSNs in the graph
-    pub fn get_lsns(&self) -> Vec<u16> {
+    /// * `Vec<LsnType>` - A vector of all LSNs in the graph
+    pub fn get_lsns(&self) -> Vec<LsnType> {
         self.lsn_to_node.iter().map(|(lsn, _)| *lsn).collect()
     }
 

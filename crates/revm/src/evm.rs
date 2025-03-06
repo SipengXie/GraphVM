@@ -14,6 +14,30 @@ use std::{boxed::Box, vec::Vec};
 /// EVM call stack limit.
 pub const CALL_STACK_LIMIT: u64 = 1024;
 
+
+/// Recovers the SSA logger from the frame.
+#[macro_export]
+macro_rules! recover_ssa_logger_from_frame {
+    ($self:expr, $stack_frame:expr) => {
+        let interpreter = &mut $stack_frame.frame_data_mut().interpreter;
+        if interpreter.ssa_logger.is_some() {
+            $self.context
+                .evm
+                .recover_ssa_logger_from_interpreter(interpreter);
+        }
+    };
+}
+
+/// Transfers the SSA logger to the frame.
+#[macro_export]
+macro_rules! transfer_ssa_logger_to_frame {
+    ($self:expr, $stack_frame:expr) => {
+        let interpreter = &mut $stack_frame.frame_data_mut().interpreter;
+        if $self.context.evm.ssa_logger.is_some() {
+            $self.context.evm.transfer_ssa_logger_to_interpreter(interpreter);
+        }
+    };
+}
 /// EVM instance containing both internal EVM context and external context
 /// and the handler that dictates the logic of EVM (or hardfork specification).
 pub struct Evm<'a, EXT, DB: Database> {
@@ -69,17 +93,6 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
         EvmBuilder::new(self)
     }
 
-    /// Recovers the SSA logger from the frame.
-    #[inline]
-    fn recover_ssa_logger_from_frame(&mut self, stack_frame: &mut Frame) {
-        let interpreter = &mut stack_frame.frame_data_mut().interpreter;
-        if interpreter.ssa_logger.is_some() {
-            self.context
-                .evm
-                .recover_ssa_logger_from_interpreter(interpreter);
-        }
-    }
-
     /// Take ownership of the SSA logger, leaving None in its place
     #[inline]
     pub fn take_ssa_logger(&mut self) -> Option<SSALogger> {
@@ -112,7 +125,22 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
                 self.handler
                     .execute_frame(stack_frame, &mut shared_memory, &mut self.context)?;
             // ! recover ssa logger from frame if it has one, it will return to the frame we back to the frame logic
-            self.recover_ssa_logger_from_frame(stack_frame);
+            recover_ssa_logger_from_frame!(self, stack_frame);
+
+            // !!!
+            if let Some(logger) = &self.context.evm.ssa_logger {
+                let js_depth = self.context.evm.journaled_state.depth;
+                let logger_stack_depth = logger.stack_pool.len();
+                
+                if js_depth != logger_stack_depth-1 {
+                    assert!(
+                        js_depth == logger_stack_depth,
+                        "Depth mismatch: journaled_state.depth={}, logger.stack_pool.len()={}",
+                        js_depth,
+                        logger_stack_depth
+                    );
+                }
+            }
 
             // Take error and break the loop, if any.
             // This error can be set in the Interpreter when it interacts with the context.
@@ -165,6 +193,8 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
                         return Ok(result);
                     };
                     stack_frame = top_frame;
+                    // ! transfer ssa logger to the top frame
+                    transfer_ssa_logger_to_frame!(self, stack_frame);
                     let ctx = &mut self.context;
                     // Insert result to the top frame.
                     match result {
@@ -359,27 +389,30 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // deduce caller balance with its limit.
         // ! Add deduct_caller log here and add execute_deduct_caller to the executor handler.
         if  ctx.evm.inner.ssa_logger.is_some() {
-            let caller_account = ctx
+            let origin_balance = ctx
                 .evm
                 .inner
                 .journaled_state
-                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
-            let origin_balance = caller_account.info.balance;
-            let origin_nonce = caller_account.info.nonce;
+                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?
+                .info.balance;
 
             pre_exec.deduct_caller(ctx)?;
 
-            let caller_account = ctx
+            let after_account = ctx
                 .evm
                 .inner
                 .journaled_state
-                .load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?;
-            let new_balance = caller_account.info.balance;
-            let pre_deduct = origin_balance - new_balance;
-            let caller = ctx.evm.env.tx.caller;
+                .account(ctx.evm.inner.env.tx.caller);
+
+            let gas_cost = origin_balance - after_account.info.balance;
+
             let is_create = matches!(ctx.evm.env.tx.transact_to, TxKind::Create);
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_deduct_caller(caller, origin_balance, origin_nonce, pre_deduct, is_create);
+            logger.log_deduct_caller(
+                ctx.evm.inner.env.tx.caller, 
+                after_account.info.clone(), 
+                gas_cost, 
+                is_create);
         } else {
             pre_exec.deduct_caller(ctx)?;
         }
@@ -432,19 +465,54 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // calculate final refund and add EIP-7702 refund to gas.
         post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
-        // TODO: Add refund log and add execute_refund to the executor handler.
         if ctx.evm.inner.ssa_logger.is_some() {
-            // eprintln!("Log Refund Gas");
-            let caller_origin_balance = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?.info.balance;
+            let origin_balance = ctx
+            .evm
+            .inner
+            .journaled_state
+            .account(ctx.evm.inner.env.tx.caller)
+            .info.balance;
+
             post_exec.reimburse_caller(ctx, result.gas())?;
-            let caller_new_balance = ctx.evm.inner.journaled_state.load_account(ctx.evm.inner.env.tx.caller, &mut ctx.evm.inner.db)?.info.balance;
+
+            let after_account = ctx
+            .evm
+            .inner
+            .journaled_state
+            .account(ctx.evm.inner.env.tx.caller);
+
+            let gas_refund = origin_balance - after_account.info.balance;
+
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, caller_origin_balance, caller_new_balance - caller_origin_balance);
+            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, after_account.info.clone(), gas_refund);
         } else {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
         // Reward beneficiary
-        // TODO: If needed this should also be logged.
+        // // TODO: Extra work is needed to compelete the logic here.
+        // if ctx.evm.inner.ssa_logger.is_some() {
+        //     let origin_balance = ctx
+        //     .evm
+        //     .inner
+        //     .journaled_state
+        //     .load_account(ctx.evm.inner.env.block.coinbase, &mut ctx.evm.inner.db)?
+        //     .info.balance;
+            
+        //     post_exec.reward_beneficiary(ctx, result.gas())?;
+
+        //     let after_account = ctx
+        //     .evm
+        //     .inner
+        //     .journaled_state
+        //     .account(ctx.evm.inner.env.block.coinbase);
+
+        //     let gas_reward = origin_balance - after_account.info.balance;
+
+        //     let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
+        //     logger.log_reward_beneficiary(ctx.evm.inner.env.block.coinbase, after_account.info.clone(), gas_reward);
+        // } else {
+        //     post_exec.reward_beneficiary(ctx, result.gas())?;
+        // }
         post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
 
@@ -459,23 +527,17 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             // Add all first reads
             for (key, _) in logger.get_first_reads() {
                 match key {
-                    StorageKey::Balance(addr) => ret.add_read(*addr, AccessType::Balance),
-                    StorageKey::Nonce(addr) => ret.add_read(*addr, AccessType::Nonce),
-                    StorageKey::Code(addr) => ret.add_read(*addr, AccessType::Code),
                     StorageKey::Slot(addr, slot) => ret.add_read(*addr, AccessType::StorageSlot(*slot)),
-                    StorageKey::CodeSize(addr) => ret.add_read(*addr, AccessType::Code),
-                    StorageKey::CodeHash(addr) => ret.add_read(*addr, AccessType::Code),
+                    StorageKey::AccountInfo(addr) => ret.add_read(*addr, AccessType::AccountInfo),
+                    StorageKey::AccountStatus(addr) => ret.add_read(*addr, AccessType::AccountStatus),
                 }
             }
             // Add all latest writes 
             for key in logger.get_latest_writes().keys() {
                 match key {
-                    StorageKey::Balance(addr) => ret.add_write(*addr, AccessType::Balance),
-                    StorageKey::Nonce(addr) => ret.add_write(*addr, AccessType::Nonce),
-                    StorageKey::Code(addr) => ret.add_write(*addr, AccessType::Code),
                     StorageKey::Slot(addr, slot) => ret.add_write(*addr, AccessType::StorageSlot(*slot)),
-                    StorageKey::CodeSize(addr) => ret.add_write(*addr, AccessType::Code),
-                    StorageKey::CodeHash(addr) => ret.add_write(*addr, AccessType::Code),
+                    StorageKey::AccountInfo(addr) => ret.add_write(*addr, AccessType::AccountInfo),
+                    StorageKey::AccountStatus(addr) => ret.add_write(*addr, AccessType::AccountStatus),
                 }
             }
             return ret;

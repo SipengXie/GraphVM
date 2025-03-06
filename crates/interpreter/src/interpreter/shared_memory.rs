@@ -1,6 +1,6 @@
 use core::{cmp::min, fmt, ops::Range};
 use crate::primitives::{hex, B256, U256};
-use revm_ssa::MemoryDep;
+use revm_ssa::{logger::LsnType, MemoryDep};
 use std::vec::Vec;
 
 /// A tuple of (LSN, offset) representing where this byte was written from
@@ -8,7 +8,7 @@ use std::vec::Vec;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MemoryDef {
     /// The LSN of the instruction that wrote this byte
-    pub lsn: u16,
+    pub lsn: LsnType,
     /// The offset in the result of that instruction
     pub offset: usize,
 }
@@ -108,7 +108,11 @@ impl SharedMemory {
 
     /// Record a memory write operation in the shadow memory
     #[inline]
-    pub fn record_shadow_write(&mut self, addr: usize, size: usize, lsn: u16) {
+    pub fn record_shadow_write(&mut self, addr: usize, size: usize, lsn: LsnType) {
+        // short circuit for empty write
+        if size == 0 {
+            return;
+        }
         if let Some(ref mut shadow) = self.shadow_buffer {
             // Ensure capacity
             let required_len = self.last_checkpoint + addr + size;
@@ -164,6 +168,10 @@ impl SharedMemory {
     /// Convert the given memory range to memory dependencies logs
     #[inline]
     pub fn get_shadow_deps(&self, range: Range<usize>) -> Vec<MemoryDep> {
+        // short circuit for empty range
+        if range.len() == 0 {
+            return Vec::new();
+        }
         let defs = self.get_shadow_defs(range.clone());
         if defs.is_empty() {
             return Vec::new();
@@ -176,7 +184,7 @@ impl SharedMemory {
         let mut len = 0;
 
         // Helper function to push current memory segment
-        let mut push_segment = |start: usize, len: usize, lsn: u16, offset: usize| {
+        let mut push_segment = |start: usize, len: usize, lsn: LsnType, offset: usize| {
             if lsn != 0 {
                 result.push(MemoryDep { // self_offset..self_offset+len is set by lsn's output[lsn_offset..lsn_offset+len]
                     lsn,

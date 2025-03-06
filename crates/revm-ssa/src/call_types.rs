@@ -22,8 +22,8 @@ pub struct SSACallInput {
     pub scheme: SSACallScheme,
     /// Return range
     pub ret_range: Range<usize>,
-    /// Contract code
-    pub code: Option<Bytes>,
+    /// Gas limit
+    pub gas_limit: u64,
 }
 
 /// Simplified Call output structure
@@ -48,8 +48,6 @@ pub struct SSACreateInput {
     pub init_code: Bytes,
     /// Creation scheme
     pub scheme: SSACreateScheme,
-    /// Target address
-    pub target: Address,
 }
 
 /// Simplified Create output structure

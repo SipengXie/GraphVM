@@ -1,146 +1,138 @@
 use revm_primitives::db::DatabaseRef;
+use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode};
 use revm_primitives::{
     Address, Bytes, B256, Spec, U256,
-    SpecId::{LONDON, SPURIOUS_DRAGON},
 };
+use revm_ssa::logger::to_analysed;
 use revm_ssa::{
-    SSACallInput, SSACallOutcome, SSACallScheme,
-    SSACreateInput, SSACreateOutcome, SSACreateScheme,
-    SSAInput, SSAInstructionResult, SSAOutput,
-    StorageKey, StorageValue,
+    output_account_info, output_account_status, ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult, SSAOutput, StorageKey, StorageValue
 };
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
 
-use super::as_usize_saturated;
+use super::{as_u64_saturated, as_usize_saturated, u256_to_bool};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
 
     /// Execute deduct caller operation
     #[inline]
-    pub fn execute_deduct_caller(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() < 3 {
+    pub fn execute_deduct_caller(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
-                "DEDUCT_CALLER requires at least 3 operands".to_string()
+                "DEDUCT_CALLER requires at least 4 operands".to_string()
             ));
         }
-        let is_call = inputs.len() == 4;
-        let caller = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be ContractEntry".to_string()
-            )),
-        };
-        let origin_balance = match &inputs[1] {
-            SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Storage value".to_string()
-            )),
-        };
-        let deduct_balance = match &inputs[2] {
-            SSAInput::Constant ( value, .. )=> value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Constant".to_string()
-            )),
+        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "Constant");
+        let is_call = match_input!(inputs, 1, SSAOutput::Constant(value, ..) => u256_to_bool(*value)?, "Constant");
+        let caller_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let gas_cost = match_input!(inputs, 3, SSAOutput::Constant ( value, .. )=> value, "Constant");
+
+        let caller = Address::from_word(B256::from(*caller));
+        let new_caller_info = AccountInfo {
+            balance: caller_info.balance - gas_cost,
+            nonce: if is_call { caller_info.nonce } else { caller_info.nonce + 1 },
+            code: caller_info.code.clone(),
+            code_hash: caller_info.code_hash,
         };
 
-        let new_balance = origin_balance - deduct_balance;
-
-        let mut outputs = vec![
+        let outputs = vec![
             SSAOutput::Storage {
-                key: Box::new(StorageKey::Balance(caller)),
-                value: Box::new(StorageValue::Balance(new_balance)),
-            }
+                key: Box::new(StorageKey::AccountInfo(caller)),
+                value: Box::new(StorageValue::AccountInfo(new_caller_info)),
+            },
         ];
-
-        if is_call {
-            let origin_nonce = match &inputs[3] {
-                SSAInput::Storage { value, .. } => value.as_nonce().unwrap(),
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Third operand must be Storage value".to_string()
-                )),
-            };
-            let new_nonce = origin_nonce + 1;
-            outputs.push(SSAOutput::Storage {
-                key: Box::new(StorageKey::Nonce(caller)),
-                value: Box::new(StorageValue::Nonce(new_nonce)),
-            });
-        }
 
         Ok(outputs)
     }
 
     #[inline]
-    pub fn execute_refund_gas(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_refund_gas(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         // eprintln!("Refund Gas");
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
-                "REFUND_GAS requires exactly 2 operands (caller, refund_gas)".to_string()
+                "REFUND_GAS requires exactly 3 operands (caller, refund_gas)".to_string()
             ));
         }
-        let caller = match &inputs[0] {
-            SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be ContractEntry".to_string()
-            )),
+        let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "Constant");
+        let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let refund_gas = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Constant");
+        
+        let caller = Address::from_word(B256::from(*caller));
+        let new_caller_info = AccountInfo {
+            balance: caller_info.balance + refund_gas,
+            nonce: caller_info.nonce,
+            code: caller_info.code.clone(),
+            code_hash: caller_info.code_hash,
         };
-        let origin_balance = match &inputs[1] {
-            SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Storage value".to_string()
-            )),
-        };  
-        let refund_gas = match &inputs[2] {
-            SSAInput::Constant ( value, .. )=> value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Constant".to_string()
-            )),
-        };
-        // Print original balance before reimbursement
-        // eprintln!("Original balance before reimbursement: {}", origin_balance);
-        let new_balance = origin_balance + refund_gas;
-        // Print new balance after reimbursement
-        // eprintln!("New balance after reimbursement: {}", new_balance);
         
         let outputs = vec![
             SSAOutput::Storage {
-                key: Box::new(StorageKey::Balance(caller)),
-                value: Box::new(StorageValue::Balance(new_balance)),
+                key: Box::new(StorageKey::AccountInfo(caller)),
+                value: Box::new(StorageValue::AccountInfo(new_caller_info)),
             },
         ];
         Ok(outputs)
     }
 
+    #[inline]
+    pub fn execute_reward_beneficiary(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 3 {
+            return Err(ExecutionError::ExecutionError(
+                "REWARD_BENEFICIARY requires exactly 3 operands".to_string()
+            ));
+        }
+        let beneficiary = match_input!(inputs, 0, SSAOutput::Constant (value) => value, "Constant");
+        let beneficiary_account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
+        let reward = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Constant");
+
+        let beneficiary = Address::from_word(B256::from(*beneficiary));
+        let new_beneficiary_account_info = AccountInfo {
+            balance: beneficiary_account_info.balance + reward,
+            nonce: beneficiary_account_info.nonce,
+            code: beneficiary_account_info.code.clone(),
+            code_hash: beneficiary_account_info.code_hash,
+        };
+
+        let outputs = vec![
+            SSAOutput::Storage {
+                key: Box::new(StorageKey::AccountInfo(beneficiary)),
+                value: Box::new(StorageValue::AccountInfo(new_beneficiary_account_info)),
+            },
+        ];
+        Ok(outputs)
+    }
     /// Execute call operation
     #[inline]
-    pub fn execute_call(&mut self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
+    pub fn execute_call(&mut self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 9 {
             return Err(ExecutionError::ExecutionError(
                 "CALL requires exactly 9 operands (gas, to, value, in_offset, in_len, out_offset, out_len, input)".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let in_offset = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
-        let in_len = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
-        let out_offset = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
-        let out_len = match_ssa_input_stack_or_const!(&inputs[6], "Seventh");
+        let gas_limit = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let value = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let in_offset = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
+        let in_len = match_ssa_output_stack_or_const!(&inputs[4], "Fifth");
+        let out_offset = match_ssa_output_stack_or_const!(&inputs[5], "Sixth");
+        let out_len = match_ssa_output_stack_or_const!(&inputs[6], "Seventh");
         let input = match &inputs[7] {
-            SSAInput::Memory { value, .. } => value,
+            SSAOutput::Memory (value) => value,
             _ => return Err(ExecutionError::ExecutionError(
                 "Eighth operand must be Memory".to_string()
             )),
         };
         let target_address = match &inputs[8] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
+            SSAOutput::ContractEnv(value) => value.target_address,
             _ => return Err(ExecutionError::ExecutionError(
-                "Ninth operand must be ContractEntry".to_string()
+                "Ninth operand must be ContractEnv".to_string()
             )),
         };
+        let gas_limit = as_u64_saturated(*gas_limit);
         let out_offset = as_usize_saturated(*out_offset);
         let out_len = as_usize_saturated(*out_len);
         let in_offset = as_usize_saturated(*in_offset);
         let in_len = as_usize_saturated(*in_len);
+
         let ssa_call_input = SSACallInput {
             input: input.clone(),
             target_address: Address::from_word(B256::from(*to)),
@@ -154,10 +146,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 )),
             },
             ret_range: out_offset..out_offset+out_len,
-            code: None
+            gas_limit: gas_limit,
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
+        let mut outputs = vec![SSAOutput::CallInput(Box::new(ssa_call_input))];
         let new_size_1 = if in_len == 0 {
             0
         } else {
@@ -174,92 +166,102 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute make call frame operation
+    /// The initial call frame is created by the evm, we should take from the ssa_logger
+    /// TODO: achieve precompile in this function
     #[inline]
-    pub fn execute_make_call_frame(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() < 2 {
+    pub fn execute_make_call_frame(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
-                "MAKE_CALL_FRAME requires at least 2 operands (call_input, code)".to_string()
+                "MAKE_CALL_FRAME requires at least 4 operands".to_string()
             ));
 
         }
 
-        let call_input = match &inputs[0] {
-            SSAInput::CallInput { input, .. } => input,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be CallInput".to_string()
-            )),
-        };
+        let call_input = match_input!(inputs, 0, SSAOutput::CallInput(value) => value, "CallFrame");
+        let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
+        let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
+        let bytecode_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage(AccountInfo)");
+        
+        let value = call_input.transfer_value;
+        let caller = call_input.caller;
+        let target_address = call_input.target_address;
+        let bytecode_address = call_input.bytecode_address;
 
-        let code = match &inputs[1] {
-            SSAInput::Storage { value, .. } => value.as_code().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Storage value".to_string()
-            )),
-        };
-
-        let mut new_call_input = call_input.clone();
-        new_call_input.code = Some(code.clone());
-
-        let mut outputs = vec![
-            SSAOutput::CallFrame(new_call_input)
-        ];
-
-        if !call_input.transfer_value.is_zero() {
-            let old_caller_balance = match &inputs[2] {
-                SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Third operand must be Storage value".to_string()
-                )),
-            };
-            let old_target_balance = match &inputs[3] {
-                SSAInput::Storage { value, .. } => value.as_balance().unwrap(),
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Fourth operand must be Storage value".to_string()
-                )),
-            };
-            if old_caller_balance < call_input.transfer_value {
-                return Err(ExecutionError::ExecutionError(
-                    format!("Insufficient balance: need {}, had {}", call_input.transfer_value, old_caller_balance).to_string()
-                ));
-            }
-            let new_caller_balance = old_caller_balance - call_input.transfer_value;
-            let new_target_balance = old_target_balance + call_input.transfer_value;
-
-            outputs.push(SSAOutput::Storage { 
-                key: Box::new(StorageKey::Balance(call_input.caller)), 
-                value: Box::new(StorageValue::Balance(new_caller_balance)), 
-            });
-            outputs.push(SSAOutput::Storage { 
-                key: Box::new(StorageKey::Balance(call_input.target_address)), 
-                value: Box::new(StorageValue::Balance(new_target_balance)), 
-            });
+        // Extract address from storage key and verify it matches bytecode_address
+        let storage_key_address = match_input!(inputs, 3, SSAOutput::Storage { key, .. } => {
+            if let StorageKey::AccountInfo(addr) = key.as_ref() { addr } 
+            else { return Err(ExecutionError::ExecutionError(
+                "Fourth operand must be Storage with AccountInfo key".to_string()
+            ))}
+        }, "Storage");
+        
+        if *storage_key_address != bytecode_address {
+            return Err(ExecutionError::ExecutionError(
+                format!("Control flow uncertain, accessed different contract addresses, initial contract address: {:?}, current contract address: {:?}", 
+                    storage_key_address, bytecode_address)
+            ));
         }
 
+        let mut outputs = Vec::with_capacity(3);
+
+        if !value.is_zero() {
+            let new_caller_info = AccountInfo {
+                nonce: caller_info.nonce,
+                balance: caller_info.balance.saturating_sub(value),
+                code: caller_info.code.clone(),
+                code_hash: caller_info.code_hash,
+            };
+            let new_target_info = AccountInfo {
+                nonce: target_info.nonce,
+                balance: target_info.balance.saturating_add(value),
+                code: target_info.code.clone(),
+                code_hash: target_info.code_hash,
+            };
+            outputs.push(output_account_info!(caller, new_caller_info));
+            outputs.push(output_account_info!(target_address, new_target_info));
+        }
+
+        let bytecode = bytecode_info.code.clone().unwrap_or_default();
+
+        if self.is_precompile(&bytecode_address) {
+            // if is precompile ..
+            let precompile = self.call_precompile(&bytecode_address, &call_input.input, call_input.gas_limit);
+            outputs.push(SSAOutput::InterpreterResult(precompile));
+        } else if bytecode.is_empty() {
+            // if is simple transfer ..
+            let ssa_interpreter_result = SSAInterpreterResult {
+                result: SSAInstructionResult::Ok,
+                output: Bytes::default(),
+            };
+            outputs.push(SSAOutput::InterpreterResult(ssa_interpreter_result));
+        } else {
+            // if is contract call
+            let contract = ContractEnv {
+                input: call_input.input.clone(),
+                bytecode: bytecode_info.code.clone().unwrap_or_default(),
+                hash: Some(bytecode_info.code_hash()),
+                target_address: target_address,
+                bytecode_address: Some(bytecode_address),
+                caller: caller,
+                call_value: value,
+            };
+            outputs.push(SSAOutput::ContractEnv(Box::new(contract)));
+        }
+        
         Ok(outputs)
     }
 
     /// Execute call return operation
     #[inline]
-    pub fn execute_call_return(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_call_return(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "CALL_RETURN requires exactly 2 operands (interpreter_result, call_input)".to_string()
             ));
         }
 
-        let interpreter_result = match &inputs[0] {
-            SSAInput::InterpreterResult { result, .. } => result,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be InterpreterResult".to_string()
-            )),
-        };
-
-        let call_input = match &inputs[1] {
-            SSAInput::CallInput { input, .. } => input,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be CallInput".to_string()
-            )),
-        };
+        let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "InterpreterResult");
+        let call_input = match_input!(inputs, 1, SSAOutput::CallInput(input) => input, "CallFrame");
 
         let ret_range = call_input.ret_range.clone();
 
@@ -273,19 +275,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute insert call outcome operation
     #[inline]
-    pub fn execute_insert_call_outcome(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_insert_call_outcome(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "INSERT_CALL_OUTCOME requires exactly 1 operand (call_outcome)".to_string()
             ));
         }
 
-        let call_outcome = match &inputs[0] {
-            SSAInput::CallOutcome { outcome, .. } => outcome,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be CallOutcome".to_string()
-            )),
-        };
+        let call_outcome = match_input!(inputs, 0, SSAOutput::CallOutcome(outcome) => outcome, "CallOutcome");
 
         let out_len = call_outcome.ret_range.len();
         let return_data_buffer = call_outcome.result.output.clone();
@@ -316,29 +313,19 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute create operation
     #[inline]
-    pub fn execute_create(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_create(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() < 5 {
             return Err(ExecutionError::ExecutionError(
                 "CREATE requires at least 5 operands (value, code_offset, len, code, caller)".to_string()
             ));
         }
-        let value = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let code_offset = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let len = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let code = match &inputs[3] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fourth operand must be Memory".to_string()
-            )),
-        };
-        let target = match &inputs[4] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Fifth operand must be ContractEntry".to_string()
-            )),
-        };
+        let value = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let code_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let len = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let code = match_input!(inputs, 3, SSAOutput::Memory(value) => value, "Memory");
+        let contract_address = match_input!(inputs, 4, SSAOutput::ContractEnv(value) => value.target_address, "ContractEnv");
         let salt = if inputs.len() == 6 {
-            Some(match_ssa_input_stack_or_const!(&inputs[5], "Sixth"))
+            Some(match_ssa_output_stack_or_const!(&inputs[5], "Sixth"))
         } else {
             None
         };
@@ -351,15 +338,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let ssa_create_input = SSACreateInput {
             init_code: padded_code_slice.into(),
             value: *value,
-            caller: target,
+            caller: contract_address,
             scheme: if salt.is_some() {
                 SSACreateScheme::Create2 { salt: *salt.unwrap() }
             } else {
                 SSACreateScheme::Create
             },
-            target: Address::ZERO,
         };
-        let mut outputs = vec![SSAOutput::CreateFrame(Box::new(ssa_create_input))];
+        let mut outputs = vec![SSAOutput::CreateInput(Box::new(ssa_create_input))];
 
         let new_size = self.check_memory_size(as_usize_saturated(*code_offset), len);
         if new_size > self.memory_size() {
@@ -373,127 +359,118 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute make create frame operation
     #[inline]
-    pub fn execute_make_create_frame(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_make_create_frame(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         // eprintln!("execute_make_create_frame: {:?}", inputs);cl
-        if inputs.len() != 2 {
+        if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
-                "MAKE_CREATE_FRAME requires exactly 2 operands (create_input, code)".to_string()
+                "MAKE_CREATE_FRAME requires exactly 5 operands".to_string()
             ));
         }
 
-        let create_input = match &inputs[0] {
-            SSAInput::CreateInput { input, .. } => input,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be CreateInput".to_string()
-            )),
-        };
-        let nonce = match &inputs[1] {
-            SSAInput::Storage { value, .. } => value.as_nonce().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Storage value".to_string()
-            )),
-        };
-
+        let create_input = match_input!(inputs, 0, SSAOutput::CreateInput(input) => input, "First");
+        let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+        let created_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
+        
         let caller = create_input.caller;
-        let created_address = match create_input.scheme {
-            SSACreateScheme::Create => create_input.caller.create(nonce),
+        let mut init_code_hash = B256::ZERO;
+        let target = match create_input.scheme {
+            SSACreateScheme::Create => caller.create(caller_info.nonce),
             SSACreateScheme::Create2 { salt } => {
-                let init_code_hash = revm_primitives::keccak256(&create_input.init_code);
-                create_input.caller.create2(salt.to_be_bytes(), init_code_hash)
+                init_code_hash = keccak256(&create_input.init_code);
+                caller.create2(salt.to_be_bytes(), init_code_hash)
             }
         };
-        let mut create_input = create_input.clone();
-        create_input.target = created_address;
+        
+        let new_caller_info = AccountInfo {
+            balance: caller_info.balance - create_input.value,
+            nonce: caller_info.nonce + 1,
+            code_hash: caller_info.code_hash,
+            code: caller_info.code.clone(),
+        };
 
-        Ok(vec![
-            SSAOutput::CreateFrame(create_input),
-            SSAOutput::Storage {
-                key: Box::new(StorageKey::Nonce(caller)),
-                value: Box::new(StorageValue::Nonce(nonce+1)),
-            }
-        ])
+        let new_created_info = AccountInfo {
+            balance: created_info.balance + create_input.value,
+            nonce: 1,
+            code_hash: created_info.code_hash,
+            code: created_info.code.clone(),
+        };
+
+        let new_created_status = AccountStatus::Created;
+
+        let bytecode = Bytecode::new_legacy(create_input.init_code.clone());
+        let contract_env = ContractEnv {
+            input: Bytes::new(),
+            bytecode: bytecode,
+            caller: caller,
+            hash: Some(init_code_hash),
+            target_address: target,
+            bytecode_address: None,
+            call_value: create_input.value,
+        };
+
+        let mut outputs = Vec::with_capacity(4);
+        outputs.push(output_account_info!(caller, new_caller_info));
+        outputs.push(output_account_info!(target, new_created_info));
+        outputs.push(output_account_status!(target, new_created_status));
+        outputs.push(SSAOutput::ContractEnv(Box::new(contract_env)));
+
+        Ok(outputs)
     }
 
     /// Execute create return operation
     #[inline]
-    pub fn execute_create_return(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
+    pub fn execute_create_return(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 4 {
             return Err(ExecutionError::ExecutionError(
-                "CREATE_RETURN requires exactly 2 operands (interpreter_result, create_input)".to_string()
+                "CREATE_RETURN requires exactly 4 operands".to_string()
             ));
         }
 
-        let interpreter_result = match &inputs[0] {
-            SSAInput::InterpreterResult { result, .. } => result,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be InterpreterResult".to_string()
-            )),
-        };
+        let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "First");
+        let address = match_input!(inputs, 1, SSAOutput::ContractEnv(input) => input.target_address, "Second");
+        let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
+        let analysis_kind = match_input!(inputs, 3, SSAOutput::Constant(value) => value, "Fifth");
+        let analysis_kind = u256_to_bool(*analysis_kind)?;
 
-        let create_input = match &inputs[1] {
-            SSAInput::CreateInput { input, .. } => input,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be CreateInput".to_string()
-            )),
-        };
+        // TODO: Gas metering and error handling
 
-        let address = create_input.target;
-        let instruction_result = interpreter_result.result;
-        let mut create_outcome = SSACreateOutcome {
+        let create_outcome = SSACreateOutcome {
             result: interpreter_result.clone(),
             address: Some(address),
         };
 
-        let mut outputs = vec![];
+        let raw_code = interpreter_result.output.clone();
+        let bytecode = if analysis_kind {
+            to_analysed(Bytecode::new_legacy(raw_code))
+        } else {
+            Bytecode::new_legacy(raw_code)
+        };
+        let codehash = bytecode.hash_slow();
 
-        // Handle basic error cases
-        if !instruction_result.is_ok() {
-            create_outcome.address = None;
-            outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
-            return Ok(outputs);
-        }
+        let new_target_info = AccountInfo {
+            balance: target_info.balance,
+            nonce: target_info.nonce,
+            code_hash: codehash,
+            code: Some(bytecode),
+        };
 
-        // London fork: Check if the first byte is 0xEF
-        if SPEC::enabled(LONDON) && interpreter_result.output.first() == Some(&0xEF) {
-            create_outcome.address = None;
-            create_outcome.result.result = SSAInstructionResult::Error;
-            outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
-            return Ok(outputs);
-        }
-
-        // Spurious Dragon fork: Contract size limit (0x6000 ~25kb)
-        if SPEC::enabled(SPURIOUS_DRAGON) && interpreter_result.output.len() > 0x6000 {
-            create_outcome.address = None;
-            create_outcome.result.result = SSAInstructionResult::Error;
-            outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
-            return Ok(outputs);
-        }
-
-        // Handle successful case
+        let mut outputs = Vec::with_capacity(2);
         outputs.push(SSAOutput::CreateOutcome(Box::new(create_outcome)));
-        outputs.push(SSAOutput::Storage { 
-            key: Box::new(StorageKey::Code(address)), 
-            value: Box::new(StorageValue::Code(interpreter_result.output.clone())) 
-        });
+        outputs.push(output_account_info!(address, new_target_info));
 
         Ok(outputs)
     }
 
     /// Execute insert create outcome operation
     #[inline]
-    pub fn execute_insert_create_outcome(&mut self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_insert_create_outcome(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "INSERT_CREATE_OUTCOME requires exactly 1 operand (create_outcome)".to_string()
             ));
         }
 
-        let create_outcome = match &inputs[0] {
-            SSAInput::CreateOutcome { outcome, .. } => outcome,
-            _ => return Err(ExecutionError::ExecutionError(
-                "First operand must be CreateOutcome".to_string()
-            )),
-        };
+        let create_outcome = match_input!(inputs, 0, SSAOutput::CreateOutcome(outcome) => outcome, "First");
 
         let address = create_outcome.address;
         let instruction_result = create_outcome.result.result;
@@ -527,31 +504,23 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute callcode operation
     #[inline]
-    pub fn execute_callcode(&mut self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
+    pub fn execute_callcode(&mut self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 9 {
             return Err(ExecutionError::ExecutionError(
                 "CALLCODE requires exactly 9 operands (gas, to, value, in_offset, in_len, out_offset, out_len, input)".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let value = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let in_offset = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
-        let in_len = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
-        let out_offset = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
-        let out_len = match_ssa_input_stack_or_const!(&inputs[6], "Seventh");
-        let input = match &inputs[7] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Eighth operand must be Memory".to_string()
-            )),
-        };
-        let target = match &inputs[8] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Ninth operand must be ContractEntry".to_string()
-            )),
-        };
+        let gas_limit = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let value = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let in_offset = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
+        let in_len = match_ssa_output_stack_or_const!(&inputs[4], "Fifth");
+        let out_offset = match_ssa_output_stack_or_const!(&inputs[5], "Sixth");
+        let out_len = match_ssa_output_stack_or_const!(&inputs[6], "Seventh");
+        let input = match_input!(inputs, 7, SSAOutput::Memory(value) => value, "Eighth");
+        let target = match_input!(inputs, 8, SSAOutput::ContractEnv(value) => value.target_address, "Ninth");
+
+        let gas_limit = as_u64_saturated(*gas_limit);
         let out_offset = as_usize_saturated(*out_offset);
         let out_len = as_usize_saturated(*out_len);
         let in_offset = as_usize_saturated(*in_offset);
@@ -569,10 +538,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 )),
             },
             ret_range: out_offset..out_offset+out_len,
-            code: None
+            gas_limit: gas_limit,
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
+        let mut outputs = vec![SSAOutput::CallInput(Box::new(ssa_call_input))];
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -586,43 +555,31 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute delegatecall operation
     #[inline]
-    pub fn execute_delegatecall(&mut self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 10 {
+    pub fn execute_delegatecall(&mut self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
+        if inputs.len() != 9 {
             return Err(ExecutionError::ExecutionError(
                 "DELEGATECALL requires exactly 10 operands (gas, to, in_offset, in_len, out_offset, out_len, input, value, caller, target)".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let in_offset = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
-        let in_len = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
-        let out_offset = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
-        let out_len = match_ssa_input_stack_or_const!(&inputs[6], "Seventh");
-        let input = match &inputs[7] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Eighth operand must be Memory".to_string()
-            )),
-        };
-        let target = match &inputs[8] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Tenth operand must be ContractEntry".to_string()
-            )),
-        };
-        let caller = match &inputs[9] {
-            SSAInput::ContractEntry { value, .. } => value.as_caller().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Ninth operand must be ContractEntry".to_string()
-            )),
-        };
+        let gas_limit = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let in_offset = match_ssa_output_stack_or_const!(&inputs[2], "Fourth");
+        let in_len = match_ssa_output_stack_or_const!(&inputs[3], "Fifth");
+        let out_offset = match_ssa_output_stack_or_const!(&inputs[4], "Sixth");
+        let out_len = match_ssa_output_stack_or_const!(&inputs[5], "Seventh");
+        let input = match_input!(inputs, 6, SSAOutput::Memory(value) => value, "Eighth");
+        let contract_address: Address = match_input!(inputs, 7, SSAOutput::ContractEnv(value) => value.target_address, "Ninth");
+        let caller = match_input!(inputs, 8, SSAOutput::ContractEnv(value) => value.caller, "Tenth");
+
+        let gas_limit = as_u64_saturated(*gas_limit);
         let out_offset = as_usize_saturated(*out_offset);
         let out_len = as_usize_saturated(*out_len);
         let in_offset = as_usize_saturated(*in_offset);
         let in_len = as_usize_saturated(*in_len);
+
         let ssa_call_input = SSACallInput {
             input: input.clone(),
-            target_address: target,
+            target_address: contract_address,
             bytecode_address: Address::from_word(B256::from(*to)),
             caller: caller,
             transfer_value: U256::ZERO,
@@ -633,10 +590,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 )),
             },
             ret_range: out_offset..out_offset+out_len,
-            code: None
+            gas_limit: gas_limit,
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
+        let mut outputs = vec![SSAOutput::CallInput(Box::new(ssa_call_input))];
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -650,35 +607,28 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute staticcall operation
     #[inline]
-    pub fn execute_staticcall(&mut self, inputs: Vec<SSAInput>, opcode: u8) -> Result<Vec<SSAOutput>> {
+    pub fn execute_staticcall(&mut self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 8 {
             return Err(ExecutionError::ExecutionError(
                 "STATICCALL requires exactly 8 operands (gas, to, in_offset, in_len, out_offset, out_len, input, target)".to_string()
             ));
         }
-        let _ = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let to = match_ssa_input_stack_or_const!(&inputs[1], "Second");
-        let in_offset = match_ssa_input_stack_or_const!(&inputs[2], "Third");
-        let in_len = match_ssa_input_stack_or_const!(&inputs[3], "Fourth");
-        let out_offset = match_ssa_input_stack_or_const!(&inputs[4], "Fifth");
-        let out_len = match_ssa_input_stack_or_const!(&inputs[5], "Sixth");
-        let input = match &inputs[6] {
-            SSAInput::Memory { value, .. } => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Seventh operand must be Memory".to_string()
-            )),
-        };
-        let target = match &inputs[7] {
-            SSAInput::ContractEntry { value, .. } => value.as_target().unwrap(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Eighth operand must be ContractEntry".to_string()
-            )),
-        };
+        let gas_limit = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let to = match_ssa_output_stack_or_const!(&inputs[1], "Second");
+        let in_offset = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        let in_len = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
+        let out_offset = match_ssa_output_stack_or_const!(&inputs[4], "Fifth");
+        let out_len = match_ssa_output_stack_or_const!(&inputs[5], "Sixth");
+        let input = match_input!(inputs, 6, SSAOutput::Memory(value) => value, "Seventh");
+        let target = match_input!(inputs, 7, SSAOutput::ContractEnv(value) => value.target_address, "Eighth");
+
+        let gas_limit = as_u64_saturated(*gas_limit);
         let out_offset = as_usize_saturated(*out_offset);
         let out_len = as_usize_saturated(*out_len);
         let in_offset = as_usize_saturated(*in_offset);
         let in_len = as_usize_saturated(*in_len);
         let to_addr = Address::from_word(B256::from(*to));
+
         let ssa_call_input = SSACallInput {
             input: input.clone(),
             target_address: to_addr,
@@ -692,10 +642,10 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 )),
             },
             ret_range: out_offset..out_offset+out_len,
-            code: None
+            gas_limit: gas_limit,
         };
         
-        let mut outputs = vec![SSAOutput::CallFrame(Box::new(ssa_call_input))];
+        let mut outputs = vec![SSAOutput::CallInput(Box::new(ssa_call_input))];
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);

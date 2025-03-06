@@ -6,7 +6,7 @@ mod shared_memory;
 mod stack;
 
 pub use contract::Contract;
-use revm_ssa::SSALogger;
+use revm_ssa::{SSAInstructionResult, SSALogger};
 pub use shared_memory::{num_words, SharedMemory, EMPTY_SHARED_MEMORY};
 pub use stack::{Stack, STACK_LIMIT};
 
@@ -324,8 +324,11 @@ impl Interpreter {
         
         // Log the call return operation if we have a logger
         if let Some(ssa_logger) = self.ssa_logger.as_mut() {
-            // println!("{:?}", call_outcome);
-            let lsn = ssa_logger.log_insert_call_outcome(convert_call_outcome(&call_outcome));
+            let ssa_result = convert_call_outcome(&call_outcome);
+            if ssa_result.result.result == SSAInstructionResult::Error {
+                panic!("Error in insert_call_outcome, original call_outcome: {:?}", call_outcome);
+            }
+            let lsn = ssa_logger.log_insert_call_outcome(ssa_result);
             shared_memory.record_shadow_write(out_offset, target_len, lsn);
         }
     }
@@ -385,7 +388,23 @@ impl Interpreter {
         self.instruction_pointer = unsafe { self.instruction_pointer.offset(1) };
 
         // execute instruction.
-        (instruction_table[opcode as usize])(self, host)
+        (instruction_table[opcode as usize])(self, host);
+
+        // validate stack
+        if let Some(ssa_logger) = self.ssa_logger.as_ref() {
+            let result = self.instruction_result;
+            match result {
+                return_ok!() => {
+                    let shadow_stack = ssa_logger.stack_pool.last().unwrap();
+                    let stack = &self.stack;
+                    if shadow_stack.len() != stack.len() {
+                        panic!("Stack length mismatch: result = {:?}, shadow_stack.len() = {}, stack.len() = {}, opcode = {}", result, shadow_stack.len(), stack.len(), opcode);
+                    }
+                },
+                _ => {}
+            }
+        }
+
     }
 
     /// Take memory and replace it with empty memory.

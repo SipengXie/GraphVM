@@ -397,7 +397,7 @@ impl<DB: Database> InnerEvmContext<DB> {
     ) {
         // Log the call return, if SSA logger is present.
         if self.ssa_logger.is_some() {
-            self.ssa_logger.as_mut().unwrap().log_call_return(&convert_interpreter_result(interpreter_result));
+            self.ssa_logger.as_mut().unwrap().log_call_return(convert_interpreter_result(interpreter_result));
         }
         // revert changes or not.
         if matches!(interpreter_result.result, return_ok!()) {
@@ -415,14 +415,13 @@ impl<DB: Database> InnerEvmContext<DB> {
         address: Address,
         journal_checkpoint: JournalCheckpoint,
     ) {
-        // Log the create return, if SSA logger is present.
-        if self.ssa_logger.is_some() {
-            self.ssa_logger.as_mut().unwrap().log_create_return::<SPEC>(&convert_interpreter_result(interpreter_result));
-        }
 
         // if return is not ok revert and return.
         if !matches!(interpreter_result.result, return_ok!()) {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
+            if let Some(logger) = self.ssa_logger.as_mut() {
+                logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+            }
             return;
         }
         // Host error if present on execution
@@ -432,6 +431,9 @@ impl<DB: Database> InnerEvmContext<DB> {
         if SPEC::enabled(LONDON) && interpreter_result.output.first() == Some(&0xEF) {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
             interpreter_result.result = InstructionResult::CreateContractStartingWithEF;
+            if let Some(logger) = self.ssa_logger.as_mut() {
+                logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+            }
             return;
         }
 
@@ -442,6 +444,9 @@ impl<DB: Database> InnerEvmContext<DB> {
         {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
             interpreter_result.result = InstructionResult::CreateContractSizeLimit;
+            if let Some(logger) = self.ssa_logger.as_mut() {
+                logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+            }
             return;
         }
         let gas_for_code = interpreter_result.output.len() as u64 * gas::CODEDEPOSIT;
@@ -453,6 +458,9 @@ impl<DB: Database> InnerEvmContext<DB> {
             if SPEC::enabled(HOMESTEAD) {
                 self.journaled_state.checkpoint_revert(journal_checkpoint);
                 interpreter_result.result = InstructionResult::OutOfGas;
+                if let Some(logger) = self.ssa_logger.as_mut() {
+                    logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+                }
                 return;
             } else {
                 interpreter_result.output = Bytes::new();
@@ -462,7 +470,8 @@ impl<DB: Database> InnerEvmContext<DB> {
         self.journaled_state.checkpoint_commit();
 
         // Do analysis of bytecode straight away.
-        let bytecode = match self.env.cfg.perf_analyse_created_bytecodes {
+        let analysis_kind = &self.env.cfg.perf_analyse_created_bytecodes;
+        let bytecode = match analysis_kind {
             AnalysisKind::Raw => Bytecode::new_legacy(interpreter_result.output.clone()),
             AnalysisKind::Analyse => {
                 to_analysed(Bytecode::new_legacy(interpreter_result.output.clone()))
@@ -471,7 +480,17 @@ impl<DB: Database> InnerEvmContext<DB> {
 
         // set code
         self.journaled_state.set_code(address, bytecode);
-
+        // ! To support ssa.
+        let account = self.journaled_state.account(address);
+        if self.ssa_logger.is_some() {
+            self.ssa_logger.as_mut().unwrap().log_create_return::<SPEC>(
+                &convert_interpreter_result(interpreter_result),
+                address,
+                account.info.clone(),
+                analysis_kind,
+            );
+        }
+        
         interpreter_result.result = InstructionResult::Return;
     }
 

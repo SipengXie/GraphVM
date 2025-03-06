@@ -1,25 +1,25 @@
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, U256};
 use revm_ssa::{
     as_usize_saturated,
-    SSAInput, SSAOutput,
+    SSAOutput,
     SSAInstructionResult, SSAInterpreterResult,
 };
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_input_stack_or_const};
+use crate::{ExecutionContext, ExecutionError, Result, match_ssa_output_stack_or_const};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute JUMP operation
     #[inline]
-    pub fn execute_jump(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_jump(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 2 {
             return Err(ExecutionError::ExecutionError(
                 "JUMP requires exactly 2 operands".to_string()
             ));
         }
 
-        let target = match_ssa_input_stack_or_const!(&inputs[0], "First");
+        let target = match_ssa_output_stack_or_const!(&inputs[0], "First");
 
         let current_pc = match &inputs[1] {
-            SSAInput::Constant(value) => value,
+            SSAOutput::Constant(value) => value,
             _ => return Err(ExecutionError::ExecutionError(
                 "Second operand must be Constant value".to_string()
             )),
@@ -35,18 +35,18 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute JUMPI operation
     #[inline]
-    pub fn execute_jumpi(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_jumpi(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "JUMPI requires exactly 3 operands".to_string()
             ));
         }
 
-        let target = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let condition = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let target = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let condition = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         let current_pc = match &inputs[2] {
-            SSAInput::Constant(value) => value,
+            SSAOutput::Constant(value) => value,
             _ => return Err(ExecutionError::ExecutionError(
                 "Third operand must be Constant value".to_string()
             )),
@@ -70,7 +70,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute PC operation
     #[inline]
-    pub fn execute_pc(&self, inputs: Vec<SSAInput>) -> Result<Vec<SSAOutput>> {
+    pub fn execute_pc(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
                 "PC requires exactly 1 operand".to_string()
@@ -78,7 +78,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         }
 
         let pc = match &inputs[0] { 
-            SSAInput::Constant(value) => value,
+            SSAOutput::Constant(value) => value,
             _ => return Err(ExecutionError::ExecutionError(
                 "Operand must be Constant value".to_string()
             )),
@@ -89,18 +89,18 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURN/REVERT operation
     #[inline]
-    pub fn execute_ret(&mut self, inputs: Vec<SSAInput>, instruction_result: SSAInstructionResult) -> Result<Vec<SSAOutput>> {
+    pub fn execute_ret(&mut self, inputs: Vec<SSAOutput>, instruction_result: SSAInstructionResult) -> Result<Vec<SSAOutput>> {
         if inputs.len() != 3 {
             return Err(ExecutionError::ExecutionError(
                 "RETURN/REVERT requires exactly 3 operands".to_string()
             ));
         }
 
-        let offset = match_ssa_input_stack_or_const!(&inputs[0], "First");
-        let length = match_ssa_input_stack_or_const!(&inputs[1], "Second");
+        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
+        let length = match_ssa_output_stack_or_const!(&inputs[1], "Second");
 
         let output = match &inputs[2] {
-            SSAInput::Memory { value, .. } => value.clone(),
+            SSAOutput::Memory(value) => value.clone(),
             _ => return Err(ExecutionError::ExecutionError(
                 "Third operand must be Memory value".to_string()
             )),
@@ -111,7 +111,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             SSAOutput::InterpreterResult(
             SSAInterpreterResult {
                 result,
-                output,
+                output: output.clone(),
             })];
         // eprintln!("return: {:?}", ssa_outputs);
         let offset = as_usize_saturated(*offset);

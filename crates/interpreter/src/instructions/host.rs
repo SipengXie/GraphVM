@@ -60,7 +60,7 @@ pub fn extcodesize<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
 
     push!(interpreter, U256::from(code.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_codesize(EXTCODESIZE, address, code.len());
+        logger.log_extcodesize(EXTCODESIZE, address, code.len());
     }
 }
 
@@ -82,7 +82,7 @@ pub fn extcodehash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     }
     push_b256!(interpreter, code_hash);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_codehash(EXTCODEHASH, address, code_hash.into());
+        logger.log_extcodehash(EXTCODEHASH, address, code_hash.into());
     }
 }
 
@@ -101,13 +101,26 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         interpreter,
         gas::extcodecopy_cost(SPEC::SPEC_ID, len as u64, load)
     );
-    if len == 0 {
-        return;
-    }
     let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let code_offset = min(as_usize_saturated!(code_offset), code.len());
-    let resized = resize_memory!(interpreter, memory_offset, len);
 
+    if len == 0 {
+        if let Some(logger) = interpreter.ssa_logger.as_mut() {
+            let mem_length = None;
+            let lsn = logger.log_extcodecopy(EXTCODECOPY,
+                address,
+                memory_offset,
+                code_offset,
+                len,
+                code,
+                mem_length);
+            // record the shadow_memory
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        }
+        return;
+    }
+
+    let resized = resize_memory!(interpreter, memory_offset, len);
     // Note: this can't panic because we resized memory to fit.
     interpreter
         .shared_memory
@@ -207,7 +220,6 @@ pub fn tload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
 
 pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     require_non_staticcall!(interpreter);
-
     pop!(interpreter, offset, len);
     let len = as_usize_or_fail!(interpreter, len);
     gas_or_fail!(interpreter, gas::log_cost(N as u8, len as u64));
@@ -232,7 +244,7 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
     }
 
     let log = if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let log_data = LogData::new(topics.clone(), data.clone()).expect("LogData should have <=4 topics");
+        let log_data = LogData::new(topics.clone(), data).expect("LogData should have <=4 topics");
         let log_to_record = Log {
             address: interpreter.contract.target_address,
             data: log_data,
@@ -241,14 +253,13 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
         let mem_deps = interpreter.shared_memory.get_shadow_deps(offset..offset+len);
         let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
         logger.log_log_opcode(LOG0 + N as u8,
-            interpreter.contract.target_address,
             offset,
             len,
             topics,
-            data,
             mem_deps,
             log_to_record.clone(),
             mem_length);
+
         log_to_record
     } else {
         let log_data = LogData::new(topics, data).expect("LogData should have <=4 topics");
@@ -265,11 +276,6 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
     require_non_staticcall!(interpreter);
     pop_address!(interpreter, target);
 
-    let caller = interpreter.contract.caller;
-    let caller_balance = host.balance(caller).unwrap().data;
-    let target_balance = host.balance(target).unwrap().data;
-
-
     let Some(res) = host.selfdestruct(interpreter.contract.target_address, target) else {
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;
@@ -279,15 +285,27 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
     if !SPEC::enabled(LONDON) && !res.previously_destroyed {
         refund!(interpreter, gas::SELFDESTRUCT)
     }
+    // additional work to support ssa
+    let is_created = res.is_created;
+    let is_cancun_enabled = res.is_cancun_enabled;
+    let address_info = res.data.address_info.clone();
+    let address_status = res.data.address_status;
+    let target_info = res.data.target_info.clone();
+
     gas!(interpreter, gas::selfdestruct_cost(SPEC::SPEC_ID, res));
 
     interpreter.instruction_result = InstructionResult::SelfDestruct;
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_selfdestruct(SELFDESTRUCT, 
-            caller,
-            caller_balance,
-            target,
-            target_balance);
+        logger.log_selfdestruct(
+            SELFDESTRUCT, 
+            interpreter.contract.target_address, 
+            target, 
+            is_created, 
+            is_cancun_enabled,
+            address_info,
+            address_status,
+            target_info,
+        );
     }
 }

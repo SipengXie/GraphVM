@@ -14,7 +14,7 @@ use eof::EofDecodeError;
 use std::{fmt, sync::Arc};
 
 /// State of the [`Bytecode`] analysis.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Bytecode {
     /// No analysis has been performed.
@@ -25,6 +25,31 @@ pub enum Bytecode {
     Eof(Arc<Eof>),
     /// EIP-7702 delegated bytecode
     Eip7702(Eip7702Bytecode),
+}
+
+impl fmt::Debug for Bytecode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Display first few and last few bytes of the bytecode
+        const PREFIX_LEN: usize = 4;
+        const SUFFIX_LEN: usize = 4;
+        
+        let bytes = self.original_byte_slice();
+        let len = bytes.len();
+        
+        if len <= PREFIX_LEN + SUFFIX_LEN {
+            // If bytecode is short enough, just display all of it
+            write!(f, "Bytecode({:?})", bytes)
+        } else {
+            // Display first PREFIX_LEN and last SUFFIX_LEN bytes
+            write!(
+                f,
+                "Bytecode({:?}...{:?}, len: {})",
+                &bytes[..PREFIX_LEN],
+                &bytes[len - SUFFIX_LEN..],
+                len
+            )
+        }
+    }
 }
 
 impl Default for Bytecode {

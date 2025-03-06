@@ -1,24 +1,33 @@
-use revm_primitives::{Address,CreateScheme};
+use revm_primitives::CreateScheme;
 use revm_ssa::{
-    SSACallInput, SSACallOutcome,
-     SSACallScheme, SSACreateInput, 
-     SSACreateOutcome, SSACreateScheme, 
-     SSAInstructionResult, SSAInterpreterResult};
-use crate::{return_error, return_ok, return_revert, InterpreterResult, InstructionResult};
+    ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
+use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
 use super::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, CallScheme};
 
+/// Convert interpreter's Contract to SSA's ContractEnv
+pub fn convert_contract_env(env: &Contract) -> ContractEnv {
+    ContractEnv {
+        target_address: env.target_address,
+        caller: env.caller,
+        call_value: env.call_value,
+        input: env.input.clone(),
+        bytecode: env.bytecode.clone(),
+        hash: env.hash,
+        bytecode_address: env.bytecode_address,
+    }
+}
 
 /// Convert interpreter's CallInputs to SSA's CallInput
 pub fn convert_call_input(input: &CallInputs) -> SSACallInput {
     SSACallInput {
         input: input.input.clone(),
         target_address: input.target_address,
-        bytecode_address: input.target_address,
+        bytecode_address: input.bytecode_address,
         caller: input.caller,
         transfer_value: input.transfer_value().unwrap_or_default(),
         scheme: convert_call_scheme(input.scheme),
         ret_range: input.return_memory_offset.clone(),
-        code: None,
+        gas_limit: input.gas_limit,
     }
 }
 
@@ -37,7 +46,6 @@ pub fn convert_create_input(input: &CreateInputs) -> SSACreateInput {
         value: input.value,
         init_code: input.init_code.clone(),
         scheme: convert_create_scheme(input.scheme),
-        target: Address::ZERO,
     }
 }
 
@@ -76,8 +84,8 @@ pub fn convert_interpreter_result(result: &InterpreterResult) -> SSAInterpreterR
         result: match result.result {
             return_ok!() => SSAInstructionResult::Ok,
             return_revert!() => SSAInstructionResult::Revert,
-            return_error!() => SSAInstructionResult::Error,
-            _ => SSAInstructionResult::Error,
+            InstructionResult::FatalExternalError => SSAInstructionResult::Error,
+            _ => SSAInstructionResult::Revert,
         },
         output: result.output.clone(),
     }

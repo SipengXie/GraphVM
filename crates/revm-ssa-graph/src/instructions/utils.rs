@@ -1,5 +1,7 @@
 use revm_primitives::U256;
 
+use crate::ExecutionError;
+
 /// Convert usize type value to U256, return U256::MAX if overflow
 #[inline]
 pub fn as_usize_saturated(value: U256) -> usize {
@@ -21,13 +23,23 @@ pub fn as_u64_saturated(value: U256) -> u64 {
     }
 }
 
+pub fn u256_to_bool(value: U256) -> Result<bool, ExecutionError> {
+    match value.try_into() {
+        Ok(0) => Ok(false),
+        Ok(1) => Ok(true),
+        _ => Err(ExecutionError::ExecutionError(
+            "Invalid boolean value".to_string()
+        )),
+    }
+}
+
 /// Macro for matching SSAInput to extract value, supporting both Stack and Constant variants
 #[macro_export]
-macro_rules! match_ssa_input_stack_or_const {
+macro_rules! match_ssa_output_stack_or_const {
     ($input:expr, $ordinal:expr) => {
         match $input {
-            SSAInput::Stack { value, .. } => value,
-            SSAInput::Constant(value) => value,
+            SSAOutput::Stack(value) => value,
+            SSAOutput::Constant(value) => value,
             _ => return Err(ExecutionError::ExecutionError(
                 format!("{} operand must be Stack or Constant value", $ordinal)
             )),
@@ -35,22 +47,14 @@ macro_rules! match_ssa_input_stack_or_const {
     };
 }
 
-// /// Pad memory data to multiples of 32 bytes, if data length is less than 32 bytes, left pad with zeros to 32 bytes
-// pub fn pad_memory_to_word(data: Bytes) -> Bytes {
-//     let len = data.len();
-//     // If length is less than 32, directly pad to 32
-//     if len < 32 {
-//         let mut padded = vec![0u8; 32];
-//         padded[32-len..].copy_from_slice(&data);
-//         return padded.into();
-//     }
-//     // If length is not a multiple of 32, pad to a multiple of 32
-//     let padding_len = (32 - (len % 32)) % 32;
-//     if padding_len > 0 {
-//         let mut padded = vec![0u8; len + padding_len];
-//         padded[padding_len..].copy_from_slice(&data);
-//         padded.into()
-//     } else {
-//         data
-//     }
-// }
+#[macro_export]
+macro_rules! match_input {
+    ($inputs:expr, $index:expr, $pattern:pat => $result:expr, $err_msg:expr) => {
+        match $inputs.get($index) {
+            Some($pattern) => $result,
+            _ => return Err(ExecutionError::ExecutionError(
+                format!("Operand {} must be {}", $index + 1, $err_msg)
+            )),
+        }
+    };
+}

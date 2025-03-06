@@ -132,24 +132,19 @@ impl<I> TaskResultItem<I> {
             for output in ssa_state {
                 if let SSAOutput::Storage { key, .. } = output {
                     match &**key {
-                        StorageKey::Balance(address) => {
-                            read_write_set.add_write(*address, AccessType::Balance);
+                        StorageKey::AccountInfo(address) => {
+                            read_write_set.add_write(*address, AccessType::AccountInfo);
                         }
-                        StorageKey::Nonce(address) => {
-                            read_write_set.add_write(*address, AccessType::Nonce); 
+                        StorageKey::AccountStatus(address) => {
+                            read_write_set.add_write(*address, AccessType::AccountStatus); 
                         }
                         StorageKey::Slot(address, key) => {
                             read_write_set.add_write(*address, AccessType::StorageSlot(*key));
                         }
-                        StorageKey::CodeSize(address) |
-                        StorageKey::Code(address) |
-                        StorageKey::CodeHash(address) => {
-                            read_write_set.add_write(*address, AccessType::Code);
-                        }
                     }
                 }
             }
-            return read_write_set;
+            return read_write_set; 
         }
 
 

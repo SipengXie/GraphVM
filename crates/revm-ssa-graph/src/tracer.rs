@@ -1,10 +1,10 @@
-use revm_ssa::SSAOutput;
+use revm_ssa::{logger::LsnType, SSAOutput};
 use std::collections::HashMap;
 
 /// Mismatch record
 #[derive(Debug, Clone)]
 pub struct MismatchRecord {
-    pub lsn: u16,
+    pub lsn: LsnType,
     pub opcode: u8,
     pub original: Vec<SSAOutput>,
     pub graph: Vec<SSAOutput>,
@@ -14,7 +14,7 @@ pub struct MismatchRecord {
 #[derive(Debug)]
 pub struct ExecutionTracer {
     /// Original execution results
-    original_results: HashMap<u16, Vec<SSAOutput>>,
+    original_results: HashMap<LsnType, Vec<SSAOutput>>,
     /// Mismatch records
     mismatches: Vec<MismatchRecord>,
 }
@@ -28,12 +28,12 @@ impl ExecutionTracer {
     }
 
     /// Record original execution result
-    pub fn record_original(&mut self, lsn: u16, outputs: Vec<SSAOutput>) {
+    pub fn record_original(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>) {
         self.original_results.insert(lsn, outputs);
     }
 
     /// Record graph execution result
-    pub fn record_graph(&mut self, lsn: u16, outputs: Vec<SSAOutput>, opcode: u8) {
+    pub fn record_graph(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>, opcode: u8) {
         // Check if results match
         if let Some(original) = self.original_results.get(&lsn) {
             if !Self::compare_results(original, &outputs) {
@@ -92,7 +92,7 @@ impl ExecutionTracer {
             (SSAOutput::Jump { relative_offset: o1 }, SSAOutput::Jump { relative_offset: o2 }) => o1 == o2,
             
             // Compare call frames
-            (SSAOutput::CallFrame(f1), SSAOutput::CallFrame(f2)) => {
+            (SSAOutput::CallInput(f1), SSAOutput::CallInput(f2)) => {
                 f1.caller == f2.caller &&
                 f1.target_address == f2.target_address &&
                 f1.input == f2.input &&
@@ -108,12 +108,11 @@ impl ExecutionTracer {
             },
             
             // Compare create frames
-            (SSAOutput::CreateFrame(f1), SSAOutput::CreateFrame(f2)) => {
+            (SSAOutput::CreateInput(f1), SSAOutput::CreateInput(f2)) => {
                 f1.caller == f2.caller &&
                 f1.value == f2.value &&
                 f1.init_code == f2.init_code &&
-                f1.scheme == f2.scheme &&
-                f1.target == f2.target
+                f1.scheme == f2.scheme
             },
             
             // Compare create outcomes
@@ -128,6 +127,20 @@ impl ExecutionTracer {
             // Compare interpreter results
             (SSAOutput::InterpreterResult(r1), SSAOutput::InterpreterResult(r2)) => {
                 r1.result == r2.result && r1.output == r2.output
+            },
+            
+            // 添加常量比较
+            (SSAOutput::Constant(v1), SSAOutput::Constant(v2)) => v1 == v2,
+            
+            // 添加合约环境比较
+            (SSAOutput::ContractEnv(e1), SSAOutput::ContractEnv(e2)) => {
+                e1.target_address == e2.target_address &&
+                e1.caller == e2.caller &&
+                e1.call_value == e2.call_value &&
+                e1.input == e2.input &&
+                e1.bytecode == e2.bytecode &&
+                e1.hash == e2.hash &&
+                e1.bytecode_address == e2.bytecode_address
             },
             
             // Different types of outputs are considered unequal

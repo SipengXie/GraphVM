@@ -1,7 +1,6 @@
-use revm_interpreter::{interpreter_action::{convert_call_input, convert_create_input}, CallValue};
+use revm_interpreter::{interpreter_action::{convert_call_input, convert_contract_env, convert_create_input}, CallValue};
 use revm_precompile::PrecompileErrors;
-use revm_primitives::U256;
-use revm_ssa::SSALogger;
+use revm_ssa::{SSAInstructionResult, SSAInterpreterResult, SSALogger};
 
 use super::inner_evm_context::InnerEvmContext;
 use crate::{
@@ -136,7 +135,7 @@ impl<DB: Database> EvmContext<DB> {
     fn get_mut_logger(&mut self) -> Option<&mut SSALogger> {
         self.inner.ssa_logger_mut()
     }
-
+    
     /// Transfer logger to interpreter
     #[inline]
     fn transfer_ssa_logger_to_interpreter(&mut self, interpreter: &mut Interpreter) {
@@ -217,9 +216,6 @@ impl<DB: Database> EvmContext<DB> {
 
         // Create subroutine checkpoint
         let checkpoint = self.journaled_state.checkpoint();
-        // ! use to record the balance:
-        let mut caller_balance : Option<U256> = None;
-        let mut target_balance : Option<U256> = None;
 
         // Touch address. For "EIP-158 State Clear", this will erase empty accounts.
         match inputs.value {
@@ -231,9 +227,6 @@ impl<DB: Database> EvmContext<DB> {
             CallValue::Transfer(value) => {
                 // Transfer value from caller to called account. As value get transferred
                 // target gets touched.
-                // ! use to record the balance:
-                caller_balance = Some(self.balance(inputs.caller)?.data);
-                target_balance = Some(self.balance(inputs.target_address)?.data);
                 if let Some(result) = self.inner.journaled_state.transfer(
                     &inputs.caller,
                     &inputs.target_address,
@@ -248,6 +241,10 @@ impl<DB: Database> EvmContext<DB> {
         };
         let is_ext_delegate = inputs.scheme.is_ext_delegate_call();
 
+        // ! To support ssa.
+        let caller_account = self.load_account(inputs.caller)?.clone();
+        let target_account = self.load_account(inputs.target_address)?.clone();
+
         if !is_ext_delegate {
             if let Some(result) =
                 self.call_precompile(&inputs.bytecode_address, &inputs.input, gas)?
@@ -260,7 +257,22 @@ impl<DB: Database> EvmContext<DB> {
                 if let Some(logger) = self.get_mut_logger() {
                     let call_intput = convert_call_input(&inputs);
                     // This is a call to a precompile, so we don't have a bytecode.
-                    logger.log_make_call_frame(call_intput, caller_balance, target_balance, Bytes::default());
+                    let ssa_interpreter_result = SSAInterpreterResult {
+                        result: match result.result {
+                            r if r.is_ok() => SSAInstructionResult::Ok,
+                            r if r.is_revert() => SSAInstructionResult::Revert,
+                            _ => SSAInstructionResult::Error,
+                        },
+                        output: result.output.clone(),
+                    };
+                    logger.log_make_call_frame(
+                        call_intput, 
+                        caller_account.info.clone(), 
+                        target_account.info.clone(), 
+                        None,
+                        true,
+                        Some(ssa_interpreter_result),
+                    );
                 }
                 return Ok(FrameOrResult::new_call_result(
                     result,
@@ -287,7 +299,18 @@ impl<DB: Database> EvmContext<DB> {
             self.journaled_state.checkpoint_commit();
             if let Some(logger) = self.get_mut_logger() {
                 let call_intput = convert_call_input(&inputs);
-                logger.log_make_call_frame(call_intput, caller_balance, target_balance, bytecode.bytes());
+                let ssa_interpreter_result = SSAInterpreterResult {
+                    result: SSAInstructionResult::Ok,
+                    output: Bytes::new(),
+                };
+                logger.log_make_call_frame(
+                    call_intput, 
+                    caller_account.info.clone(), 
+                    target_account.info.clone(), 
+                    None,
+                    false,
+                    Some(ssa_interpreter_result),
+                );
             }
             return return_result(InstructionResult::Stop);
         }
@@ -303,13 +326,21 @@ impl<DB: Database> EvmContext<DB> {
                 .unwrap_or_default();
         }
 
-        if let Some(logger) = self.get_mut_logger() {
-            let call_intput = convert_call_input(&inputs);
-            logger.log_make_call_frame(call_intput, caller_balance, target_balance, bytecode.bytes());
-        }
-
         let contract =
             Contract::new_with_context(inputs.input.clone(), bytecode, Some(code_hash), inputs);
+
+        if let Some(logger) = self.get_mut_logger() {
+            let call_intput = convert_call_input(&inputs);
+            logger.log_make_call_frame(
+                call_intput, 
+                caller_account.info.clone(), 
+                target_account.info.clone(), 
+                Some(convert_contract_env(&contract)),
+                false,
+                None,
+            );
+        }    
+        
         let mut interpreter = Interpreter::new(contract, gas.limit(), inputs.is_static);
         self.transfer_ssa_logger_to_interpreter(&mut interpreter);
 
@@ -397,7 +428,6 @@ impl<DB: Database> EvmContext<DB> {
         };
 
         let bytecode = Bytecode::new_legacy(inputs.init_code.clone());
-
         let contract = Contract::new(
             Bytes::new(),
             bytecode,
@@ -407,13 +437,18 @@ impl<DB: Database> EvmContext<DB> {
             inputs.caller,
             inputs.value,
         );
-
-        let mut interpreter = Interpreter::new(contract, inputs.gas_limit, false);
+        let caller_account = self.load_account(inputs.caller)?.clone();
+        let target_account = self.load_account(created_address)?.clone();
         if let Some(logger) = self.get_mut_logger() {
             logger.log_make_create_frame(
                 convert_create_input(&inputs), 
-                old_nonce);
+                caller_account.info.clone(),
+                target_account.info.clone(),
+                target_account.status,
+                convert_contract_env(&contract),
+            );
         };
+        let mut interpreter = Interpreter::new(contract, inputs.gas_limit, false);
         self.transfer_ssa_logger_to_interpreter(&mut interpreter);
 
         Ok(FrameOrResult::new_create_frame(
