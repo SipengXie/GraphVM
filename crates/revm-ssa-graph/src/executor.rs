@@ -2,7 +2,7 @@
 use std::{
     collections::HashSet,
     marker::PhantomData,
-    sync::{atomic::{AtomicU64, Ordering}, Arc}, 
+    sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Instant, 
     // time::Instant
 };
 
@@ -194,7 +194,7 @@ where
         Ok(nodes_to_execute.len())
     }
 
-    pub fn execute_parallel(&mut self) -> Result<()> {
+    pub fn execute_parallel(&mut self) -> Result<std::time::Duration> {
         // Get nodes to execute based on execution mode
         let nodes_to_execute: Vec<_> = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
@@ -244,25 +244,24 @@ where
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
         let thread_pool = self.thread_pool.as_ref().unwrap();
         
+        let start = Instant::now();
         thread_pool.install(|| {
             nodes_with_masks.into_iter().for_each(|(node, deps_mask)| {
                 // Use bitmask for batch checking
-                let mut spin_count = 1;
-                'wait_loop: loop {
-                    // Check if all dependencies are completed
-                    for (idx, mask) in deps_mask.iter().enumerate() {
-                        if *mask == 0 { continue; }
-                        let current = self.completed_nodes.bits[idx].0.load(Ordering::Acquire);
-                        if (current & mask) != *mask {
-                            // Exponential backoff strategy
-                            for _ in 0..spin_count {
-                                std::hint::spin_loop();
-                            }
-                            spin_count = std::cmp::min(spin_count * 2, 1024);
-                            continue 'wait_loop;
+                // Wait for all dependencies to complete with adaptive spinning
+                let mut spin_count = 0;
+                while !deps_mask.iter().enumerate().all(|(idx, mask)| {
+                    *mask == 0 || (self.completed_nodes.bits[idx].0.load(Ordering::Acquire) & mask) == *mask
+                }) {
+                    // Adaptive spinning with yield after threshold
+                    if spin_count < 1000 {
+                        for _ in 0..1 << std::cmp::min(spin_count, 10) {
+                            std::hint::spin_loop();
                         }
+                        spin_count += 1;
+                    } else {
+                        std::thread::yield_now();
                     }
-                    break;
                 }
 
                 let exec_result = Self::execute_node(node, graph, &self.context);
@@ -272,8 +271,8 @@ where
                 self.completed_nodes.mark(node.lsn);
             })
         });
-        // eprintln!("Parallel Execution time: {:?}", start.elapsed());
-
+        let duration = start.elapsed();
+        
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
             for node in &nodes_to_execute {
@@ -281,10 +280,10 @@ where
                 tracer.record_graph(node.lsn, outputs.into(), node.opcode);
             }
         }
-        std::thread::spawn(move || {
+        self.thread_pool.as_ref().unwrap().spawn(move || {
             drop(nodes_to_execute);
         });
-        Ok(())
+        Ok(duration)
     }
 
     pub fn execute_node(node: &SSALogEntry, graph: &mut SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {

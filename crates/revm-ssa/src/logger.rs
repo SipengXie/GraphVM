@@ -108,8 +108,8 @@ pub struct SSALogger {
     // last_create_return
     last_create_return: Vec<LsnType>,
     // Initial LSN
-    // Use stack to track entry_lsn at different levels
-    pub entry_lsn: Vec<LsnType>,
+    // Use stack to track contract_env at different levels
+    pub contract_env: Vec<LsnType>,
     // we need call_inputs to get return range
     pub call_inputs: Vec<SSACallInput>,
     pub first_call_input: Option<SSACallInput>,
@@ -143,8 +143,8 @@ impl SsaRwSet {
 impl SSALogger {
 
     fn get_entry_lsn(&mut self) -> LsnType {
-        if self.entry_lsn.len() > 0 {
-            *self.entry_lsn.last().unwrap()
+        if self.contract_env.len() > 0 {
+            *self.contract_env.last().unwrap()
         } else {
             panic!("entry_lsn is empty");
         }
@@ -154,7 +154,7 @@ impl SSALogger {
         
         Self {
             current_lsn: 1,
-            entry_lsn: Vec::new(),
+            contract_env: Vec::new(),
             logs: Vec::with_capacity(512),
             stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
@@ -178,7 +178,7 @@ impl SSALogger {
     pub fn new_with_capacity(capacity: usize) -> Self {
         Self {
             current_lsn: 1,
-            entry_lsn: Vec::new(),
+            contract_env: Vec::new(),
             logs: Vec::with_capacity(capacity),
             stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
@@ -814,7 +814,7 @@ impl SSALogger {
         ssa_outputs.push(output_account_info!(created_address, new_target_info));
         ssa_outputs.push(output_account_status!(created_address, new_target_status));
         ssa_outputs.push(SSAOutput::ContractEnv(Box::new(contract_env)));
-        self.entry_lsn.push(lsn);
+        self.contract_env.push(lsn);
         self.generate_new_stack();
 
         if self.first_create_input.is_none() {
@@ -832,7 +832,7 @@ impl SSALogger {
     pub fn log_create_return_failed(&mut self, result: &SSAInterpreterResult) {
         let opcode = InternalOp::CREATE_RETURN;
         let lsn = self.current_lsn;
-        self.entry_lsn.pop();
+        self.contract_env.pop();
         let create_outcome = SSACreateOutcome {
             result: result.clone(),
             address: None,
@@ -873,7 +873,7 @@ impl SSALogger {
             }
         );
 
-        self.entry_lsn.pop();
+        self.contract_env.pop();
 
         let create_outcome = SSACreateOutcome {
             result: result.clone(),
@@ -1213,7 +1213,7 @@ impl SSALogger {
         } else {
             // if the call is a contract call, we should generate a result
             ssa_outputs.push(SSAOutput::ContractEnv(Box::new(contract_env.unwrap())));
-            self.entry_lsn.push(lsn);
+            self.contract_env.push(lsn);
             self.generate_new_stack();
         }
 
@@ -1251,7 +1251,7 @@ impl SSALogger {
             }))
         );
         self.last_call_return.push(self.current_lsn);
-        self.entry_lsn.pop();
+        self.contract_env.pop();
         self.remove_last_stack();
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
