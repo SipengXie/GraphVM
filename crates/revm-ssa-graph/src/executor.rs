@@ -9,6 +9,7 @@ use std::{
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result
 };
+use metrics::histogram;
 // use metrics::histogram;
 use rayon::ThreadPool;
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
@@ -250,6 +251,7 @@ where
                 // Use bitmask for batch checking
                 // Wait for all dependencies to complete with adaptive spinning
                 let mut spin_count = 0;
+                // let wait_start = Instant::now();
                 while !deps_mask.iter().enumerate().all(|(idx, mask)| {
                     *mask == 0 || (self.completed_nodes.bits[idx].0.load(Ordering::Acquire) & mask) == *mask
                 }) {
@@ -263,6 +265,8 @@ where
                         std::thread::yield_now();
                     }
                 }
+                // let wait_duration = wait_start.elapsed();
+                // histogram!("revm.ssa.executor.wait_time", wait_duration);
 
                 let exec_result = Self::execute_node(node, graph, &self.context);
                 if exec_result.is_err() {
@@ -288,34 +292,25 @@ where
 
     pub fn execute_node(node: &SSALogEntry, graph: &mut SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let lsn = node.lsn;
+
+        // let get_inputs_start = Instant::now();
         let inputs = Self::resolve_dependencies(graph, &context, &node)?;
+        // let get_inputs_duration = get_inputs_start.elapsed();
+        // histogram!("revm.ssa.executor.get_inputs_time", get_inputs_duration);
+
+        // let execute_start = Instant::now();
         let outputs = Self::execute_operation(&context, node.opcode, inputs)?;
-        
-        // let outputs = match Self::execute_operation(&context, node.opcode, inputs.clone()) {
-        //     Ok(outputs) => outputs,
-        //     Err(err) => {
-        //         println!("Node: {:?}", node);
-        //         if node.opcode == 0xD7 {
-        //             println!("执行节点 MAKE_CALL_FRAME 时出错: {:?}", err);
-        //             println!("当前节点: {:?}", node);
-        //             // 查找 CallInput 输入
-        //             if let Some(SSAInput::CallInput { source }) = node.inputs.get(0) {
-        //                 let original_node = graph.get_node(*source);
-        //                 let current_result = graph.get_result_by_lsn(*source);
-                        
-        //                 println!("原始 CallInput 节点: {:?}", original_node);
-        //                 println!("当前 CallInput 结果: {:?}", current_result);
-        //             }
-        //         }
-        //         panic!("Execution failed: {:?}", err);
-        //     }
-        // };
-        
+        // let execute_duration = execute_start.elapsed();
+        // histogram!("revm.ssa.executor.generate_outputs_time", execute_duration);
 
         if node.opcode == 0x56 || node.opcode == 0x57 {
             Self::verify_control_flow(node, &outputs)?;
         }
+
+        // let set_result_start = Instant::now();
         graph.set_result(lsn, outputs)?;
+        // let set_result_duration = set_result_start.elapsed();
+        // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
         Ok(())
     }
 

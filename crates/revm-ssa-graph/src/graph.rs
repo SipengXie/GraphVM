@@ -3,7 +3,7 @@
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
 use revm_ssa::logger::LsnType;
-use std::collections::{HashMap, HashSet};
+use revm_primitives::{HashMap, HashSet};
 use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
 
@@ -14,7 +14,7 @@ pub struct SsaGraph {
     /// Mapping from LSN to node index
     lsn_to_node: HashMap<LsnType, NodeIndex>,
     /// Mapping from node index to results
-    results: HashMap<NodeIndex, Vec<SSAOutput>>,
+    results: HashMap<LsnType, Vec<SSAOutput>>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<LsnType>,
 }
@@ -24,8 +24,8 @@ impl SsaGraph {
     pub fn new(node_num: usize, edge_num: usize) -> Self {
         Self {
             graph: DiGraph::with_capacity(node_num, edge_num),
-            lsn_to_node: HashMap::new(),
-            results: HashMap::new(),
+            lsn_to_node: HashMap::default(),
+            results: HashMap::default(),
             storage_write: Vec::new(),
         }
     }
@@ -82,12 +82,8 @@ impl SsaGraph {
 
     /// Set execution result for a node
     pub fn set_result(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>) -> Result<()> {
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
-        
         // Directly modify node outputs
-        self.results.insert(node_idx, outputs);
+        self.results.insert(lsn, outputs);
         Ok(())
     }
 
@@ -120,23 +116,24 @@ impl SsaGraph {
     pub fn get_result<T, F>(&self, lsn: LsnType, extractor: F) -> Result<Option<T>>
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
-    {
+    {       
+        if let Some(outputs) = self.results.get(&lsn) {
+            return Ok(extractor(outputs));
+        }
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
-        
-        if let Some(outputs) = self.results.get(&node_idx) {
-            return Ok(extractor(outputs));
-        }
-
         Ok(extractor(&self.graph[node_idx].outputs))
     }
 
     pub fn get_result_by_lsn(&self, lsn: LsnType) -> Result<Option<&Vec<SSAOutput>>> {
+        if let Some(outputs) = self.results.get(&lsn) {
+            return Ok(Some(outputs));
+        }
         let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
             ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
         )?;
-        Ok(self.results.get(&node_idx).or(Some(&self.graph[node_idx].outputs)))
+        Ok(Some(&self.graph[node_idx].outputs))
     }
 
     /// Add edges
