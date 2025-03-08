@@ -273,6 +273,9 @@ fn graph_execute_parallel(
         graph.add_edges(lsn).unwrap();
     }
 
+    let cp_ratio = graph.calculate_parallelism_ratio().unwrap();
+    println!("Parallelism Ratio: {}", cp_ratio);
+
     let thread_pool = rayon::ThreadPoolBuilder::new()
         .num_threads(config.thread_number.unwrap_or(8))
         .build()
@@ -2081,7 +2084,7 @@ mod erc20_tests {
         // Initialize prometheus metrics exporter
         let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
         let _handle = builder
-            .with_http_listener(([127, 0, 0, 1], 9090))
+            .with_http_listener(([127, 0, 0, 1], 12345))
             .install()
             .expect("failed to install Prometheus recorder");
         let runtime_hex = hex::decode(TEST_RUNTIME_CODE).unwrap();
@@ -2116,10 +2119,10 @@ mod erc20_tests {
         };
         let parallel_full_result = execute_case(runtime_code.clone(), "parallel_full", parallel_full_config);
         println!("Parallel Full Graph Time Cost: {:?}", parallel_full_result.execution_time);
-        println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
-        println!("You can use curl http://127.0.0.1:9090/metrics to view them");
+        println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
+        println!("You can use curl http://127.0.0.1:12345/metrics to view them");
         println!("The metrics will be in standard Prometheus format");
-        // std::thread::sleep(std::time::Duration::from_secs(15));
+        std::thread::sleep(std::time::Duration::from_secs(15));
     }
 
     #[test]

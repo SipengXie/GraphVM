@@ -11,10 +11,10 @@ use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
 pub struct SsaGraph {
     /// Graph structure
     graph: DiGraph<SSALogEntry, ()>,
-    /// Mapping from LSN to node index
-    lsn_to_node: HashMap<LsnType, NodeIndex>,
-    /// Mapping from node index to results
-    results: HashMap<LsnType, Vec<SSAOutput>>,
+    /// Mapping from LSN to node index, using Vec since LSN is sequential from 1..N
+    lsn_to_node: Vec<NodeIndex>,
+    /// Mapping from node index to results, using Vec since LSN is sequential from 1..N
+    results: Vec<Vec<SSAOutput>>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<LsnType>,
 }
@@ -24,9 +24,9 @@ impl SsaGraph {
     pub fn new(node_num: usize, edge_num: usize) -> Self {
         Self {
             graph: DiGraph::with_capacity(node_num, edge_num),
-            lsn_to_node: HashMap::default(),
-            results: HashMap::default(),
-            storage_write: Vec::new(),
+            lsn_to_node: vec![NodeIndex::new(0); node_num + 1],
+            results: vec![vec![]; node_num + 1],
+            storage_write: Vec::with_capacity(node_num + 1),
         }
     }
 
@@ -39,11 +39,13 @@ impl SsaGraph {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
         if is_storage_write!(entry.opcode) {
-            // eprintln!("write_opcode:{}", lsn);
             self.storage_write.push(lsn);
         }
         let node_idx = self.graph.add_node(entry);
-        self.lsn_to_node.insert(lsn, node_idx);
+        
+        //The vector has enough capacity for the current LSN
+        self.lsn_to_node[lsn as usize] = node_idx;
+        
         Ok(())
     }
 
@@ -82,8 +84,7 @@ impl SsaGraph {
 
     /// Set execution result for a node
     pub fn set_result(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>) -> Result<()> {
-        // Directly modify node outputs
-        self.results.insert(lsn, outputs);
+        self.results[lsn as usize] = outputs;
         Ok(())
     }
 
@@ -95,9 +96,7 @@ impl SsaGraph {
     /// # Returns
     /// * `Result<Option<&[SSAOutput]>>` - A reference to execution results if found
     pub fn get_original_outputs(&self, lsn: LsnType) -> Result<Option<&[SSAOutput]>> {
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
+        let node_idx = self.lsn_to_node[lsn as usize];
         Ok(Some(&self.graph[node_idx].outputs))
     }
 
@@ -117,30 +116,39 @@ impl SsaGraph {
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
     {       
-        if let Some(outputs) = self.results.get(&lsn) {
-            return Ok(extractor(outputs));
+        if !self.results[lsn as usize].is_empty() {
+            return Ok(extractor(&self.results[lsn as usize]));
         }
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
+        
+        if lsn as usize >= self.lsn_to_node.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        
+        let node_idx = self.lsn_to_node[lsn as usize];
         Ok(extractor(&self.graph[node_idx].outputs))
     }
 
     pub fn get_result_by_lsn(&self, lsn: LsnType) -> Result<Option<&Vec<SSAOutput>>> {
-        if let Some(outputs) = self.results.get(&lsn) {
-            return Ok(Some(outputs));
+        if !self.results[lsn as usize].is_empty() {
+            return Ok(Some(&self.results[lsn as usize]));
         }
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
+        
+        if lsn as usize >= self.lsn_to_node.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        
+        let node_idx = self.lsn_to_node[lsn as usize];
         Ok(Some(&self.graph[node_idx].outputs))
     }
 
     /// Add edges
     pub fn add_edges(&mut self, lsn: LsnType) -> Result<()> {
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
+        let lsn = lsn as usize;
+        if lsn >= self.lsn_to_node.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        
+        let node_idx = self.lsn_to_node[lsn];
 
         // Use HashSet to collect all LSN dependencies, automatically deduplicating
         let mut dep_lsns = HashSet::new();
@@ -159,10 +167,10 @@ impl SsaGraph {
         // Convert all LSNs to NodeIndex at once
         let mut dep_indices = HashSet::with_capacity(dep_lsns.len());
         for dep_lsn in dep_lsns {
-            let dep_idx = self.lsn_to_node.get(&dep_lsn).ok_or_else(|| 
-                ExecutionError::GraphError(format!("Dependency node not found for LSN: {}", dep_lsn))
-            )?;
-            dep_indices.insert(*dep_idx);
+            if dep_lsn as usize >= self.lsn_to_node.len() {
+                return Err(ExecutionError::GraphError(format!("Dependency node not found for LSN: {}", dep_lsn)));
+            }
+            dep_indices.insert(self.lsn_to_node[dep_lsn as usize]);
         }
 
         // Add all edges
@@ -183,17 +191,23 @@ impl SsaGraph {
 
     /// Get mutable node
     pub fn get_node_mut(&mut self, lsn: LsnType) -> Result<&mut SSALogEntry> {
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
+        let lsn = lsn as usize;
+        if lsn >= self.lsn_to_node.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        
+        let node_idx = self.lsn_to_node[lsn];
         Ok(&mut self.graph[node_idx])
     }
 
     /// Get immutable node
     pub fn get_node(&self, lsn: LsnType) -> Result<&SSALogEntry> {
-        let node_idx = *self.lsn_to_node.get(&lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn))
-        )?;
+        let lsn = lsn as usize;
+        if lsn >= self.lsn_to_node.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        
+        let node_idx = self.lsn_to_node[lsn];
         Ok(&self.graph[node_idx])
     }
 
@@ -205,10 +219,13 @@ impl SsaGraph {
     /// # Returns
     /// * `Result<Vec<SSALogEntry>>` - A vector of reachable nodes in dependency order
     pub fn get_reachable_nodes(&self, start_lsn: LsnType) -> Result<Vec<SSALogEntry>> {
+        let lsn = start_lsn as usize;
         // Get the starting node index
-        let start_idx = *self.lsn_to_node.get(&start_lsn).ok_or_else(|| 
-            ExecutionError::GraphError(format!("Node not found for LSN: {}", start_lsn))
-        )?;
+        if lsn >= self.lsn_to_node.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", start_lsn)));
+        }
+        
+        let start_idx = self.lsn_to_node[lsn];
         
         // Use BFS to find all reachable nodes in order
         let mut bfs = petgraph::visit::Bfs::new(&self.graph, start_idx);
@@ -226,7 +243,7 @@ impl SsaGraph {
     /// # Returns
     /// * `Vec<LsnType>` - A vector of all LSNs in the graph
     pub fn get_lsns(&self) -> Vec<LsnType> {
-        self.lsn_to_node.iter().map(|(lsn, _)| *lsn).collect()
+        (1..self.lsn_to_node.len() as LsnType).collect()
     }
 
     /// Get all storage write outputs and their corresponding storage keys
@@ -262,4 +279,44 @@ impl SsaGraph {
         Ok(storage_outputs)
     }
 
+    /// Calculate the parallelism ratio of the graph
+    /// 
+    /// This function computes the ratio of critical path length to total nodes,
+    /// which indicates the potential for parallelism. A lower ratio means higher
+    /// potential for parallelization.
+    /// 
+    /// # Returns
+    /// * `Result<f64>` - The ratio of critical path length to total nodes
+    pub fn calculate_parallelism_ratio(&self) -> Result<f64> {
+        let total_nodes = self.num_nodes();
+        if total_nodes == 0 {
+            return Ok(0.0);
+        }
+        
+        let mut longest_paths: HashMap<NodeIndex, usize> = HashMap::with_capacity(total_nodes);
+        
+        let sorted_indices = toposort(&self.graph, None)
+            .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
+        
+        for &node_idx in &sorted_indices {
+            let incoming_count = self.graph.neighbors_directed(node_idx, petgraph::Direction::Incoming).count();
+            if incoming_count == 0 {
+                longest_paths.insert(node_idx, 1);
+            } else {
+                longest_paths.entry(node_idx).or_insert(1);
+            }
+        }
+        
+        for &node_idx in &sorted_indices {
+            let current_path_len = *longest_paths.get(&node_idx).unwrap();
+            
+            for succ in self.graph.neighbors_directed(node_idx, petgraph::Direction::Outgoing) {
+                let entry = longest_paths.entry(succ).or_insert(1);
+                *entry = (*entry).max(current_path_len + 1);
+            }
+        }
+        
+        let critical_path_length = longest_paths.values().max().copied().unwrap_or(1);
+        Ok(critical_path_length as f64 / total_nodes as f64)
+    }
 }

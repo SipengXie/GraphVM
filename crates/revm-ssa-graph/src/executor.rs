@@ -307,10 +307,10 @@ where
             Self::verify_control_flow(node, &outputs)?;
         }
 
-        // let set_result_start = Instant::now();
+        let set_result_start = Instant::now();
         graph.set_result(lsn, outputs)?;
-        // let set_result_duration = set_result_start.elapsed();
-        // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
+        let set_result_duration = set_result_start.elapsed();
+        histogram!("revm.ssa.executor.set_result_time", set_result_duration);
         Ok(())
     }
 
