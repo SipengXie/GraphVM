@@ -667,6 +667,7 @@ impl Occda {
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                         profiler::start_multi("ssa-execution");
+                        profiler::note_str_multi("ssa-execution", "type", "ssa-execution");
                         match executor.execute() {
                             Ok(nodes_to_execute_len) => {
                                 profiler::end_multi("ssa-execution");
@@ -721,6 +722,7 @@ impl Occda {
                         .build();
                     
                     profiler::start_multi("evm-transact");
+                    profiler::note_str_multi("evm-transact", "type", "evm-transact");
                     let result = evm.transact();
                     profiler::end_multi("evm-transact");
                     
