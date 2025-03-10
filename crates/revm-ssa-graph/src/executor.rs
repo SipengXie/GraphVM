@@ -249,21 +249,12 @@ where
         thread_pool.install(|| {
             nodes_with_masks.into_iter().for_each(|(node, deps_mask)| {
                 // Use bitmask for batch checking
-                // Wait for all dependencies to complete with adaptive spinning
-                let mut spin_count = 0;
+                // Wait for all dependencies to complete with spinning
                 // let wait_start = Instant::now();
                 while !deps_mask.iter().enumerate().all(|(idx, mask)| {
                     *mask == 0 || (self.completed_nodes.bits[idx].0.load(Ordering::Acquire) & mask) == *mask
                 }) {
-                    // Adaptive spinning with yield after threshold
-                    if spin_count < 1000 {
-                        for _ in 0..1 << std::cmp::min(spin_count, 10) {
-                            std::hint::spin_loop();
-                        }
-                        spin_count += 1;
-                    } else {
-                        std::thread::yield_now();
-                    }
+                    std::hint::spin_loop();
                 }
                 // let wait_duration = wait_start.elapsed();
                 // histogram!("revm.ssa.executor.wait_time", wait_duration);
