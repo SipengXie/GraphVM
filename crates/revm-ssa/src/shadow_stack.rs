@@ -1,7 +1,7 @@
 use core::{fmt, ptr};
 use std::vec::Vec;
 
-use crate::logger::LsnType;
+use crate::logger::LsnWithIndex;
 
 pub const STACK_LIMIT: usize = 1024;
 
@@ -40,7 +40,7 @@ macro_rules! assume {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ShadowStack {
     /// The underlying data of the shadow stack, storing LSN definitions
-    data: Vec<LsnType>, // 0 means constant, else means lsn
+    data: Vec<LsnWithIndex>, // 0 means constant, else means lsn
 }
 
 impl fmt::Display for ShadowStack {
@@ -50,8 +50,8 @@ impl fmt::Display for ShadowStack {
             if i > 0 {
                 f.write_str(", ")?;
             }
-            if *x > 0 {
-                write!(f, "LSN({})", x)?;
+            if x.0 > 0 {
+                write!(f, "LSN({:?})", x)?;
             } else {
                 write!(f, "Const")?;
             }
@@ -91,7 +91,7 @@ impl ShadowStack {
     /// Removes the topmost element from the stack and returns it, or `StackUnderflow` if it is
     /// empty.
     #[inline]
-    pub fn pop(&mut self) -> Result<LsnType, InstructionResult> {
+    pub fn pop(&mut self) -> Result<LsnWithIndex, InstructionResult> {
         self.data.pop().ok_or(InstructionResult::StackUnderflow)
     }
 
@@ -100,7 +100,7 @@ impl ShadowStack {
     /// If it will exceed the stack limit, returns `StackOverflow` error and leaves the stack
     /// unchanged.
     #[inline]
-    pub fn push(&mut self, value: LsnType) -> Result<(), InstructionResult> {
+    pub fn push(&mut self, value: LsnWithIndex) -> Result<(), InstructionResult> {
         // Allows the compiler to optimize out the `Vec::push` capacity check.
         assume!(self.data.capacity() == STACK_LIMIT);
         if self.data.len() == STACK_LIMIT {
@@ -170,7 +170,7 @@ impl<'de> serde::Deserialize<'de> for ShadowStack {
     where
         D: serde::Deserializer<'de>,
     {
-        let mut data = Vec::<LsnType>::deserialize(deserializer)?;
+        let mut data = Vec::<LsnWithIndex>::deserialize(deserializer)?;
         if data.len() > STACK_LIMIT {
             return Err(serde::de::Error::custom(std::format!(
                 "stack size exceeds limit: {} > {}",

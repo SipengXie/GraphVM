@@ -2122,7 +2122,7 @@ mod erc20_tests {
         println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
         println!("You can use curl http://127.0.0.1:12345/metrics to view them");
         println!("The metrics will be in standard Prometheus format");
-        std::thread::sleep(std::time::Duration::from_secs(15));
+        // std::thread::sleep(std::time::Duration::from_secs(15));
     }
 
     #[test]

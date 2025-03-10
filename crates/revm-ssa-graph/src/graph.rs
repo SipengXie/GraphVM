@@ -50,34 +50,33 @@ impl SsaGraph {
     }
 
     /// Get LSN dependencies from SSAInput
-
     pub fn get_lsn_from_input(input: &SSAInput) -> Vec<LsnType> {
         let mut lsn_vec = Vec::with_capacity(1);
         match input {
             SSAInput::Constant(_) => lsn_vec.push(0),
-            SSAInput::Stack { source, .. } => lsn_vec.push(*source),
+            SSAInput::Stack { source, .. } => lsn_vec.push(source.0),
             SSAInput::Memory { source, .. } => {
                 if source.is_empty() {
                     lsn_vec.push(0)
                 } else {
                     // Get LSN from the last memory dependency
                     // Memory may contains multiple dependencies
-                    source.iter().for_each(|dep| lsn_vec.push(dep.lsn))
+                    source.iter().for_each(|dep| lsn_vec.push(dep.lsn.0))
                 }
             },
-            SSAInput::Storage { source, .. } => lsn_vec.push(*source),
-            SSAInput::ReturnDataBuffer { source, .. } => lsn_vec.push(*source),
+            SSAInput::Storage { source, .. } => lsn_vec.push(source.0),
+            SSAInput::ReturnDataBuffer { source, .. } => lsn_vec.push(source.0),
             SSAInput::ContractEnv { source: entry_lsn, .. } => {
-                if *entry_lsn != 2 {
-                    lsn_vec.push(*entry_lsn) // we should consider the first contract_env(lsn:2) as a constant
+                if entry_lsn.0 != 2 {
+                    lsn_vec.push(entry_lsn.0) // we should consider the first contract_env(lsn:2) as a constant
                 }
             },
-            SSAInput::MemorySizeChange { source: last_memory, .. } => lsn_vec.push(*last_memory),
-            SSAInput::CreateInput { source, .. } => lsn_vec.push(*source),
-            SSAInput::CallInput { source, .. } => lsn_vec.push(*source),
-            SSAInput::InterpreterResult { source, .. } => lsn_vec.push(*source),
-            SSAInput::CallOutcome { source, .. } => lsn_vec.push(*source),
-            SSAInput::CreateOutcome { source, .. } => lsn_vec.push(*source),
+            SSAInput::MemorySizeChange { source: last_memory, .. } => lsn_vec.push(last_memory.0),
+            SSAInput::CreateInput { source, .. } => lsn_vec.push(source.0),
+            SSAInput::CallInput { source, .. } => lsn_vec.push(source.0),
+            SSAInput::InterpreterResult { source, .. } => lsn_vec.push(source.0),
+            SSAInput::CallOutcome { source, .. } => lsn_vec.push(source.0),
+            SSAInput::CreateOutcome { source, .. } => lsn_vec.push(source.0),
         };
         lsn_vec
     }

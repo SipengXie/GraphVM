@@ -23,8 +23,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         }
         let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "Constant");
         let is_call = match_input!(inputs, 1, SSAOutput::Constant(value, ..) => u256_to_bool(*value)?, "Constant");
-        let caller_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
-        let gas_cost = match_input!(inputs, 3, SSAOutput::Constant ( value, .. )=> value, "Constant");
+        let gas_cost = match_input!(inputs, 2, SSAOutput::Constant ( value, .. )=> value, "Constant");
+        let caller_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
 
         let caller = Address::from_word(B256::from(*caller));
         let new_caller_info = AccountInfo {
@@ -53,8 +53,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             ));
         }
         let caller = match_input!(inputs, 0, SSAOutput::Constant(value) => value, "Constant");
-        let caller_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
-        let refund_gas = match_input!(inputs, 2, SSAOutput::Constant(value)=> value, "Constant");
+        let refund_gas = match_input!(inputs, 1, SSAOutput::Constant(value)=> value, "Constant");
+        let caller_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
         
         let caller = Address::from_word(B256::from(*caller));
         let new_caller_info = AccountInfo {

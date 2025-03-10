@@ -14,7 +14,7 @@ use metrics::histogram;
 use rayon::ThreadPool;
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
 use revm_ssa::{
-    logger::LsnType, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
+    logger::{LsnType, LsnWithIndex}, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
 };
 
 /// Execution mode
@@ -307,10 +307,10 @@ where
             Self::verify_control_flow(node, &outputs)?;
         }
 
-        let set_result_start = Instant::now();
+        // let set_result_start = Instant::now();
         graph.set_result(lsn, outputs)?;
-        let set_result_duration = set_result_start.elapsed();
-        histogram!("revm.ssa.executor.set_result_time", set_result_duration);
+        // let set_result_duration = set_result_start.elapsed();
+        // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
         Ok(())
     }
 
@@ -456,15 +456,11 @@ where
         
         // Fill memory according to each dependency's offset and length
         for dep in deps {
-            if let Ok(Some(memory_data)) = graph.get_result(dep.lsn, |results: &[SSAOutput]| {
-                results.iter().find_map(|result| {
-                    if let SSAOutput::Memory(src_bytes) = result {
-                        Some(src_bytes.clone())
-                    } else {
-                        None
-                    }
-                })
-            }) {
+            if let Ok(memory_data) = Self::get_dependency_result::<Bytes>(
+                graph,
+                dep.lsn,
+                "Memory dependency"
+            ) {
                 // According to MemoryDep definition:
                 // mem[self_offset:self_offset+length] = mem[lsn_offset:lsn_offset+length]
                 let dst_start = dep.self_offset;
@@ -487,55 +483,52 @@ where
         Ok(memory.into())
     }
 
-
-    /// Generic function for getting results and type conversion
-    fn get_dependency_result<T, F>(
+    /// Get output result for a specific LSN and index from the graph
+    fn get_dependency_result<T>(
         graph: &SsaGraph,
-        lsn: LsnType,
-        extractor: F,
+        source: LsnWithIndex,
         error_msg: &str
     ) -> Result<T>
     where
-        F: FnOnce(&[SSAOutput]) -> Option<T>,
+        T: TryFrom<SSAOutput>,
+        <T as TryFrom<SSAOutput>>::Error: std::fmt::Debug,
     {
-        let result = match graph.get_result(lsn, extractor)? {
-            Some(value) => value,
-            None => {
-                let original_outputs = graph.get_result_by_lsn(lsn)?
-                    .map(|outputs| format!("{:?}", outputs))
-                    .unwrap_or_else(|| "No outputs".to_string());
-                return Err(ExecutionError::ExecutionError(
-                    format!("{} dependency must exist in the inputs. LSN: {}, Actual outputs: {}", 
-                        error_msg, lsn, original_outputs)
-                ));
-            }
-        };
+        let (lsn, index) = source;
+        let outputs = graph.get_result_by_lsn(lsn)?
+            .ok_or_else(|| ExecutionError::ExecutionError(
+                format!("Output not found for LSN: {}", lsn)
+            ))?;
         
-        Ok(result)
+        if index >= outputs.len() as u8 {
+            return Err(ExecutionError::ExecutionError(
+                format!("{} index out of bounds. LSN: {}, index: {}, available outputs: {}", 
+                    error_msg, lsn, index, outputs.len())
+            ));
+        }
+        
+        let output = &outputs[index as usize];
+        T::try_from(output.clone()).map_err(|e| {
+            ExecutionError::ExecutionError(
+                format!("{} type conversion failed. LSN: {}, index: {}, actual output: {:?}, error: {:?}", 
+                    error_msg, lsn, index, output, e)
+            )
+        })
     }
 
     /// Handle Stack type input
     fn resolve_stack_input(
         graph: &SsaGraph,
-        source: LsnType 
+        source: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError("Stack input must have a source".to_string()));
         }
 
-        let stack_value = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::Stack(value) = output {
-                    Some(*value)
-                } else {
-                    None
-                }
-            }),
             "Stack"
-        )?;
-        Ok(SSAOutput::Stack(stack_value))
+        )
     }
 
     /// Handle Memory type input
@@ -555,29 +548,15 @@ where
     fn resolve_storage_input(
         graph: &SsaGraph,
         context: &Arc<ExecutionContext<'a, DB, SPEC>>,
-        source: LsnType,
+        source: LsnWithIndex,
         key: &StorageKey
     ) -> Result<SSAOutput> {
-        // eprintln!("resolve_storage_input: {:?}", source);
-        let result = if source != 0 {
-            let storage_output = Self::get_dependency_result(
+        let result = if source.0 != 0 {
+           Self::get_dependency_result(
                 graph,
                 source,
-                |results| results.iter().find_map(|output| match output {
-                    SSAOutput::Storage{key: _key, value} if **_key == *key => Some(value.clone()),
-                    _ => None
-                }),
-                // &format!(
-                //     "Storage for node <with Old Output> {:?}, node <corresponding result> {:?}", 
-                //     graph.get_node(source)?, 
-                //     graph.get_result_by_lsn(source)?.unwrap()
-                // ),
                 "Storage"
-            )?;
-            Ok(SSAOutput::Storage {
-                key: Box::new(key.clone()),
-                value: storage_output,
-            })
+            )
         } else {
             let context = unsafe { Self::get_mut_context(context) };
             let value = context.get_storage_value_from_db(key);
@@ -592,23 +571,14 @@ where
     /// Handle ReturnDataBuffer type input
     fn resolve_return_data_input(
         graph: &SsaGraph,
-        source: LsnType
+        source: LsnWithIndex
     ) -> Result<SSAOutput> {
-        let result = if source != 0 {
-            let return_data = Self::get_dependency_result(
+        let result = if source.0 != 0 {
+            Self::get_dependency_result(
                 graph,
                 source,
-                |results| results.iter().find_map(|output| {
-                    if let SSAOutput::ReturnDataBuffer(data) = output {
-                        Some(data.clone())
-                    } else {
-                        None
-                    }
-                }),
                 "ReturnData"
-            )?;
-            
-            Ok(SSAOutput::ReturnDataBuffer(return_data))
+            )
         } else {
             Ok(SSAOutput::ReturnDataBuffer(Bytes::default()))
         };
@@ -618,23 +588,14 @@ where
     /// Handle MemorySizeChange type input
     fn resolve_memory_size_input(
         graph: &SsaGraph,
-        last_memory: LsnType 
+        last_memory: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        let result = if last_memory != 0 {
-            let memory_size = Self::get_dependency_result(
+        let result = if last_memory.0 != 0 {
+            Self::get_dependency_result(
                 graph,
                 last_memory,
-                |results| results.iter().find_map(|output| {
-                    if let SSAOutput::MemorySize(size) = output {
-                        Some(*size)
-                    } else {
-                        None
-                    }
-                }),
                 "Memory"
-            )?;
-            
-            Ok(SSAOutput::MemorySize(memory_size))
+            )
         } else {
             Ok(SSAOutput::MemorySize(0))
         };
@@ -644,23 +605,14 @@ where
     /// Handle ContractEntry type input
     fn resolve_contract_env_input(
         graph: &SsaGraph,
-        entry_lsn: LsnType 
+        entry_lsn: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        let result = if entry_lsn != 0 {
-            let contract_env = Self::get_dependency_result(
+        let result = if entry_lsn.0 != 0 {
+            Self::get_dependency_result(
                 graph,
                 entry_lsn,
-                |results| results.iter().find_map(|output| {
-                    if let SSAOutput::ContractEnv(env) = output {
-                        Some(env.clone())
-                    } else {
-                        None
-                    }
-                }),
                 "ContractEnv"
-            )?;
-            
-            Ok(SSAOutput::ContractEnv(contract_env))
+            )
         } else {
             Err(ExecutionError::ExecutionError(
                 "ContractEnv must have a source".to_string()
@@ -672,136 +624,91 @@ where
     /// Handle CreateInput type input
     fn resolve_create_input(
         graph: &SsaGraph,
-        entry: LsnType
+        entry: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if entry == 0 {
+        if entry.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "Internal CreateInput must have a source".to_string()
             ));
         }
 
-        let create_input = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             entry,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CreateInput(input) = output {
-                    Some(input.clone())
-                } else {
-                    None
-                }
-            }),
             "Create"
-        )?;
-        
-        Ok(SSAOutput::CreateInput(create_input))
+        )
     }
 
     /// Handle CallInput type input
     fn resolve_call_input(
         graph: &SsaGraph,
-        entry: LsnType
+        entry: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if entry == 0 {
+        if entry.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "CallInput must have a source".to_string()
             ));
         }
      
-        let call_input = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             entry,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CallInput(input) = output {
-                    Some(input.clone())
-                } else {
-                    None
-                }
-            }),
             "Call"
-        )?;
-        
-        Ok(SSAOutput::CallInput(call_input))
+        )
     }
 
     /// Handle InterpreterResult type input
     fn resolve_interpreter_result(
         graph: &SsaGraph,
-        source: LsnType 
+        source: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "InterpreterResult must have a source".to_string()
             ));
         }
 
-        let interpreter_result = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::InterpreterResult(result) = output {
-                    Some(result.clone())
-                } else {
-                    None
-                }
-            }),
             "InterpreterResult"
-        )?;
-        
-        Ok(SSAOutput::InterpreterResult(interpreter_result))
+        )
     }
 
     /// Handle CallOutcome type input
     fn resolve_call_outcome(
         graph: &SsaGraph,
-        source: LsnType 
+        source: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "CallOutcome must have a source".to_string()
             ));
         }
 
-        let call_outcome = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CallOutcome(outcome) = output {
-                    Some(outcome.clone())
-                } else {
-                    None
-                }
-            }),
             "CallOutcome"
-        )?;
-        
-        Ok(SSAOutput::CallOutcome(call_outcome))
+        )
     }
 
     /// Handle CreateOutcome type input
     fn resolve_create_outcome(
         graph: &SsaGraph,
-        source: LsnType
+        source: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "CreateOutcome must have a source".to_string()
             ));
         }
 
-        let create_outcome = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CreateOutcome(outcome) = output {
-                    Some(outcome.clone())
-                } else {
-                    None
-                }
-            }),
             "CreateOutcome"
-        )?;
-        
-        Ok(SSAOutput::CreateOutcome(create_outcome))
+        )
     }
 
     /// Parse dependencies to get input values
@@ -825,14 +732,14 @@ where
                 SSAInput::ContractEnv { source: entry_lsn } => Self::resolve_contract_env_input(graph, *entry_lsn)?,
                 SSAInput::MemorySizeChange { source: last_memory } => Self::resolve_memory_size_input(graph, *last_memory)?,
                 SSAInput::CallInput { source } => {
-                    if *source == 0 {
+                    if source.0 == 0 {
                         SSAOutput::CallInput(Box::new(context.get_first_call_input().unwrap()))
                     } else {
-                        Self::resolve_call_input(graph, *source)?
+                        Self::resolve_call_input(graph, *source)?   
                     }
                 },
                 SSAInput::CreateInput { source } => {
-                    if *source == 0 {
+                    if source.0 == 0 {
                         SSAOutput::CreateInput(Box::new(context.get_first_create_input().unwrap()))
                     } else {
                         Self::resolve_create_input(graph, *source)?

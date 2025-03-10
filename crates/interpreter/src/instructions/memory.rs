@@ -32,7 +32,7 @@ pub fn mstore<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
             offset, 
             value, 
             mem_length);
-        interpreter.shared_memory.record_shadow_write(offset, 32, lsn);
+        interpreter.shared_memory.record_shadow_write(offset, 32, (lsn, 0));
         // eprintln!("mem_deps: {:?}", interpreter.shared_memory.get_shadow_deps(offset..offset+32));
     }
 }
@@ -49,7 +49,7 @@ pub fn mstore8<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
             offset, 
             value, 
             mem_length);
-        interpreter.shared_memory.record_shadow_write(offset, 1, lsn);
+        interpreter.shared_memory.record_shadow_write(offset, 1, (lsn, 0));
     }
 }
 
@@ -92,6 +92,6 @@ pub fn mcopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host:
             result, 
             memory_deps,
             mem_length);
-        interpreter.shared_memory.record_shadow_write(dst, len, lsn);
+        interpreter.shared_memory.record_shadow_write(dst, len, (lsn, 0));
     }
 }

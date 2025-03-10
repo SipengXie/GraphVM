@@ -73,7 +73,7 @@ pub fn codecopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
                 len, 
                 interpreter.contract.bytecode.bytes(), 
                 mem_length);   
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -99,7 +99,7 @@ pub fn codecopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
             len, 
             interpreter.contract.bytecode.bytes(), 
             mem_length);   
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -161,7 +161,7 @@ pub fn calldatacopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
             let mem_length = None;
             let lsn = logger.log_call_data_copy(CALLDATACOPY, memory_offset, data_offset, len, interpreter.contract.input.clone(), mem_length);
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -178,7 +178,7 @@ pub fn calldatacopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
         let lsn = logger.log_call_data_copy(CALLDATACOPY, memory_offset, data_offset, len, interpreter.contract.input.clone(), mem_length);
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -219,7 +219,7 @@ pub fn returndatacopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interprete
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
             let mem_length = None;    
             let lsn =  logger.log_return_data_cpy_operation(RETURNDATACOPY, memory_offset, data_offset, len, interpreter.return_data_buffer.clone(), mem_length);
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -238,7 +238,7 @@ pub fn returndatacopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interprete
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };    
         let lsn =  logger.log_return_data_cpy_operation(RETURNDATACOPY, memory_offset, data_offset, len, interpreter.return_data_buffer.clone(), mem_length);
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 

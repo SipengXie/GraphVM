@@ -329,7 +329,7 @@ impl Interpreter {
                 panic!("Error in insert_call_outcome, original call_outcome: {:?}", call_outcome);
             }
             let lsn = ssa_logger.log_insert_call_outcome(ssa_result);
-            shared_memory.record_shadow_write(out_offset, target_len, lsn);
+            shared_memory.record_shadow_write(out_offset, target_len, (lsn, 1));
         }
     }
 
