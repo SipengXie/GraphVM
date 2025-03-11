@@ -572,11 +572,16 @@ impl SSALogger {
             source: self.last_return_data_buffer,
         });
         
-        let return_data_len = min(data_offset + len, return_data.len());
-        let return_data_slice = return_data.slice(data_offset..return_data_len);
-        // Pad return_data_slice to len
-        let mut padded_return_data_slice = vec![0u8; len];
-        padded_return_data_slice[..return_data_slice.len()].copy_from_slice(&return_data_slice);
+        let padded_return_data_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let return_data_len = min(data_offset + len, return_data.len());
+            let return_data_slice = return_data.slice(data_offset..return_data_len);
+            // Pad return_data_slice to len
+            let mut padded_return_data_slice = vec![0u8; len];
+            padded_return_data_slice[..return_data_slice.len()].copy_from_slice(&return_data_slice);
+            padded_return_data_slice
+        };
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::Memory(padded_return_data_slice.into()));
         
@@ -603,11 +608,16 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv { 
             source: self.get_entry_lsn() 
         });
-        let code_end = min(code.len(), code_offset+len);
-        let code_slice = code.slice(code_offset..code_end);
-        // Pad code_slice to len
-        let mut padded_code_slice = vec![0u8; len];
-        padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+        let padded_code_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let code_end = min(code.len(), code_offset+len);
+            let code_slice = code.slice(code_offset..code_end);
+            // Pad code_slice to len
+            let mut padded_code_slice = vec![0u8; len];
+            padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_code_slice
+        };
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::Memory(padded_code_slice.into()));
 
@@ -1274,8 +1284,12 @@ impl SSALogger {
         let mut ssa_outputs = Vec::with_capacity(2);
         ssa_outputs.push(SSAOutput::ReturnDataBuffer(return_data_buffer.clone()));
 
-        let target_len = min(out_len, return_data_buffer.len());
-        let data_slice = &return_data_buffer[..target_len];
+        let data_slice = if out_len == 0 {
+            &[] as &[u8]
+        } else {
+            let target_len = min(out_len, return_data_buffer.len());
+            &return_data_buffer[..target_len]
+        };
         match out_result {
             SSAInstructionResult::Ok => {
                 ssa_outputs.push(SSAOutput::Memory(data_slice.to_vec().into()));
@@ -1386,11 +1400,16 @@ impl SSALogger {
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(len)));
         ssa_inputs.push(input_account_info!(self, address));
 
-        let code_end = min(code.len(), code_offset+len);
-        let code_slice = &code[code_offset..code_end];
-        // pad code_slice to len
-        let mut padded_code_slice = vec![0u8; len];
-        padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+        let padded_code_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let code_end = min(code.len(), code_offset+len);
+            let code_slice = &code[code_offset..code_end];
+            // Pad code_slice to len
+            let mut padded_code_slice = vec![0u8; len];
+            padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_code_slice
+        };
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::Memory(padded_code_slice.into()));
 

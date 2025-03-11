@@ -290,8 +290,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             SSAOutput::ReturnDataBuffer(return_data_buffer.clone()),
         ];
 
-        let target_len = std::cmp::min(out_len, return_data_buffer.len());
-        let data_slice = &return_data_buffer[..target_len];
+        let data_slice = if out_len == 0 {
+            &[] as &[u8]
+        } else {
+            let target_len = std::cmp::min(out_len, return_data_buffer.len());
+            &return_data_buffer[..target_len]
+        };
         match call_outcome.result.result {
             SSAInstructionResult::Ok => {
                 outputs.push(SSAOutput::Memory(data_slice.to_vec().into()));
