@@ -128,11 +128,19 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let mem_offset = as_usize_saturated(*mem_offset);
         let code_offset = as_usize_saturated(*code_offset);
         let len = as_usize_saturated(*len);
-        let code_len = min(code.len(), code_offset+len);
-        let code_slice = &code[code_offset..code_len];
-        // Pad code_slice to len
-        let mut padded_code_slice = vec![0u8; len];
-        padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+
+        // When len is 0, return an empty vector
+        let padded_code_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let code_len = min(code.len(), code_offset+len);
+            let code_slice = &code[code_offset..code_len];
+            // Pad code_slice to len
+            let mut padded_data = vec![0u8; len];
+            padded_data[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_data
+        };
+        
         let mut outputs = vec![SSAOutput::Memory(padded_code_slice.into())];
 
         let new_size = self.check_memory_size(mem_offset, len);

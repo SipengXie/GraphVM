@@ -576,6 +576,8 @@ impl SSALogger {
         self.log_operation(opcode, ssa_input, ssa_output);
     }
 
+    // Corresponding Execution Function
+    // [execute_returndatacopy]
     #[inline]
     pub fn log_return_data_cpy_operation(&mut self, opcode: u8, 
         meme_offset: usize, 
@@ -591,11 +593,17 @@ impl SSALogger {
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(len)));
         ssa_inputs.push(SSAInput::ReturnDataBuffer {source: self.last_return_data_buffer});
         
-        let return_data_len = min(data_offset + len, return_data.len());
-        let return_data_slice = return_data.slice(data_offset..return_data_len);
-        // Pad return_data_slice to len
-        let mut padded_return_data_slice = vec![0u8; len];
-        padded_return_data_slice[..return_data_slice.len()].copy_from_slice(&return_data_slice);
+        // When len is 0, return an empty vector
+        let padded_return_data_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let return_data_len = min(data_offset + len, return_data.len());
+            let return_data_slice = return_data.slice(data_offset..return_data_len);
+            // Pad return_data_slice to len
+            let mut padded_data = vec![0u8; len];
+            padded_data[..return_data_slice.len()].copy_from_slice(&return_data_slice);
+            padded_data
+        };
 
 
         let mut ssa_outputs = Vec::with_capacity(1);
@@ -610,6 +618,8 @@ impl SSALogger {
         self.log_operation(opcode, ssa_inputs, ssa_outputs)
     }
 
+    // Corresponding Execution Function
+    // [execute_codecopy]
     #[inline]
     pub fn log_codecopy(&mut self, 
         opcode: u8, 
@@ -625,11 +635,17 @@ impl SSALogger {
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(len)));
         ssa_inputs.push(SSAInput::ContractEnv { source: self.get_entry_lsn()});
 
-        let code_end = min(code.len(), code_offset+len);
-        let code_slice = code.slice(code_offset..code_end);
-        // Pad code_slice to len
-        let mut padded_code_slice = vec![0u8; len];
-        padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+        // When len is 0, return an empty vector
+        let padded_code_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let code_end = min(code.len(), code_offset+len);
+            let code_slice = code.slice(code_offset..code_end);
+            // Pad code_slice to len
+            let mut padded_data = vec![0u8; len];
+            padded_data[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_data
+        };
 
         let mut ssa_outputs = Vec::with_capacity(1);
         // Index is 0
@@ -643,6 +659,8 @@ impl SSALogger {
         self.log_operation(opcode, ssa_inputs, ssa_outputs)
     }
 
+    // Corresponding Execution Function
+    // [execute_calldatacopy]
     #[inline]
     pub fn log_call_data_copy(&mut self, opcode: u8, memory_offset: usize, data_offset: usize, len: usize, data: Bytes, mem_length: Option<usize>) -> LsnType {
         let lsn = self.current_lsn;
@@ -653,11 +671,17 @@ impl SSALogger {
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(len)));
         ssa_inputs.push(SSAInput::ContractEnv {source: self.get_entry_lsn()});
 
-        let data_len = min(data_offset + len, data.len());
-        let data_slice = data.slice(data_offset..data_len);
-        // Pad data_slice to len
-        let mut padded_data_slice = vec![0u8; len];
-        padded_data_slice[..data_slice.len()].copy_from_slice(&data_slice);
+        // When len is 0, return an empty vector
+        let padded_data_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let data_len = min(data_offset + len, data.len());
+            let data_slice = data.slice(data_offset..data_len);
+            // Pad data_slice to len
+            let mut padded_data = vec![0u8; len];
+            padded_data[..data_slice.len()].copy_from_slice(&data_slice);
+            padded_data
+        };
 
         let mut ssa_outputs = Vec::with_capacity(1);
         // Index is 0
@@ -1239,11 +1263,14 @@ impl SSALogger {
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
+    // Corresponding Execution Function
+    // [execute_insert_call_outcome]
     #[inline]
     pub fn log_insert_call_outcome(&mut self, call_outcome: SSACallOutcome) -> LsnType {
         let opcode = InternalOp::INSERT_CALL_OUTCOME;
         let lsn = self.current_lsn;
         let return_data_buffer = call_outcome.result.output.clone();
+        
         let target_len = min(call_outcome.ret_range.len(), return_data_buffer.len());
         let data_slice = &return_data_buffer[..target_len];
 
@@ -1329,6 +1356,8 @@ impl SSALogger {
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 
+    // Corresponding Execution Function
+    // [execute_extcodecopy]
     #[inline]
     pub fn log_extcodecopy(&mut self, 
         opcode: u8, 
@@ -1348,11 +1377,17 @@ impl SSALogger {
         ssa_inputs.push(input_account_info!(self, address));
         self.log_storage_read(StorageKey::AccountInfo(address), lsn);
 
-        let code_end = min(code.len(), code_offset+len);
-        let code_slice = &code[code_offset..code_end];
-        // pad code_slice to len
-        let mut padded_code_slice = vec![0u8; len];
-        padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
+        // When len is 0, return an empty vector
+        let padded_code_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let code_end = min(code.len(), code_offset+len);
+            let code_slice = &code[code_offset..code_end];
+            // Pad code_slice to len
+            let mut padded_data = vec![0u8; len];
+            padded_data[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_data
+        };
 
         let mut ssa_outputs = Vec::with_capacity(1);
         // Index is 0
