@@ -251,19 +251,34 @@ where
                 // Use bitmask for batch checking
                 // Wait for all dependencies to complete with spinning
                 // let wait_start = Instant::now();
-                while !deps_mask.iter().enumerate().all(|(idx, mask)| {
-                    *mask == 0 || (self.completed_nodes.bits[idx].0.load(Ordering::Acquire) & mask) == *mask
-                }) {
+                while {
+                    let mut all_ready = true;
+                    for (idx, mask) in deps_mask.iter().enumerate() {
+                        if *mask != 0 && (self.completed_nodes.bits[idx].0.load(Ordering::Relaxed) & mask) != *mask {
+                            all_ready = false;
+                            break;
+                        }
+                    }
+                    !all_ready
+                } {
                     std::hint::spin_loop();
                 }
                 // let wait_duration = wait_start.elapsed();
                 // histogram!("revm.ssa.executor.wait_time", wait_duration);
 
+                // let execute_start = Instant::now();
                 let exec_result = Self::execute_node(node, graph, &self.context);
+                // let execute_duration = execute_start.elapsed();
+                // histogram!("revm.ssa.executor.execute_time", execute_duration);
+
                 if exec_result.is_err() {
                     panic!("Execution failed: {:?}", exec_result.err().unwrap());
                 }
+
+                // let set_result_start = Instant::now();
                 self.completed_nodes.mark(node.lsn);
+                // let set_result_duration = set_result_start.elapsed();
+                // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
             })
         });
         let duration = start.elapsed();
