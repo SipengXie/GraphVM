@@ -638,11 +638,18 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv {
             source: self.get_entry_lsn(),
         });
-        let data_len = min(data_offset + len, data.len());
-        let data_slice = data.slice(data_offset..data_len);
-        // Pad data_slice to len
-        let mut padded_data_slice = vec![0u8; len];
-        padded_data_slice[..data_slice.len()].copy_from_slice(&data_slice);
+        
+        let padded_data_slice = if len == 0 {
+            Vec::new()
+        } else {
+            let data_len = min(data_offset + len, data.len());
+            let data_slice = data.slice(data_offset..data_len);
+            // Pad data_slice to len
+            let mut padded_data_slice = vec![0u8; len];
+            padded_data_slice[..data_slice.len()].copy_from_slice(&data_slice);
+            padded_data_slice
+        };
+        
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::Memory(padded_data_slice.into()));
 
