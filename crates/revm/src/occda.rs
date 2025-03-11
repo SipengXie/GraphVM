@@ -298,7 +298,7 @@ impl Occda {
                                 self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                             match executor.execute() {
-                                Ok(nodes_to_execute_len) => {
+                                Ok((nodes_to_execute_len, _)) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                     task_result.gas_limit = task.gas;
@@ -324,7 +324,7 @@ impl Occda {
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
                                         &tx_hash, 
-                                        &(nodes_to_execute_len.0).to_string()
+                                        &nodes_to_execute_len.to_string()
                                     );
                                     continue;
                                 }
@@ -667,7 +667,7 @@ impl Occda {
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                         match executor.execute() {
-                            Ok(nodes_to_execute_len) => {
+                            Ok((nodes_to_execute_len, _)) => {
                                 let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
@@ -690,7 +690,7 @@ impl Occda {
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
                                     &tx_hash, 
-                                    &(nodes_to_execute_len.0).to_string()
+                                    &(nodes_to_execute_len).to_string()
                                 );
                                 continue;
                             }

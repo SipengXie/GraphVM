@@ -11,7 +11,7 @@ use crate::{
 };
 use metrics::histogram;
 // use metrics::histogram;
-use rayon::ThreadPool;
+use rayon::{iter::ParallelIterator, slice::ParallelSlice, ThreadPool};
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
 use revm_ssa::{
     logger::{LsnType, LsnWithIndex}, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
@@ -196,24 +196,52 @@ where
     }
 
     pub fn execute_parallel_batches(&mut self) -> Result<std::time::Duration> {
-        let nodes_to_execute = self.graph.execution_layers()?;
+        const PARALLEL_THRESHOLD : usize = 1024;
 
-        let graph = unsafe { Self::get_mut_graph(&self.graph) };
+        let layers = self.graph.execution_layers()?;
         let thread_pool = self.thread_pool.as_ref().unwrap();
-        
-
-
+        let start = Instant::now();
+        for (_layer_idx, layer) in layers.iter().enumerate() {
+            let layer_size = layer.len();
+            if layer_size <= PARALLEL_THRESHOLD {
+                let graph = unsafe { Self::get_mut_graph(&self.graph) };
+                for node in layer {
+                    let exec_result = Self::execute_node(node, graph, &self.context);
+                    if exec_result.is_err() {
+                        panic!("Execution failed: {:?}", exec_result.err().unwrap());
+                    }
+                }
+            } else {
+                let batch_size = self.dynamic_batch_size(layer.len());
+                thread_pool.install(|| {
+                    layer.par_chunks(batch_size).for_each(|batch| {
+                        let graph = unsafe { Self::get_mut_graph(&self.graph) };
+                    for node in batch {
+                        let exec_result = Self::execute_node(node, graph, &self.context);
+                        if exec_result.is_err() {
+                            panic!("Execution failed: {:?}", exec_result.err().unwrap());
+                        }
+                    }
+                    })
+                });
+            }
+        }
+        let duration = start.elapsed();
+        Ok(duration)
     }
 
     // Calculate dynamic batch size based on layer size
-    fn dynamic_batch_size(&self, _layer_idx: usize, layer_len: usize) -> usize {
-        const BASE_SIZE: usize = 64;
-        match layer_len {
-            len if len <= 16 => 1,      // Small layers execute in parallel
-            len if len <= 256 => BASE_SIZE,
-            len if len <= 1024 => BASE_SIZE * 2,
-            _ => BASE_SIZE * 4,         // Very large layers use largest batch size
-        }
+    fn dynamic_batch_size(&self, layer_len: usize) -> usize {
+        
+        let min_per_thread = 4;
+        let max_per_thread = 256;
+        
+        let threads = rayon::current_num_threads();
+        let base_size = (layer_len + threads - 1) / threads;
+        
+        base_size
+            .next_power_of_two() 
+            .clamp(min_per_thread, max_per_thread)
     }
 
     pub fn execute_parallel(&mut self) -> Result<std::time::Duration> {

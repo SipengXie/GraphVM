@@ -210,6 +210,7 @@ impl TryFrom<SSAOutput> for Bytes {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(align(64))]
 pub struct SSALogEntry {
     // The LSN of the log entry
     pub lsn: LsnType,

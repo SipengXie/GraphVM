@@ -283,7 +283,7 @@ fn graph_execute_parallel(
     
     
     // Execute
-    let execution_time = executor.execute_parallel().unwrap();
+    let execution_time = executor.execute_parallel_batches().unwrap();
     
     (executor.into_tracer(), Some(execution_time))
 }
@@ -2426,5 +2426,5 @@ mod erc20_tests {
         // println!("The metrics will be in standard Prometheus format");
         // std::thread::sleep(std::time::Duration::from_secs(15));
     }
-
+  
 }
