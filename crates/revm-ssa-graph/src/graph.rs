@@ -318,4 +318,45 @@ impl SsaGraph {
         let critical_path_length = longest_paths.values().max().copied().unwrap_or(1);
         Ok(critical_path_length as f64 / total_nodes as f64)
     }
+
+    /// Get nodes grouped by execution layers (topological levels)
+    /// 
+    /// # Returns
+    /// * `Result<Vec<Vec<SSALogEntry>>>` - Nodes grouped by layers where each layer can be executed in parallel
+    pub fn execution_layers(&self) -> Result<Vec<Vec<SSALogEntry>>> {
+        // Get topologically sorted node indices
+        let sorted_indices = toposort(&self.graph, None)
+            .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
+
+        // Use array to store level information (more efficient than HashMap)
+        let mut levels = vec![0; self.graph.node_count()];
+        let mut max_level = 0;
+
+        // First pass: calculate the level for each node
+        for &node_idx in &sorted_indices {
+            // Get the maximum level of all predecessor nodes
+            let pred_level = self.graph.neighbors_directed(node_idx, petgraph::Direction::Incoming)
+                .map(|p| levels[p.index()])
+                .max()
+                .unwrap_or(0);
+
+            // Current node level = max predecessor level + 1
+            let current_level = pred_level + 1;
+            levels[node_idx.index()] = current_level;
+            
+            // Update the maximum level
+            if current_level > max_level {
+                max_level = current_level;
+            }
+        }
+
+        // Second pass: group by levels (pre-allocate space for better performance)
+        let mut layers: Vec<Vec<SSALogEntry>> = vec![Vec::new(); max_level as usize];
+        for (_i, &node_idx) in sorted_indices.iter().enumerate() {
+            let level = levels[node_idx.index()] - 1; // Levels start from 0
+            layers[level].push(self.graph[node_idx].clone());
+        }
+
+        Ok(layers)
+    }
 }

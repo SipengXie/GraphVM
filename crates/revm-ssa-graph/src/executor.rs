@@ -150,7 +150,7 @@ where
     }
 
     /// Execute the entire graph
-    pub fn execute(&mut self) -> Result<usize> {
+    pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {
         let nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
@@ -178,11 +178,11 @@ where
         //     );
         // }
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
-        // let execute_start = Instant::now();
+        let execute_start = Instant::now();
         for node in &nodes_to_execute {
             Self::execute_node(node, graph, &self.context)?;
         }
-        // histogram!("revm.ssa.executor.execute_time", execute_start.elapsed());
+        let execute_duration = execute_start.elapsed();
 
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
@@ -192,7 +192,28 @@ where
             }
         }
         
-        Ok(nodes_to_execute.len())
+        Ok((nodes_to_execute.len(), execute_duration))
+    }
+
+    pub fn execute_parallel_batches(&mut self) -> Result<std::time::Duration> {
+        let nodes_to_execute = self.graph.execution_layers()?;
+
+        let graph = unsafe { Self::get_mut_graph(&self.graph) };
+        let thread_pool = self.thread_pool.as_ref().unwrap();
+        
+
+
+    }
+
+    // Calculate dynamic batch size based on layer size
+    fn dynamic_batch_size(&self, _layer_idx: usize, layer_len: usize) -> usize {
+        const BASE_SIZE: usize = 64;
+        match layer_len {
+            len if len <= 16 => 1,      // Small layers execute in parallel
+            len if len <= 256 => BASE_SIZE,
+            len if len <= 1024 => BASE_SIZE * 2,
+            _ => BASE_SIZE * 4,         // Very large layers use largest batch size
+        }
     }
 
     pub fn execute_parallel(&mut self) -> Result<std::time::Duration> {

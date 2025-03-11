@@ -324,7 +324,7 @@ impl Occda {
                                     profiler::note_str_unchecked(
                                         "re-execution-opcodes",
                                         &tx_hash, 
-                                        &nodes_to_execute_len.to_string()
+                                        &(nodes_to_execute_len.0).to_string()
                                     );
                                     continue;
                                 }
@@ -690,7 +690,7 @@ impl Occda {
                                 profiler::note_str_unchecked(
                                     "re-execution-opcodes",
                                     &tx_hash, 
-                                    &nodes_to_execute_len.to_string()
+                                    &(nodes_to_execute_len.0).to_string()
                                 );
                                 continue;
                             }

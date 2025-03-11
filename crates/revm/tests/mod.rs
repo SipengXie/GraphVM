@@ -222,20 +222,11 @@ fn graph_execute(entries: Vec<SSALogEntry>, config: ExecutionConfig, db: &mut Ca
         first_create
         ).with_mode(config.mode).with_tracer(tracer);
 
-
-    // Start timing after loading previous results
-    let start_time = if config.collect_metrics {
-        Some(Instant::now())
-    } else {
-        None
-    };
     
     // Execute
-    executor.execute().unwrap();
+    let res = executor.execute().unwrap();
     
-    let execution_time = start_time.map(|t| t.elapsed());
-    
-    (executor.into_tracer(), execution_time)
+    (executor.into_tracer(), Some(res.1))
 }
 
 /// Re-execute using graph execution engine
@@ -2119,6 +2110,52 @@ mod erc20_tests {
         };
         let parallel_full_result = execute_case(runtime_code.clone(), "parallel_full", parallel_full_config);
         println!("Parallel Full Graph Time Cost: {:?}", parallel_full_result.execution_time);
+        println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
+        println!("You can use curl http://127.0.0.1:12345/metrics to view them");
+        println!("The metrics will be in standard Prometheus format");
+        // std::thread::sleep(std::time::Duration::from_secs(15));
+    }
+
+    #[test]
+    fn test_compute() {
+        // Initialize prometheus metrics exporter
+        let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
+        let _handle = builder
+            .with_http_listener(([127, 0, 0, 1], 12345))
+            .install()
+            .expect("failed to install Prometheus recorder");
+        let runtime_hex = hex::decode(TEST_RUNTIME_CODE).unwrap();
+        let runtime_code = Bytes::from(runtime_hex);
+        let input_hex = hex::decode(TEST_INPUT).unwrap();
+        let input = Bytes::from(input_hex);
+
+        let non_ssa_config = ExecutionConfig {
+            mode: ExecutionMode::Full,
+            test_mode: TestMode::BaselineNoSSA,
+            collect_metrics: true,
+            pre_deployed_contract: vec![],
+            pre_determined_slots: vec![],
+            input: Some(input.clone()),
+            thread_number: None,
+            enable_tracer: false,
+            is_deployed_contract: false
+        };
+        let non_ssa_result = execute_case(runtime_code.clone(), "non_ssa", non_ssa_config);
+        println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
+        // Serial full graph execution
+        let serial_full_config = ExecutionConfig {
+            mode: ExecutionMode::Full,
+            test_mode: TestMode::SerialGraph,
+            collect_metrics: true,
+            pre_deployed_contract: vec![],
+            pre_determined_slots: vec![],
+            input: Some(input.clone()),
+            thread_number: None,
+            enable_tracer: false,
+            is_deployed_contract: false
+        };
+        let serial_full_result = execute_case(runtime_code.clone(), "serial_full", serial_full_config);
+        println!("Serial Full Graph Time Cost: {:?}", serial_full_result.execution_time);
         println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
         println!("You can use curl http://127.0.0.1:12345/metrics to view them");
         println!("The metrics will be in standard Prometheus format");
