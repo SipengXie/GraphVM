@@ -80,6 +80,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let len = as_usize_saturated(*len);
         let new_size = self.check_memory_size(memory_offset, len);
 
+        // Handle the case when len is 0
         let padded_code_slice = if len == 0 {
             Vec::new()
         } else {
@@ -87,10 +88,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             let code_end = min(code_offset + len, code.len());
             let code_slice = &code[code_offset..code_end];
             // Pad code to len length
-            let mut padded_code_slice = vec![0u8; len];
-            padded_code_slice[..code_slice.len()].copy_from_slice(&code_slice);
-            padded_code_slice
+            let mut padded_slice = vec![0u8; len];
+            padded_slice[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_slice
         };
+        
         let mut outputs = vec![SSAOutput::Memory(padded_code_slice.into())];
         if new_size > self.memory_size() {
             outputs.push(SSAOutput::MemorySize(new_size));
@@ -165,12 +167,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         } else {
             // Prevent data from being too short
             let data_end = min(data_offset + len, call_data.len());
-            let data_slice = call_data.slice(data_offset..data_end);
+            let data_slice = call_data.slice(data_offset..data_end); 
             // Pad data to len length
-            let mut padded_data_slice = vec![0u8; len];
-            padded_data_slice[..data_slice.len()].copy_from_slice(&data_slice);
-            padded_data_slice
+            let mut padded_data = vec![0u8; len];
+            padded_data[..data_slice.len()].copy_from_slice(&data_slice);
+            padded_data
         };
+        
         let mut outputs = vec![SSAOutput::Memory(padded_data_slice.into())];
         if new_size > self.memory_size() {
             outputs.push(SSAOutput::MemorySize(new_size));
@@ -209,6 +212,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let len = as_usize_saturated(*len);
         let new_size = self.check_memory_size(memory_offset, len);
 
+        // When len is 0, return an empty vector
         let padded_data_slice = if len == 0 {
             Vec::new()
         } else {
@@ -216,10 +220,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             let data_end = min(data_offset + len, return_data.len());
             let data_slice = return_data.slice(data_offset..data_end);
             // Pad data to len length
-            let mut padded_data_slice = vec![0u8; len];
-            padded_data_slice[..data_slice.len()].copy_from_slice(&data_slice);
-            padded_data_slice
+            let mut padded_data = vec![0u8; len];
+            padded_data[..data_slice.len()].copy_from_slice(&data_slice);
+            padded_data
         };
+        
         let mut outputs = vec![SSAOutput::Memory(padded_data_slice.into())];
         if new_size > self.memory_size() {
             outputs.push(SSAOutput::MemorySize(new_size));

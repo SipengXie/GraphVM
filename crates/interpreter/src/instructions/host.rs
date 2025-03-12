@@ -115,7 +115,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
                 code,
                 mem_length);
             // record the shadow_memory
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -136,7 +136,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
             code,
             mem_length);
         // record the shadow_memory
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, lsn);
+        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 

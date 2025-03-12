@@ -2,18 +2,19 @@
 use std::{
     collections::HashSet,
     marker::PhantomData,
-    sync::{atomic::{AtomicU64, Ordering}, Arc}, 
+    sync::{atomic::{AtomicU64, Ordering}, Arc}, time::Instant, 
     // time::Instant
 };
 
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result
 };
+use metrics::histogram;
 // use metrics::histogram;
-use rayon::ThreadPool;
+use rayon::{iter::ParallelIterator, slice::ParallelSlice, ThreadPool};
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
 use revm_ssa::{
-    logger::LsnType, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
+    logger::{LsnType, LsnWithIndex}, MemoryDep, SSACallInput, SSACreateInput, SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput, StorageKey
 };
 
 /// Execution mode
@@ -149,7 +150,7 @@ where
     }
 
     /// Execute the entire graph
-    pub fn execute(&mut self) -> Result<usize> {
+    pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {
         let nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
@@ -177,11 +178,11 @@ where
         //     );
         // }
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
-        // let execute_start = Instant::now();
+        let execute_start = Instant::now();
         for node in &nodes_to_execute {
             Self::execute_node(node, graph, &self.context)?;
         }
-        // histogram!("revm.ssa.executor.execute_time", execute_start.elapsed());
+        let execute_duration = execute_start.elapsed();
 
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
@@ -191,10 +192,65 @@ where
             }
         }
         
-        Ok(nodes_to_execute.len())
+        Ok((nodes_to_execute.len(), execute_duration))
     }
 
-    pub fn execute_parallel(&mut self) -> Result<()> {
+    pub fn execute_parallel_batches(&mut self) -> Result<std::time::Duration> {
+        const PARALLEL_THRESHOLD : usize = 1024;
+
+        let layers = self.graph.execution_layers()?;
+        let thread_pool = self.thread_pool.as_ref().unwrap();
+        
+        let start = Instant::now();
+        for (layer_idx, layer) in layers.iter().enumerate() {
+            let layer_size = layer.len();
+            let layer_start = Instant::now();
+            
+            if layer_size <= PARALLEL_THRESHOLD {
+                let graph = unsafe { Self::get_mut_graph(&self.graph) };
+                for node in layer {
+                    let exec_result = Self::execute_node(node, graph, &self.context);
+                    if exec_result.is_err() {
+                        panic!("Execution failed: {:?}", exec_result.err().unwrap());
+                    }
+                }
+            } else {
+                let batch_size = self.dynamic_batch_size(layer.len());
+                thread_pool.install(|| {
+                    layer.par_chunks(batch_size).for_each(|batch| {
+                        let graph = unsafe { Self::get_mut_graph(&self.graph) };
+                        for node in batch {
+                            let exec_result = Self::execute_node(node, graph, &self.context);
+                            if exec_result.is_err() {
+                                panic!("Execution failed: {:?}", exec_result.err().unwrap());
+                            }
+                        }
+                    })
+                });
+            }
+            
+            let layer_duration = layer_start.elapsed();
+            println!("Layer {}: size = {}, execution time = {:?}", layer_idx, layer_size, layer_duration);
+        }
+        let duration = start.elapsed();
+        Ok(duration)
+    }
+
+    // Calculate dynamic batch size based on layer size
+    fn dynamic_batch_size(&self, layer_len: usize) -> usize {
+        
+        let min_per_thread = 4;
+        let max_per_thread = 256;
+        
+        let threads = rayon::current_num_threads();
+        let base_size = (layer_len + threads - 1) / threads;
+        
+        base_size
+            .next_power_of_two() 
+            .clamp(min_per_thread, max_per_thread)
+    }
+
+    pub fn execute_parallel(&mut self) -> Result<std::time::Duration> {
         // Get nodes to execute based on execution mode
         let nodes_to_execute: Vec<_> = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
@@ -244,36 +300,44 @@ where
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
         let thread_pool = self.thread_pool.as_ref().unwrap();
         
+        let start = Instant::now();
         thread_pool.install(|| {
             nodes_with_masks.into_iter().for_each(|(node, deps_mask)| {
                 // Use bitmask for batch checking
-                let mut spin_count = 1;
-                'wait_loop: loop {
-                    // Check if all dependencies are completed
+                // Wait for all dependencies to complete with spinning
+                // let wait_start = Instant::now();
+                while {
+                    let mut all_ready = true;
                     for (idx, mask) in deps_mask.iter().enumerate() {
-                        if *mask == 0 { continue; }
-                        let current = self.completed_nodes.bits[idx].0.load(Ordering::Acquire);
-                        if (current & mask) != *mask {
-                            // Exponential backoff strategy
-                            for _ in 0..spin_count {
-                                std::hint::spin_loop();
-                            }
-                            spin_count = std::cmp::min(spin_count * 2, 1024);
-                            continue 'wait_loop;
+                        if *mask != 0 && (self.completed_nodes.bits[idx].0.load(Ordering::Relaxed) & mask) != *mask {
+                            all_ready = false;
+                            break;
                         }
                     }
-                    break;
+                    !all_ready
+                } {
+                    std::hint::spin_loop();
                 }
+                // let wait_duration = wait_start.elapsed();
+                // histogram!("revm.ssa.executor.wait_time", wait_duration);
 
+                // let execute_start = Instant::now();
                 let exec_result = Self::execute_node(node, graph, &self.context);
+                // let execute_duration = execute_start.elapsed();
+                // histogram!("revm.ssa.executor.execute_time", execute_duration);
+
                 if exec_result.is_err() {
                     panic!("Execution failed: {:?}", exec_result.err().unwrap());
                 }
+
+                // let set_result_start = Instant::now();
                 self.completed_nodes.mark(node.lsn);
+                // let set_result_duration = set_result_start.elapsed();
+                // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
             })
         });
-        // eprintln!("Parallel Execution time: {:?}", start.elapsed());
-
+        let duration = start.elapsed();
+        
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
             for node in &nodes_to_execute {
@@ -281,42 +345,33 @@ where
                 tracer.record_graph(node.lsn, outputs.into(), node.opcode);
             }
         }
-        std::thread::spawn(move || {
+        self.thread_pool.as_ref().unwrap().spawn(move || {
             drop(nodes_to_execute);
         });
-        Ok(())
+        Ok(duration)
     }
 
     pub fn execute_node(node: &SSALogEntry, graph: &mut SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let lsn = node.lsn;
+
+        // let get_inputs_start = Instant::now();
         let inputs = Self::resolve_dependencies(graph, &context, &node)?;
+        // let get_inputs_duration = get_inputs_start.elapsed();
+        // histogram!("revm.ssa.executor.get_inputs_time", get_inputs_duration);
+
+        // let execute_start = Instant::now();
         let outputs = Self::execute_operation(&context, node.opcode, inputs)?;
-        
-        // let outputs = match Self::execute_operation(&context, node.opcode, inputs.clone()) {
-        //     Ok(outputs) => outputs,
-        //     Err(err) => {
-        //         println!("Node: {:?}", node);
-        //         if node.opcode == 0xD7 {
-        //             println!("执行节点 MAKE_CALL_FRAME 时出错: {:?}", err);
-        //             println!("当前节点: {:?}", node);
-        //             // 查找 CallInput 输入
-        //             if let Some(SSAInput::CallInput { source }) = node.inputs.get(0) {
-        //                 let original_node = graph.get_node(*source);
-        //                 let current_result = graph.get_result_by_lsn(*source);
-                        
-        //                 println!("原始 CallInput 节点: {:?}", original_node);
-        //                 println!("当前 CallInput 结果: {:?}", current_result);
-        //             }
-        //         }
-        //         panic!("Execution failed: {:?}", err);
-        //     }
-        // };
-        
+        // let execute_duration = execute_start.elapsed();
+        // histogram!("revm.ssa.executor.generate_outputs_time", execute_duration);
 
         if node.opcode == 0x56 || node.opcode == 0x57 {
             Self::verify_control_flow(node, &outputs)?;
         }
+
+        // let set_result_start = Instant::now();
         graph.set_result(lsn, outputs)?;
+        // let set_result_duration = set_result_start.elapsed();
+        // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
         Ok(())
     }
 
@@ -462,15 +517,11 @@ where
         
         // Fill memory according to each dependency's offset and length
         for dep in deps {
-            if let Ok(Some(memory_data)) = graph.get_result(dep.lsn, |results: &[SSAOutput]| {
-                results.iter().find_map(|result| {
-                    if let SSAOutput::Memory(src_bytes) = result {
-                        Some(src_bytes.clone())
-                    } else {
-                        None
-                    }
-                })
-            }) {
+            if let Ok(memory_data) = Self::get_dependency_result::<Bytes>(
+                graph,
+                dep.lsn,
+                "Memory dependency"
+            ) {
                 // According to MemoryDep definition:
                 // mem[self_offset:self_offset+length] = mem[lsn_offset:lsn_offset+length]
                 let dst_start = dep.self_offset;
@@ -493,55 +544,52 @@ where
         Ok(memory.into())
     }
 
-
-    /// Generic function for getting results and type conversion
-    fn get_dependency_result<T, F>(
+    /// Get output result for a specific LSN and index from the graph
+    fn get_dependency_result<T>(
         graph: &SsaGraph,
-        lsn: LsnType,
-        extractor: F,
+        source: LsnWithIndex,
         error_msg: &str
     ) -> Result<T>
     where
-        F: FnOnce(&[SSAOutput]) -> Option<T>,
+        T: TryFrom<SSAOutput>,
+        <T as TryFrom<SSAOutput>>::Error: std::fmt::Debug,
     {
-        let result = match graph.get_result(lsn, extractor)? {
-            Some(value) => value,
-            None => {
-                let original_outputs = graph.get_result_by_lsn(lsn)?
-                    .map(|outputs| format!("{:?}", outputs))
-                    .unwrap_or_else(|| "No outputs".to_string());
-                return Err(ExecutionError::ExecutionError(
-                    format!("{} dependency must exist in the inputs. LSN: {}, Actual outputs: {}", 
-                        error_msg, lsn, original_outputs)
-                ));
-            }
-        };
+        let (lsn, index) = source;
+        let outputs = graph.get_result_by_lsn(lsn)?
+            .ok_or_else(|| ExecutionError::ExecutionError(
+                format!("Output not found for LSN: {}", lsn)
+            ))?;
         
-        Ok(result)
+        if index >= outputs.len() as u8 {
+            return Err(ExecutionError::ExecutionError(
+                format!("{} index out of bounds. LSN: {}, index: {}, available outputs: {}", 
+                    error_msg, lsn, index, outputs.len())
+            ));
+        }
+        
+        let output = &outputs[index as usize];
+        T::try_from(output.clone()).map_err(|e| {
+            ExecutionError::ExecutionError(
+                format!("{} type conversion failed. LSN: {}, index: {}, actual output: {:?}, error: {:?}", 
+                    error_msg, lsn, index, output, e)
+            )
+        })
     }
 
     /// Handle Stack type input
     fn resolve_stack_input(
         graph: &SsaGraph,
-        source: LsnType 
+        source: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError("Stack input must have a source".to_string()));
         }
 
-        let stack_value = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::Stack(value) = output {
-                    Some(*value)
-                } else {
-                    None
-                }
-            }),
             "Stack"
-        )?;
-        Ok(SSAOutput::Stack(stack_value))
+        )
     }
 
     /// Handle Memory type input
@@ -561,29 +609,15 @@ where
     fn resolve_storage_input(
         graph: &SsaGraph,
         context: &Arc<ExecutionContext<'a, DB, SPEC>>,
-        source: LsnType,
+        source: LsnWithIndex,
         key: &StorageKey
     ) -> Result<SSAOutput> {
-        // eprintln!("resolve_storage_input: {:?}", source);
-        let result = if source != 0 {
-            let storage_output = Self::get_dependency_result(
+        let result = if source.0 != 0 {
+           Self::get_dependency_result(
                 graph,
                 source,
-                |results| results.iter().find_map(|output| match output {
-                    SSAOutput::Storage{key: _key, value} if **_key == *key => Some(value.clone()),
-                    _ => None
-                }),
-                // &format!(
-                //     "Storage for node <with Old Output> {:?}, node <corresponding result> {:?}", 
-                //     graph.get_node(source)?, 
-                //     graph.get_result_by_lsn(source)?.unwrap()
-                // ),
                 "Storage"
-            )?;
-            Ok(SSAOutput::Storage {
-                key: Box::new(key.clone()),
-                value: storage_output,
-            })
+            )
         } else {
             let context = unsafe { Self::get_mut_context(context) };
             let value = context.get_storage_value_from_db(key);
@@ -598,23 +632,14 @@ where
     /// Handle ReturnDataBuffer type input
     fn resolve_return_data_input(
         graph: &SsaGraph,
-        source: LsnType
+        source: LsnWithIndex
     ) -> Result<SSAOutput> {
-        let result = if source != 0 {
-            let return_data = Self::get_dependency_result(
+        let result = if source.0 != 0 {
+            Self::get_dependency_result(
                 graph,
                 source,
-                |results| results.iter().find_map(|output| {
-                    if let SSAOutput::ReturnDataBuffer(data) = output {
-                        Some(data.clone())
-                    } else {
-                        None
-                    }
-                }),
                 "ReturnData"
-            )?;
-            
-            Ok(SSAOutput::ReturnDataBuffer(return_data))
+            )
         } else {
             Ok(SSAOutput::ReturnDataBuffer(Bytes::default()))
         };
@@ -624,23 +649,14 @@ where
     /// Handle MemorySizeChange type input
     fn resolve_memory_size_input(
         graph: &SsaGraph,
-        last_memory: LsnType 
+        last_memory: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        let result = if last_memory != 0 {
-            let memory_size = Self::get_dependency_result(
+        let result = if last_memory.0 != 0 {
+            Self::get_dependency_result(
                 graph,
                 last_memory,
-                |results| results.iter().find_map(|output| {
-                    if let SSAOutput::MemorySize(size) = output {
-                        Some(*size)
-                    } else {
-                        None
-                    }
-                }),
                 "Memory"
-            )?;
-            
-            Ok(SSAOutput::MemorySize(memory_size))
+            )
         } else {
             Ok(SSAOutput::MemorySize(0))
         };
@@ -650,23 +666,14 @@ where
     /// Handle ContractEntry type input
     fn resolve_contract_env_input(
         graph: &SsaGraph,
-        entry_lsn: LsnType 
+        entry_lsn: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        let result = if entry_lsn != 0 {
-            let contract_env = Self::get_dependency_result(
+        let result = if entry_lsn.0 != 0 {
+            Self::get_dependency_result(
                 graph,
                 entry_lsn,
-                |results| results.iter().find_map(|output| {
-                    if let SSAOutput::ContractEnv(env) = output {
-                        Some(env.clone())
-                    } else {
-                        None
-                    }
-                }),
                 "ContractEnv"
-            )?;
-            
-            Ok(SSAOutput::ContractEnv(contract_env))
+            )
         } else {
             Err(ExecutionError::ExecutionError(
                 "ContractEnv must have a source".to_string()
@@ -678,136 +685,91 @@ where
     /// Handle CreateInput type input
     fn resolve_create_input(
         graph: &SsaGraph,
-        entry: LsnType
+        entry: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if entry == 0 {
+        if entry.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "Internal CreateInput must have a source".to_string()
             ));
         }
 
-        let create_input = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             entry,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CreateInput(input) = output {
-                    Some(input.clone())
-                } else {
-                    None
-                }
-            }),
             "Create"
-        )?;
-        
-        Ok(SSAOutput::CreateInput(create_input))
+        )
     }
 
     /// Handle CallInput type input
     fn resolve_call_input(
         graph: &SsaGraph,
-        entry: LsnType
+        entry: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if entry == 0 {
+        if entry.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "CallInput must have a source".to_string()
             ));
         }
      
-        let call_input = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             entry,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CallInput(input) = output {
-                    Some(input.clone())
-                } else {
-                    None
-                }
-            }),
             "Call"
-        )?;
-        
-        Ok(SSAOutput::CallInput(call_input))
+        )
     }
 
     /// Handle InterpreterResult type input
     fn resolve_interpreter_result(
         graph: &SsaGraph,
-        source: LsnType 
+        source: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "InterpreterResult must have a source".to_string()
             ));
         }
 
-        let interpreter_result = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::InterpreterResult(result) = output {
-                    Some(result.clone())
-                } else {
-                    None
-                }
-            }),
             "InterpreterResult"
-        )?;
-        
-        Ok(SSAOutput::InterpreterResult(interpreter_result))
+        )
     }
 
     /// Handle CallOutcome type input
     fn resolve_call_outcome(
         graph: &SsaGraph,
-        source: LsnType 
+        source: LsnWithIndex 
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "CallOutcome must have a source".to_string()
             ));
         }
 
-        let call_outcome = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CallOutcome(outcome) = output {
-                    Some(outcome.clone())
-                } else {
-                    None
-                }
-            }),
             "CallOutcome"
-        )?;
-        
-        Ok(SSAOutput::CallOutcome(call_outcome))
+        )
     }
 
     /// Handle CreateOutcome type input
     fn resolve_create_outcome(
         graph: &SsaGraph,
-        source: LsnType
+        source: LsnWithIndex
     ) -> Result<SSAOutput> {
-        if source == 0 {
+        if source.0 == 0 {
             return Err(ExecutionError::ExecutionError(
                 "CreateOutcome must have a source".to_string()
             ));
         }
 
-        let create_outcome = Self::get_dependency_result(
+        Self::get_dependency_result(
             graph,
             source,
-            |results| results.iter().find_map(|output| {
-                if let SSAOutput::CreateOutcome(outcome) = output {
-                    Some(outcome.clone())
-                } else {
-                    None
-                }
-            }),
             "CreateOutcome"
-        )?;
-        
-        Ok(SSAOutput::CreateOutcome(create_outcome))
+        )
     }
 
     /// Parse dependencies to get input values
@@ -831,14 +793,14 @@ where
                 SSAInput::ContractEnv { source: entry_lsn } => Self::resolve_contract_env_input(graph, *entry_lsn)?,
                 SSAInput::MemorySizeChange { source: last_memory } => Self::resolve_memory_size_input(graph, *last_memory)?,
                 SSAInput::CallInput { source } => {
-                    if *source == 0 {
+                    if source.0 == 0 {
                         SSAOutput::CallInput(Box::new(context.get_first_call_input().unwrap()))
                     } else {
-                        Self::resolve_call_input(graph, *source)?
+                        Self::resolve_call_input(graph, *source)?   
                     }
                 },
                 SSAInput::CreateInput { source } => {
-                    if *source == 0 {
+                    if source.0 == 0 {
                         SSAOutput::CreateInput(Box::new(context.get_first_create_input().unwrap()))
                     } else {
                         Self::resolve_create_input(graph, *source)?

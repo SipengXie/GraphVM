@@ -3684,6 +3684,7 @@ dependencies = [
  "ethers-providers",
  "indicatif",
  "metrics",
+ "metrics-exporter-prometheus",
  "once_cell",
  "parking_lot",
  "rayon",

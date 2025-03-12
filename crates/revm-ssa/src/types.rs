@@ -1,5 +1,5 @@
 use revm_primitives::{AccountInfo, AccountStatus, Address, Bytecode, Bytes, Log, B256, U256};
-use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, logger::LsnType, SSAInterpreterResult};
+use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, logger::{LsnType, LsnWithIndex}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +54,7 @@ impl From<InternalOp> for u8 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MemoryDep {
-    pub lsn: LsnType,
+    pub lsn: LsnWithIndex,
     pub self_offset: usize,
     pub lsn_offset: usize,
     pub length: usize,
@@ -131,38 +131,38 @@ impl StorageValue {
 pub enum SSAInput {
     Constant(U256),
     Stack {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     Memory {
         source: Vec<MemoryDep>,
     },
     Storage {
         key: Box<StorageKey>,
-        source: LsnType,
+        source: LsnWithIndex,
     },
     ReturnDataBuffer {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     InterpreterResult {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     CallOutcome {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     CreateOutcome {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     MemorySizeChange {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     CreateInput {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     CallInput {
-        source: LsnType,
+        source: LsnWithIndex,
     },
     ContractEnv {
-        source: LsnType,
+        source: LsnWithIndex,
     }
 }
 
@@ -195,8 +195,22 @@ pub enum SSAOutput {
     ContractEnv(Box<ContractEnv>),
 }
 
+// Implement TryFrom trait to convert SSAOutput to Bytes
+// This is specifically for Memory type outputs
+impl TryFrom<SSAOutput> for Bytes {
+    type Error = &'static str;
+
+    fn try_from(output: SSAOutput) -> Result<Self, Self::Error> {
+        match output {
+            SSAOutput::Memory(bytes) => Ok(bytes),
+            _ => Err("Cannot convert non-memory SSAOutput to Bytes"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[repr(align(64))]
 pub struct SSALogEntry {
     // The LSN of the log entry
     pub lsn: LsnType,
