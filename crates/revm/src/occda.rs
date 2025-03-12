@@ -105,7 +105,7 @@ impl Occda {
             self.reads_store = Vec::<HashMap<StorageKey, LsnType>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
             }
         }
@@ -547,7 +547,7 @@ impl Occda {
             self.first_create_input_store = Vec::<Option<SSACreateInput>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
                 self.first_call_input_store.push(None);
                 self.first_create_input_store.push(None);
