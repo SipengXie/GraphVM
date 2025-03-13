@@ -429,7 +429,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "CREATE_RETURN requires exactly 4 operands".to_string()
             ));
         }
-
+        println!("execute_create_return: {:?}", inputs);
         let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "First");
         let address = match_input!(inputs, 1, SSAOutput::ContractEnv(input) => input.target_address, "Second");
         let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");
