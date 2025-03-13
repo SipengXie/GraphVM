@@ -852,7 +852,7 @@ impl Occda {
         profiler::note_str("metrics", "redo-gas-used", &redo_gas_used.to_string());
         profiler::note_str("metrics", "block-tx-num", &tx_size.to_string());
         profiler::note_str("metrics", "total-opcodes", &total_opcodes.to_string());
-        profiler::note_str_unchecked("metrics", "re-execution-opcodes", &re_execution_opcodes.to_string());
+        profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
         profiler::end("metrics");
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",
