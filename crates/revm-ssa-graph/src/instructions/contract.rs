@@ -429,7 +429,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 "CREATE_RETURN requires exactly 4 or 1 operands".to_string()
             ));
         }
-        println!("execute_create_return: {:?}", inputs);
+        // println!("execute_create_return: {:?}", inputs);
 
         if inputs.len() == 1 {
             let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "First");
