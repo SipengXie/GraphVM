@@ -292,7 +292,7 @@ impl SsaGraph {
             return Ok(0.0);
         }
         
-        let mut longest_paths: HashMap<NodeIndex, usize> = HashMap::with_capacity(total_nodes);
+        let mut longest_paths: HashMap<NodeIndex, usize> = HashMap::default();
         
         let sorted_indices = toposort(&self.graph, None)
             .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;

@@ -1525,9 +1525,9 @@ impl SSALogger {
 
         if is_created || !is_cancun_enabled {
             ssa_outputs.push(output_account_info!(address,address_info));
-            self.log_storage_write(StorageKey::AccountStatus(address), lsn, (ssa_outputs.len()-1) as u8); // mark as selfdestruct, it is used when calculate gas
+            self.log_storage_write(StorageKey::AccountInfo(address), lsn, (ssa_outputs.len()-1) as u8); // mark as selfdestruct, it is used when calculate gas
             ssa_outputs.push(output_account_status!(address,address_status));
-            self.log_storage_write(StorageKey::AccountInfo(address), lsn, (ssa_outputs.len()-1) as u8); // clear balance
+            self.log_storage_write(StorageKey::AccountStatus(address), lsn, (ssa_outputs.len()-1) as u8); // clear balance
         } else if address != target {
             ssa_outputs.push(output_account_info!(address,address_info));
             self.log_storage_write(StorageKey::AccountInfo(address), lsn, (ssa_outputs.len()-1) as u8); // clear balance

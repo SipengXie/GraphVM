@@ -1,5 +1,5 @@
 use crate::{
-    interpreter::{Gas, SuccessOrHalt}, journaled_state::AccessType, primitives::{
+    interpreter::{Gas, SuccessOrHalt}, primitives::{
         db::Database, EVMError, ExecutionResult, ResultAndState, Spec, SpecId::{self, LONDON}, U256,
     }, Context, FrameResult
 };

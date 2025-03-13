@@ -105,7 +105,7 @@ impl Occda {
             self.reads_store = Vec::<HashMap<StorageKey, LsnType>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
             }
         }
@@ -267,6 +267,7 @@ impl Occda {
                     let mut write_result_time = Duration::from_secs(0);
                     // Track individual transaction times for performance analysis
                     let mut transact_times = Vec::with_capacity(indexes.len());
+                    let mut gas_used = 0;
 
                     // Process each transaction assigned to this thread
                     for idx in indexes {
@@ -275,7 +276,6 @@ impl Occda {
                         // Each transaction needs its own inspector to track execution
                         let mut inspector = inspector_setup();
                         let db_ref = &*db;
-                        let tx_hash = format!("{}", task.tx_hash.unwrap());
                         
                         // use ssa to re-execute the transaction
                         if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
@@ -298,7 +298,7 @@ impl Occda {
                                 self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                             match executor.execute() {
-                                Ok((nodes_to_execute_len, _)) => {
+                                Ok(_nodes_to_execute_len) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                     task_result.gas_limit = task.gas;
@@ -321,21 +321,11 @@ impl Occda {
                                         *result_raw_ptr.add(idx) = task_result;
                                     }
                                     drop(executor);
-                                    profiler::note_str_unchecked(
-                                        "re-execution-opcodes",
-                                        &tx_hash, 
-                                        &nodes_to_execute_len.to_string()
-                                    );
                                     continue;
                                 }
                                 Err(_err) => {
                                     // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                     drop(executor);
-                                    profiler::note_str_unchecked(
-                                        "re-execution-opcodes",
-                                        &tx_hash, 
-                                        &opcode_counts_store[idx].to_string()
-                                    );
                                     // fall through to EVM re-execution path below
                                 }
                             }
@@ -396,27 +386,17 @@ impl Occda {
                         let read_write_set = evm.get_read_write_set();
                         task_result.read_write_set = Some(read_write_set);
 
-                        let tx_hash_clone = tx_hash.clone();
                         if let Some(mut logger) = evm.take_ssa_logger() {
-                            profiler::start("ssa-logger");
                             let logs = logger.take_logs();
                             let graph_wrapper = self.dag_store[idx].clone();
                             self.thread_pool.spawn(move || {
-                                let start_time = std::time::Instant::now();
                                 let mut graph = graph_wrapper.write();
                                 graph.build(logs);
-                                let end_time = std::time::Instant::now();
-                                profiler::note_str_unchecked(
-                                    "build-dag",
-                                    &tx_hash_clone, 
-                                    &end_time.duration_since(start_time).as_secs_f64().to_string()
-                                );
                             });
                             let reads_raw_ptr = reads_ptr as *mut HashMap<StorageKey, LsnType>;
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
-                            profiler::end("ssa-logger");
                             let first_call_input_raw_ptr = first_call_input_ptr as *mut Option<SSACallInput>;
                             let first_create_input_raw_ptr = first_create_input_ptr as *mut Option<SSACreateInput>;
                             unsafe {
@@ -437,20 +417,11 @@ impl Occda {
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
-                                profiler::note_str_unchecked(
-                                    "gas-used", 
-                                    &tx_hash, 
-                                    &result.gas_used().to_string(),
-                                );
+                                gas_used += result.gas_used();
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
                             }
                             Err(_) => {
-                                profiler::note_str_unchecked(
-                                    "gas-used", 
-                                    &tx_hash, 
-                                    &"failure",
-                                );
                                 task_result.state = None;
                                 task_result.result = None;
                             }
@@ -468,6 +439,12 @@ impl Occda {
 
                     // Store timing metrics for this thread
                     thread_times.write()[thread_id] = (db_read_time, init_time, transact_time, write_result_time);
+
+                    profiler::note_str_unchecked(
+                        "gas-used", 
+                        &thread_id.to_string(), 
+                        &gas_used.to_string(),
+                    );
                     
                     // Log detailed transaction timing statistics
                     // This helps identify performance patterns and outliers
@@ -570,7 +547,7 @@ impl Occda {
             self.first_create_input_store = Vec::<Option<SSACreateInput>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new(400, 800))));
+                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
                 self.first_call_input_store.push(None);
                 self.first_create_input_store.push(None);
@@ -601,6 +578,8 @@ impl Occda {
         
         let prefetch_end = std::time::Instant::now();
         prefetch_time += prefetch_end - prefetch_start;
+
+        let mut redo_gas_used = 0;
 
         // Initialize execution queue with all transactions
         // Each transaction is ordered by its sequence ID for dependency tracking
@@ -637,14 +616,12 @@ impl Occda {
             if ready_tasks.len() < self.num_threads {
                 parallel_db.set_parallel_mode(false);
                 
-                profiler::start_multi("non-parallel");
-                profiler::note_str_multi("non-parallel", "type", "non-parallel");
+                profiler::start("non-parallel");
                 let seq_start = std::time::Instant::now();
                 seq_exec_size += ready_tasks.len();
                 for &idx in &ready_tasks {
                     let task = &mut h_tx[idx];
                     let mut inspector = inspector_setup();
-                    let tx_hash = format!("{}", task.tx_hash.unwrap());
 
                     // Handle re-execution case (using SSA)
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
@@ -666,8 +643,10 @@ impl Occda {
                             self.first_call_input_store[idx].clone(), 
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
+                        profiler::start("ssa-execution");
                         match executor.execute() {
-                            Ok((nodes_to_execute_len, _)) => {
+                            Ok(_nodes_to_execute_len) => {
+                                profiler::end("ssa-execution");
                                 let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
@@ -687,28 +666,19 @@ impl Occda {
                                 };
                                 result_store[idx] = task_result;
                                 drop(executor);
-                                profiler::note_str_unchecked(
-                                    "re-execution-opcodes",
-                                    &tx_hash, 
-                                    &(nodes_to_execute_len).to_string()
-                                );
                                 continue;
                             }
                             Err(_err) => {
+                                profiler::end("ssa-execution");
                                 // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                 drop(executor);
-                                profiler::note_str_unchecked(
-                                    "re-execution-opcodes",
-                                    &tx_hash, 
-                                    &opcode_counts_store[idx].to_string()
-                                );
                                 // fall through to EVM re-execution path below
                             }
                         }
                     }
 
-                   // Normal execution path
-                   let mut evm = 
+                    // Normal execution path
+                    let mut evm = 
                     Evm::builder()
                         .with_ref_db(&parallel_db)
                         .modify_env(|env| env.clone_from(&task.env))
@@ -716,8 +686,11 @@ impl Occda {
                         .with_spec_id(task.spec_id)
                         .append_handler_register(inspector_handle_register)
                         .build();
-    
+                    
+                    profiler::start("evm-transact");
                     let result = evm.transact();
+                    profiler::end("evm-transact");
+                    
                     let mut task_result = TaskResultItem::default();    
                     // Track read-write access for conflict detection
                     // This information is crucial for maintaining consistency
@@ -730,20 +703,11 @@ impl Occda {
                     match result {
                         Ok(result_and_state) => {
                             let ResultAndState { state, result } = result_and_state;
-                            profiler::note_str_unchecked(
-                                "redo-gas-used", 
-                                &tx_hash, 
-                                &result.gas_used().to_string(),
-                            );
+                            redo_gas_used += result.gas_used();
                             task_result.state = Some(state);
                             task_result.result = Some(result);
                         }
                         Err(_) => {
-                            profiler::note_str_unchecked(
-                                "redo-gas-used", 
-                                &tx_hash, 
-                                &"failure",
-                            );
                             task_result.state = None;
                             task_result.result = None;
                         }
@@ -754,11 +718,10 @@ impl Occda {
                 
                 let seq_end = std::time::Instant::now();
                 seq_time += seq_end - seq_start;
-                profiler::end_multi("non-parallel");
+                profiler::end("non-parallel");
                 
             } else {
-                profiler::start_multi("parallel");
-                profiler::note_str_multi("parallel", "type", "parallel");
+                profiler::start("parallel");
                 parallel_exec_size += ready_tasks.len();
                 parallel_db.set_parallel_mode(true);
                 parallel_time += self.execute_parallel_tasks(
@@ -772,7 +735,7 @@ impl Occda {
                     enable_dep_graph,
                     enable_ssa,
                 );
-                profiler::end_multi("parallel");
+                profiler::end("parallel");
             }
 
 
@@ -780,8 +743,8 @@ impl Occda {
             h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
 
             let commit_start = std::time::Instant::now();
-            profiler::start_multi("commit-all");
-            profiler::note_str_multi("commit-all", "type", "commit");
+            profiler::start("commit-all");
+            profiler::note_str("commit-all", "type", "commit");
             
             // Commit phase: process transactions in sequential order
             // This ensures consistency and handles conflicts
@@ -827,24 +790,11 @@ impl Occda {
                     !conflict.is_empty()
                 };
 
-                profiler::note_str_unchecked(
-                    "is-conflict", 
-                    &format!("{}", h_tx[task_idx].tx_hash.unwrap()), 
-                    &is_conflict.to_string()
-                );
-
                 // Handle conflicts or commit changes
                 if is_conflict {
                     // Conflict detected: update sid and retry
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
-                    if enable_ssa {
-                        profiler::note_str_unchecked(
-                            "total-opcodes", 
-                            &format!("{}", h_tx[task_idx].tx_hash.unwrap()), 
-                            &opcode_counts_store[task_idx].to_string()
-                        );
-                    }
                 } else {
                     let state: HashMap<Address, Account> = 
                     if let Some(ssa_state) = &task_result.ssa_output {
@@ -875,7 +825,7 @@ impl Occda {
             }
             let commit_end = std::time::Instant::now();
             commit_time += commit_end - commit_start;
-            profiler::end_multi("commit-all");
+            profiler::end("commit-all");
         }
 
         // Calculate final statistics and conflict rate
@@ -884,6 +834,8 @@ impl Occda {
         profiler::start("metrics");
         profiler::note_str("metrics", "type", "metrics");
         profiler::note_str("metrics", "conflict-rate", &conflict_rate.to_string());
+        profiler::note_str("metrics", "redo-gas-used", &redo_gas_used.to_string());
+        profiler::note_str("metrics", "block-tx-num", &tx_size.to_string());
         profiler::end("metrics");
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",

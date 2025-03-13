@@ -290,8 +290,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             SSAOutput::ReturnDataBuffer(return_data_buffer.clone()),
         ];
 
-        let target_len = std::cmp::min(out_len, return_data_buffer.len());
-        let data_slice = &return_data_buffer[..target_len];
+        let data_slice = if out_len == 0 {
+            &[] as &[u8]
+        } else {
+            let target_len = std::cmp::min(out_len, return_data_buffer.len());
+            &return_data_buffer[..target_len]
+        };
         match call_outcome.result.result {
             SSAInstructionResult::Ok => {
                 outputs.push(SSAOutput::Memory(data_slice.to_vec().into()));
@@ -420,12 +424,21 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute create return operation
     #[inline]
     pub fn execute_create_return(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 4 {
+        if inputs.len() != 4 && inputs.len() != 1 {
             return Err(ExecutionError::ExecutionError(
-                "CREATE_RETURN requires exactly 4 operands".to_string()
+                "CREATE_RETURN requires exactly 4 or 1 operands".to_string()
             ));
         }
+        // println!("execute_create_return: {:?}", inputs);
 
+        if inputs.len() == 1 {
+            let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "First");
+            return Ok(vec![SSAOutput::CreateOutcome(Box::new(SSACreateOutcome {
+                result: interpreter_result.clone(),
+                address: None,
+            }))]);
+        }
+        
         let interpreter_result = match_input!(inputs, 0, SSAOutput::InterpreterResult(result) => result, "First");
         let address = match_input!(inputs, 1, SSAOutput::ContractEnv(input) => input.target_address, "Second");
         let target_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Third");

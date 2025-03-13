@@ -10,9 +10,9 @@ pub struct GraphWrapper {
 }
 
 impl GraphWrapper {
-    pub fn new(node_capacity: usize, edge_capacity: usize) -> Self {
+    pub fn new() -> Self {
         GraphWrapper {
-            graph: Arc::new(SsaGraph::new(node_capacity, edge_capacity)),
+            graph: Arc::new(SsaGraph::new(0, 0)),
             is_built: false,
         }
     }
@@ -22,8 +22,8 @@ impl GraphWrapper {
             return;
         }
 
-        let graph = Arc::get_mut(&mut self.graph)
-            .expect("Arc should be unique during build");
+        let mut new_graph = SsaGraph::new(entries.len(), entries.len() * 2);
+        let graph = &mut new_graph;
 
         let lsns: Vec<LsnType> = entries.iter().map(|entry| entry.lsn).collect();
 
@@ -51,7 +51,7 @@ impl GraphWrapper {
                 }
             }
         }
-        
+        self.graph = Arc::new(new_graph);
         self.is_built = true;
     }
 
