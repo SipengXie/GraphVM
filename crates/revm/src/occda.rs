@@ -653,10 +653,8 @@ impl Occda {
                             self.first_call_input_store[idx].clone(), 
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
-                        profiler::start("ssa-execution");
                         match executor.execute() {
                             Ok((nodes_to_execute_len, _duration)) => {
-                                profiler::end("ssa-execution");
                                 let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
@@ -680,7 +678,6 @@ impl Occda {
                                 continue;
                             }
                             Err(_err) => {
-                                profiler::end("ssa-execution");
                                 // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                 drop(executor);
                                 re_execution_opcodes += opcode_counts_store[idx];
