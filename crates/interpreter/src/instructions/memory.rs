@@ -1,3 +1,5 @@
+use revm_primitives::Bytes;
+
 use crate::{
     gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
 };
@@ -68,14 +70,28 @@ pub fn mcopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host:
 
     // into usize or fail
     let len = as_usize_or_fail!(interpreter, len);
+    let dst = as_usize_or_fail!(interpreter, dst);
+    let src = as_usize_or_fail!(interpreter, src);
     // deduce gas
     gas_or_fail!(interpreter, gas::verylowcopy_cost(len as u64));
     if len == 0 {
+        if let Some(logger) = interpreter.ssa_logger.as_mut() {
+            // Get memory dependencies for the source region
+            let memory_deps = interpreter.shared_memory.get_shadow_deps(src..src+len);
+            let mem_length = None;
+            let result  = Bytes::default();
+            let lsn = logger.log_mcopy_operation(MCOPY, 
+                dst, 
+                src, 
+                len, 
+                result, 
+                memory_deps,
+                mem_length);
+            interpreter.shared_memory.record_shadow_write(dst, len, (lsn, 0));
+        }
         return;
     }
 
-    let dst = as_usize_or_fail!(interpreter, dst);
-    let src = as_usize_or_fail!(interpreter, src);
     // resize memory
     let resized = resize_memory!(interpreter, max(dst, src), len);
     // copy memory in place
