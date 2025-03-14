@@ -82,6 +82,7 @@ impl SsaGraph {
     }
 
     /// Set execution result for a node
+    #[inline]
     pub fn set_result(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>) -> Result<()> {
         self.results[lsn as usize] = outputs;
         Ok(())

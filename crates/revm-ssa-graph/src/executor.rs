@@ -196,18 +196,20 @@ where
     }
 
     pub fn execute_parallel_batches(&mut self) -> Result<std::time::Duration> {
-        const PARALLEL_THRESHOLD : usize = 1024;
+        let threshold = 1024;
+        // const PARALLEL_THRESHOLD : usize = 1024;
 
         let layers = self.graph.execution_layers()?;
         let thread_pool = self.thread_pool.as_ref().unwrap();
-        
+        let thread_number = thread_pool.current_num_threads();
+        let graph = unsafe { Self::get_mut_graph(&self.graph) };
+
         let start = Instant::now();
-        for (layer_idx, layer) in layers.iter().enumerate() {
+        for (_layer_idx, layer) in layers.iter().enumerate() {
             let layer_size = layer.len();
             let layer_start = Instant::now();
-            
-            if layer_size <= PARALLEL_THRESHOLD {
-                let graph = unsafe { Self::get_mut_graph(&self.graph) };
+
+            if layer_size <= threshold {
                 for node in layer {
                     let exec_result = Self::execute_node(node, graph, &self.context);
                     if exec_result.is_err() {
@@ -215,7 +217,7 @@ where
                     }
                 }
             } else {
-                let batch_size = self.dynamic_batch_size(layer.len());
+                let batch_size = self.dynamic_batch_size(layer.len(), thread_number);
                 thread_pool.install(|| {
                     layer.par_chunks(batch_size).for_each(|batch| {
                         let graph = unsafe { Self::get_mut_graph(&self.graph) };
@@ -227,27 +229,27 @@ where
                         }
                     })
                 });
+                let layer_duration = layer_start.elapsed();
+                println!("Layer {}: size = {}, batch_size = {}, thread_number = {}, execution time = {:?}", _layer_idx, layer_size, batch_size, thread_number, layer_duration);
             }
             
-            let layer_duration = layer_start.elapsed();
-            println!("Layer {}: size = {}, execution time = {:?}", layer_idx, layer_size, layer_duration);
         }
         let duration = start.elapsed();
         Ok(duration)
     }
 
     // Calculate dynamic batch size based on layer size
-    fn dynamic_batch_size(&self, layer_len: usize) -> usize {
+    #[inline]
+    fn dynamic_batch_size(&self, layer_len: usize, thread_number: usize) -> usize {
         
-        let min_per_thread = 4;
-        let max_per_thread = 256;
+        // let min_per_thread = 4;
+        // let max_per_thread = 256;
         
-        let threads = rayon::current_num_threads();
-        let base_size = (layer_len + threads - 1) / threads;
+        let base_size = (layer_len + thread_number - 1) / thread_number;
         
         base_size
-            .next_power_of_two() 
-            .clamp(min_per_thread, max_per_thread)
+            // .next_power_of_two() 
+            // .clamp(min_per_thread, max_per_thread)
     }
 
     pub fn execute_parallel(&mut self) -> Result<std::time::Duration> {
@@ -351,6 +353,7 @@ where
         Ok(duration)
     }
 
+    #[inline]
     pub fn execute_node(node: &SSALogEntry, graph: &mut SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let lsn = node.lsn;
 
@@ -376,16 +379,19 @@ where
     }
 
     /// Unsafely get mutable reference to context
+    #[inline]
     unsafe fn get_mut_context(context: &Arc<ExecutionContext<'a,DB, SPEC>>) -> &'a mut ExecutionContext<'a, DB, SPEC> {
         &mut *(Arc::as_ptr(context) as *mut ExecutionContext<'a, DB, SPEC>)
     }
 
     /// Unsafely get mutable reference to graph
+    #[inline]
     unsafe fn get_mut_graph(graph: &Arc<SsaGraph>) -> &'a mut SsaGraph {
         &mut *(Arc::as_ptr(graph) as *mut SsaGraph)
     }
 
     /// Execute operation based on opcode
+    #[inline]
     fn execute_operation(context: &Arc<ExecutionContext<'a, DB, SPEC>>, opcode: u8, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
         let context = unsafe { Self::get_mut_context(context) };
         match opcode {
@@ -505,6 +511,7 @@ where
     }
 
     /// Handle memory dependencies, combine multiple memory fragments into complete memory
+    #[inline]
     fn resolve_memory_deps(graph: &SsaGraph, deps: &[MemoryDep]) -> Result<Bytes> {
         // Calculate required memory size - find the maximum end position
         let max_size = deps.iter()
@@ -545,6 +552,7 @@ where
     }
 
     /// Get output result for a specific LSN and index from the graph
+    #[inline]
     fn get_dependency_result<T>(
         graph: &SsaGraph,
         source: LsnWithIndex,
@@ -577,6 +585,7 @@ where
     }
 
     /// Handle Stack type input
+    #[inline]
     fn resolve_stack_input(
         graph: &SsaGraph,
         source: LsnWithIndex
@@ -593,6 +602,7 @@ where
     }
 
     /// Handle Memory type input
+    #[inline]
     fn resolve_memory_input(
         graph: &SsaGraph,
         source: &[MemoryDep],
@@ -606,6 +616,7 @@ where
     }
 
     /// Handle Storage type input
+    #[inline]
     fn resolve_storage_input(
         graph: &SsaGraph,
         context: &Arc<ExecutionContext<'a, DB, SPEC>>,
@@ -630,6 +641,7 @@ where
     }
 
     /// Handle ReturnDataBuffer type input
+    #[inline]
     fn resolve_return_data_input(
         graph: &SsaGraph,
         source: LsnWithIndex
@@ -647,6 +659,7 @@ where
     }
 
     /// Handle MemorySizeChange type input
+    #[inline]
     fn resolve_memory_size_input(
         graph: &SsaGraph,
         last_memory: LsnWithIndex 
@@ -664,6 +677,7 @@ where
     }
 
     /// Handle ContractEntry type input
+    #[inline]
     fn resolve_contract_env_input(
         graph: &SsaGraph,
         entry_lsn: LsnWithIndex 
@@ -683,6 +697,7 @@ where
     }
 
     /// Handle CreateInput type input
+    #[inline]
     fn resolve_create_input(
         graph: &SsaGraph,
         entry: LsnWithIndex
@@ -701,6 +716,7 @@ where
     }
 
     /// Handle CallInput type input
+    #[inline]
     fn resolve_call_input(
         graph: &SsaGraph,
         entry: LsnWithIndex
@@ -719,6 +735,7 @@ where
     }
 
     /// Handle InterpreterResult type input
+    #[inline]
     fn resolve_interpreter_result(
         graph: &SsaGraph,
         source: LsnWithIndex 
@@ -737,6 +754,7 @@ where
     }
 
     /// Handle CallOutcome type input
+    #[inline]
     fn resolve_call_outcome(
         graph: &SsaGraph,
         source: LsnWithIndex 
@@ -755,6 +773,7 @@ where
     }
 
     /// Handle CreateOutcome type input
+    #[inline]
     fn resolve_create_outcome(
         graph: &SsaGraph,
         source: LsnWithIndex
@@ -775,6 +794,7 @@ where
     /// Parse dependencies to get input values
     /// we output vec<SSAOutput> because we do not need to record the value of the input
     /// only need to find the 
+    #[inline]
     fn resolve_dependencies(
         graph: &SsaGraph,
         context: &Arc<ExecutionContext<'a, DB, SPEC>>,
@@ -816,6 +836,7 @@ where
         Ok(inputs)
     }
 
+    #[inline]
     fn verify_control_flow(node: &SSALogEntry, outputs: &[SSAOutput]) -> Result<()> {
         let old_jump_output = match node.outputs[0] {
             SSAOutput::Jump { relative_offset } => relative_offset,

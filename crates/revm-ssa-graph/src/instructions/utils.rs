@@ -23,6 +23,7 @@ pub fn as_u64_saturated(value: U256) -> u64 {
     }
 }
 
+#[inline]
 pub fn u256_to_bool(value: U256) -> Result<bool, ExecutionError> {
     match value.try_into() {
         Ok(0) => Ok(false),

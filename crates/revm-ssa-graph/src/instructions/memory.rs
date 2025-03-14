@@ -7,6 +7,7 @@ use revm_primitives::Spec;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Check if memory size needs to be extended, return new memory size
+    #[inline]
     pub fn check_memory_size(&self, offset: usize, size: usize) -> usize {
         let required_size = if size == 0 {
             0

@@ -45,14 +45,17 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Get environment
+    #[inline]
     pub fn env(&self) -> &'a Env {
         self.env.as_ref()
     }
 
+    #[inline]
     pub fn is_precompile(&mut self, address: &Address) -> bool {
         self.precompiles.contains(address)
     }
 
+    #[inline]
     pub fn call_precompile(&mut self, address: &Address, input_data: &Bytes, gas: u64) -> SSAInterpreterResult {
         let precompile = self.precompiles.get(address);
 
@@ -78,15 +81,18 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
         }
     }
 
+    #[inline]
     pub fn get_first_call_input(&self) -> Option<SSACallInput> {
         self.first_call_input.clone()
     }
 
+    #[inline]
     pub fn get_first_create_input(&self) -> Option<SSACreateInput> {
         self.first_create_input.clone()
     }
 
     /// Get account information
+    #[inline]
     pub fn get_account(&mut self, address: &Address) -> AccountInfo {
         // If not in cache, look up in database
         if let Ok(Some(account)) = self.db.basic_ref(*address) {
@@ -96,11 +102,13 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Get account balance
+    #[inline]
     pub fn get_balance(&mut self, address: &Address) -> U256 {
         self.get_account(address).balance
     }
 
     /// Get storage value
+    #[inline]
     pub fn get_storage(&mut self, address: &Address, key: U256) -> U256 {
         // If not in cache, look up in database
         if let Ok(value) = self.db.storage_ref(*address, key) {
@@ -109,6 +117,8 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
         U256::ZERO
     }
 
+    /// Get blockhash
+    #[inline]
     pub fn get_blockhash(&mut self, requested_number: u64) -> U256 {
         let block_number = as_u64_saturated(self.env().block.number);
         let Some(diff) = block_number.checked_sub(requested_number) else {
@@ -131,16 +141,19 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Get current memory size
+    #[inline]
     pub fn memory_size(&self) -> usize {
         self.memory_size.load(Ordering::Relaxed)
     }
 
     /// Set memory size
+    #[inline]
     pub fn set_memory_size(&mut self, size: usize) {
         self.memory_size.store(size, Ordering::Relaxed);
     }
 
     /// Unified storage access interface
+    #[inline]
     pub fn get_storage_value_from_db(&mut self, key: &StorageKey) -> StorageValue {
         match key {
             StorageKey::Slot(address, slot) => {
