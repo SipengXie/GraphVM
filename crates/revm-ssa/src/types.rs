@@ -186,7 +186,6 @@ pub enum SSAOutput {
     ReturnDataBuffer(Bytes),
     InterpreterResult(SSAInterpreterResult),
     MemorySize(usize),
-    Address(Address),
     CreateInput(Box<SSACreateInput>),
     CreateOutcome(Box<SSACreateOutcome>),
     CallInput(Box<SSACallInput>),

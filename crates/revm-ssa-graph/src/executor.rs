@@ -210,25 +210,33 @@ where
             let layer_start = Instant::now();
 
             if layer_size <= threshold {
+                break; // ! FOR TEST CASE
+                // for node in layer {
+                //     let exec_result = Self::execute_node(node, graph, &self.context);
+                //     if exec_result.is_err() {
+                //         panic!("Execution failed: {:?}", exec_result.err().unwrap());
+                //     }
+                // }
+            } else {
+                let batch_size = self.dynamic_batch_size(layer.len(), thread_number);
+                // thread_pool.install(|| {
+                //     layer.par_chunks(batch_size).for_each(|batch| {
+                //         let graph = unsafe { Self::get_mut_graph(&self.graph) };
+                //         for node in batch {
+                //             let exec_result = Self::execute_node(node, graph, &self.context);
+                //             if exec_result.is_err() {
+                //                 panic!("Execution failed: {:?}", exec_result.err().unwrap());
+                //             }
+                //         }
+                //     })
+                // });
+
                 for node in layer {
                     let exec_result = Self::execute_node(node, graph, &self.context);
                     if exec_result.is_err() {
                         panic!("Execution failed: {:?}", exec_result.err().unwrap());
                     }
                 }
-            } else {
-                let batch_size = self.dynamic_batch_size(layer.len(), thread_number);
-                thread_pool.install(|| {
-                    layer.par_chunks(batch_size).for_each(|batch| {
-                        let graph = unsafe { Self::get_mut_graph(&self.graph) };
-                        for node in batch {
-                            let exec_result = Self::execute_node(node, graph, &self.context);
-                            if exec_result.is_err() {
-                                panic!("Execution failed: {:?}", exec_result.err().unwrap());
-                            }
-                        }
-                    })
-                });
                 let layer_duration = layer_start.elapsed();
                 println!("Layer {}: size = {}, batch_size = {}, thread_number = {}, execution time = {:?}", _layer_idx, layer_size, batch_size, thread_number, layer_duration);
             }
