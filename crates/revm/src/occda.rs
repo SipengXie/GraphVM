@@ -269,6 +269,8 @@ impl Occda {
                     let mut transact_times = Vec::with_capacity(indexes.len());
                     let mut gas_used = 0;
                     let mut re_execution_opcodes = 0;
+                    let mut reo_count = 0;
+                    let mut reo_max = 0;
 
                     // Process each transaction assigned to this thread
                     for idx in indexes {
@@ -323,12 +325,16 @@ impl Occda {
                                     }
                                     drop(executor);
                                     re_execution_opcodes += nodes_to_execute_len;
+                                    reo_count += 1;
+                                    reo_max = reo_max.max(nodes_to_execute_len);
                                     continue;
                                 }
                                 Err(_err) => {
                                     // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                     drop(executor);
                                     re_execution_opcodes += opcode_counts_store[idx];
+                                    reo_count += 1;
+                                    reo_max = reo_max.max(opcode_counts_store[idx]);
                                     // fall through to EVM re-execution path below
                                 }
                             }
@@ -453,7 +459,18 @@ impl Occda {
                         &thread_id.to_string(), 
                         &re_execution_opcodes.to_string(),
                     );
-                    
+                    profiler::note_str_unchecked(
+                        "re-execution-opcodes",
+                        &format!("{}-max", thread_id),
+                        &reo_max.to_string(),
+                    );
+                    profiler::note_str_unchecked(
+                        "re-execution-opcodes",
+                        &format!("{}-mean", thread_id),
+                        &if reo_count == 0 { "0".to_string() } else { 
+                            (re_execution_opcodes as f64 / reo_count as f64).to_string() 
+                        },
+                    );
                     // Log detailed transaction timing statistics
                     // This helps identify performance patterns and outliers
                     
@@ -590,6 +607,8 @@ impl Occda {
         let mut redo_gas_used = 0;
         let mut re_execution_opcodes = 0;
         let mut total_opcodes = 0;
+        let mut reo_max = 0;
+        let mut reo_count = 0;
 
         // Initialize execution queue with all transactions
         // Each transaction is ordered by its sequence ID for dependency tracking
@@ -675,12 +694,16 @@ impl Occda {
                                 result_store[idx] = task_result;
                                 drop(executor);
                                 re_execution_opcodes += nodes_to_execute_len;
+                                reo_count += 1;
+                                reo_max = reo_max.max(nodes_to_execute_len);
                                 continue;
                             }
                             Err(_err) => {
                                 // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                 drop(executor);
                                 re_execution_opcodes += opcode_counts_store[idx];
+                                reo_count += 1;
+                                reo_max = reo_max.max(opcode_counts_store[idx]);
                                 // fall through to EVM re-execution path below
                             }
                         }
@@ -850,6 +873,10 @@ impl Occda {
         profiler::note_str("metrics", "block-tx-num", &tx_size.to_string());
         profiler::note_str("metrics", "total-opcodes", &total_opcodes.to_string());
         profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
+        profiler::note_str_unchecked("re-execution-opcodes", "main-max", &reo_max.to_string());
+        profiler::note_str_unchecked("re-execution-opcodes", "main-mean", &if reo_count == 0 { "0".to_string() } else { 
+            (re_execution_opcodes as f64 / reo_count as f64).to_string() 
+        });
         profiler::end("metrics");
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",
