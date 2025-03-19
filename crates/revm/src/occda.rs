@@ -474,11 +474,14 @@ impl Occda {
                             (re_execution_opcodes as f64 / reo_count as f64).to_string() 
                         },
                     );
-                    profiler::note_str_unchecked(
-                        "metrics",
-                        "prefetch",
-                        &prefetch_time.to_string(),
-                    );
+
+                    if is_prefetch && enable_ssa {
+                        profiler::note_str_unchecked(
+                            "metrics",
+                            "prefetch",
+                            &(prefetch_time as f64 / 1e6).to_string(),
+                        );
+                    }
                     // Log detailed transaction timing statistics
                     // This helps identify performance patterns and outliers
                     
@@ -563,13 +566,11 @@ impl Occda {
         let mut commit_time = Duration::from_secs(0);
         let mut parallel_time = Duration::from_secs(0);
         let mut seq_time = Duration::from_secs(0);
-        let mut prefetch_time = Duration::from_secs(0);
 
         // AccessTracker monitors read/write sets to detect conflicts between transactions
         // This is crucial for maintaining consistency in parallel execution
         let mut access_tracker = AccessTracker::new();
         
-        let prefetch_start = std::time::Instant::now();
         let mut opcode_counts_store = Vec::<usize>::with_capacity(len);
         // Initialize the store for ssa re-execution, we count the time in the prefetch phase.
         if enable_ssa {
@@ -609,9 +610,6 @@ impl Occda {
             parallel_db.reset_stats();
         }
         
-        let prefetch_end = std::time::Instant::now();
-        prefetch_time += prefetch_end - prefetch_start;
-
         let mut redo_gas_used = 0;
         let mut re_execution_opcodes = 0;
         let mut total_opcodes = 0;
@@ -895,7 +893,6 @@ impl Occda {
         println!("parallel_time: {:?}", parallel_time);
         println!("seq_time: {:?}", seq_time);
         println!("commit_time: {:?}", commit_time); 
-        println!("prefetch_time: {:?}", prefetch_time);
         // Clean up resources in background to avoid blocking
         // This includes access tracker and task management queues
         self.thread_pool.spawn(move || {
