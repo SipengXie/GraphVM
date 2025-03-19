@@ -271,6 +271,8 @@ impl Occda {
                     let mut re_execution_opcodes = 0;
                     let mut reo_count = 0;
                     let mut reo_max = 0;
+                    
+                    let mut prefetch_time = 0;
 
                     // Process each transaction assigned to this thread
                     for idx in indexes {
@@ -342,30 +344,31 @@ impl Occda {
 
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time 
-                        profiler::start("prefetch");
                         let init_start = std::time::Instant::now();
                         let mut evm = if is_prefetch && enable_ssa {
                             // enable ssa and prefetch, then we will pre-process the ssa graph
-                            Evm::builder()
-                            .with_ref_db(db_ref)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .with_ssa_logger(SSALogger::new())
-                            .build_with_ssa_logger()
+                            let prefetch_start = std::time::Instant::now();
+                            let evm_inside = Evm::builder()
+                                .with_ref_db(db_ref)
+                                .modify_env(|env| env.clone_from(&task.env))
+                                .with_external_context(&mut inspector)
+                                .with_spec_id(task.spec_id)
+                                .append_handler_register(inspector_handle_register)
+                                .with_ssa_logger(SSALogger::new())
+                                .build_with_ssa_logger();
+                            prefetch_time += prefetch_start.elapsed().as_nanos();
+                            evm_inside
                         } else {
                             Evm::builder()
-                            .with_ref_db(db_ref)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .build()
+                                .with_ref_db(db_ref)
+                                .modify_env(|env| env.clone_from(&task.env))
+                                .with_external_context(&mut inspector)
+                                .with_spec_id(task.spec_id)
+                                .append_handler_register(inspector_handle_register)
+                                .build()
                         };
                         let init_end = std::time::Instant::now();
                         init_time += init_end - init_start;
-                        profiler::end("prefetch");
 
                         // Execute the transaction and measure execution time
                         // This is the core EVM execution phase
@@ -470,6 +473,11 @@ impl Occda {
                         &if reo_count == 0 { "0".to_string() } else { 
                             (re_execution_opcodes as f64 / reo_count as f64).to_string() 
                         },
+                    );
+                    profiler::note_str_unchecked(
+                        "metrics",
+                        "prefetch",
+                        &prefetch_time.to_string(),
                     );
                     // Log detailed transaction timing statistics
                     // This helps identify performance patterns and outliers
@@ -866,18 +874,16 @@ impl Occda {
         // Calculate final statistics and conflict rate
         // High conflict rates might indicate need for better task scheduling
         let conflict_rate = ((exec_size - tx_size) as f64) / (tx_size as f64) * 100.0;
-        profiler::start("metrics");
-        profiler::note_str("metrics", "type", "metrics");
-        profiler::note_str("metrics", "conflict-rate", &conflict_rate.to_string());
-        profiler::note_str("metrics", "redo-gas-used", &redo_gas_used.to_string());
-        profiler::note_str("metrics", "block-tx-num", &tx_size.to_string());
-        profiler::note_str("metrics", "total-opcodes", &total_opcodes.to_string());
+        profiler::note_str_unchecked("metrics", "type", "metrics");
+        profiler::note_str_unchecked("metrics", "conflict-rate", &conflict_rate.to_string());
+        profiler::note_str_unchecked("metrics", "redo-gas-used", &redo_gas_used.to_string());
+        profiler::note_str_unchecked("metrics", "block-tx-num", &tx_size.to_string());
+        profiler::note_str_unchecked("metrics", "total-opcodes", &total_opcodes.to_string());
         profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
         profiler::note_str_unchecked("re-execution-opcodes", "main-max", &reo_max.to_string());
         profiler::note_str_unchecked("re-execution-opcodes", "main-mean", &if reo_count == 0 { "0".to_string() } else { 
             (re_execution_opcodes as f64 / reo_count as f64).to_string() 
         });
-        profiler::end("metrics");
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",
             result_store.len(),
