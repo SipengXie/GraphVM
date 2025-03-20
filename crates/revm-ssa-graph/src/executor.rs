@@ -54,7 +54,7 @@ pub enum ExecutionMode {
 //     }
 
 //     /// Atomically mark an LSN as completed
-//     #[inline]
+//     #[inline(always)]
 //     fn mark(&self, lsn: LsnType) {
 //         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
 //         if let Some(atomic) = self.bits.get(idx) {
@@ -64,7 +64,7 @@ pub enum ExecutionMode {
 //     }
 
 //     /// Atomically clear a bit (set to 0)
-//     #[inline]
+//     #[inline(always)]
 //     fn unmark(&self, lsn: LsnType) {
 //         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
 //         if let Some(atomic) = self.bits.get(idx) {
@@ -145,7 +145,7 @@ where
     }
 
     /// Execute the entire graph
-    #[inline]
+    #[inline(always)]
     pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {        
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
@@ -240,7 +240,7 @@ where
     // }
 
     // // Calculate dynamic batch size based on layer size
-    // #[inline]
+    // #[inline(always)]
     // fn dynamic_batch_size(&self, layer_len: usize, thread_number: usize) -> usize {
         
     //     // let min_per_thread = 4;
@@ -355,19 +355,19 @@ where
     // }
 
     /// Unsafely get mutable reference to context
-    #[inline]
+    #[inline(always)]
     unsafe fn get_mut_context(context: &Arc<ExecutionContext<'a,DB, SPEC>>) -> &'a mut ExecutionContext<'a, DB, SPEC> {
         &mut *(Arc::as_ptr(context) as *mut ExecutionContext<'a, DB, SPEC>)
     }
 
     /// Unsafely get mutable reference to graph
-    #[inline]
+    #[inline(always)]
     unsafe fn get_mut_graph(graph: &Arc<SsaGraph>) -> &'a mut SsaGraph {
         &mut *(Arc::as_ptr(graph) as *mut SsaGraph)
     }
 
     /// Execute operation based on opcode
-    #[inline]
+    #[inline(always)]
     fn execute_node(node: &mut SSALogEntry, graph: & SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let context = unsafe { Self::get_mut_context(context) };
         match node.opcode {

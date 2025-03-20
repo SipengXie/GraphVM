@@ -6,7 +6,7 @@ use crate::as_usize_saturated;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute host environment operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_host_env(&self, node: &mut SSALogEntry, _graph: & SsaGraph, opcode: u8) -> Result<()> {
         let value = match opcode {
             // CHAINID
@@ -46,7 +46,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute BLOBHASH operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_blobhash(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let index = as_usize_saturated!(value);

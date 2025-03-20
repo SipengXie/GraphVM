@@ -69,5 +69,33 @@ pub enum ExecutionError {
     Database(String),
 }
 
+impl ExecutionError {
+    pub const EXPECTED_STACK_VALUE: &'static str = "Expected Stack output value";
+    pub const EXPECTED_CALL_INPUT: &'static str = "Expected CallInput output value";
+    
+    // 新增的常量
+    pub const INPUT_MUST_BE_STACK_OR_CONST: &'static str = "Input must be Stack or Constant value";
+    pub const EXPECTED_STORAGE_VALUE: &'static str = "Expected Storage output value";
+    pub const INPUT_MUST_BE_STORAGE_VALUE: &'static str = "Input must be Storage value";
+    pub const EXPECTED_CONTRACT_ENV_VALUE: &'static str = "Expected ContractEnv output value";
+    pub const INPUT_MUST_BE_CONTRACT_ENV: &'static str = "Input must be ContractEnv value";
+    pub const EXPECTED_MEMORY_VALUE: &'static str = "Expected Memory output value";
+    pub const INPUT_MUST_BE_MEMORY_VALUE: &'static str = "Input must be Memory value";
+    pub const EXPECTED_RETURN_DATA_BUFFER: &'static str = "Expected ReturnDataBuffer output value";
+    pub const INPUT_MUST_BE_RETURN_DATA_BUFFER: &'static str = "Input must be ReturnDataBuffer value";
+    pub const INPUT_MUST_BE_CALL_INPUT: &'static str = "Input must be CallInput value";
+    pub const EXPECTED_INTERPRETER_RESULT: &'static str = "Expected InterpreterResult output value";
+    pub const INPUT_MUST_BE_INTERPRETER_RESULT: &'static str = "Input must be InterpreterResult value";
+    pub const INVALID_BOOLEAN_VALUE: &'static str = "Invalid boolean value";
+    pub const INVALID_OPCODE_FOR_RESULT_CHANGE: &'static str = "Invalid opcode for instruction result change";
+    
+    // 提供一个函数用于控制流不确定性错误
+    #[inline]
+    pub fn control_flow_not_deterministic(node: &impl std::fmt::Debug, old_jump: isize, new_jump: isize) -> String {
+        format!("Control flow is not deterministic. Node: {:?}, Old jump: {}, New jump: {}", 
+                node, old_jump, new_jump)
+    }
+}
+
 /// Result type for operations that can fail with an ExecutionError
 pub type Result<T> = std::result::Result<T, ExecutionError>; 

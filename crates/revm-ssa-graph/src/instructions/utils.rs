@@ -3,8 +3,8 @@
 macro_rules! as_usize_saturated {
     ($value:expr) => {{
         let limbs = $value.as_limbs();
-        if limbs[1] == 0 && limbs[2] == 0 && limbs[3] == 0 {
-            usize::try_from(limbs[0]).unwrap_or(usize::MAX)
+        if limbs[1] | limbs[2] | limbs[3] == 0 {
+            limbs[0] as usize
         } else {
             usize::MAX
         }
@@ -16,7 +16,7 @@ macro_rules! as_usize_saturated {
 macro_rules! as_u64_saturated {
     ($value:expr) => {{
         let limbs = $value.as_limbs();
-        if limbs[1] == 0 && limbs[2] == 0 && limbs[3] == 0 {
+        if limbs[1] | limbs[2] | limbs[3] == 0 {
             limbs[0]
         } else {
             u64::MAX
@@ -32,7 +32,7 @@ macro_rules! u256_to_bool {
             Ok(0) => Ok(false),
             Ok(1) => Ok(true),
             _ => Err(ExecutionError::ExecutionError(
-                "Invalid boolean value".to_string()
+                ExecutionError::INVALID_BOOLEAN_VALUE.to_string()
             )),
         }
     }};
@@ -50,12 +50,12 @@ macro_rules! get_ssa_output_stack_or_const {
                 match dep_node.outputs[lsn_with_index.1 as usize] {
                     SSAOutput::Stack(value) => value,
                     _ => return Err(ExecutionError::ExecutionError(
-                        "Expected Stack output value".to_string()
+                        ExecutionError::EXPECTED_STACK_VALUE.to_string()
                     ))
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be Stack or Constant value".to_string()
+                ExecutionError::INPUT_MUST_BE_STACK_OR_CONST.to_string()
             ))
         }
     };
@@ -76,13 +76,13 @@ macro_rules! get_storage_value {
                     match &dep_node.outputs[source.1 as usize] {
                         SSAOutput::Storage { value, .. } => *value.clone(),
                         _ => return Err(ExecutionError::ExecutionError(
-                            "Expected Storage output value".to_string()
+                            ExecutionError::EXPECTED_STORAGE_VALUE.to_string()
                         ))
                     }
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be Storage value".to_string()
+                ExecutionError::INPUT_MUST_BE_STORAGE_VALUE.to_string()
             ))
         }
     };
@@ -99,12 +99,12 @@ macro_rules! get_contract_env {
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::ContractEnv(value) => value,
                     _ => return Err(ExecutionError::ExecutionError(
-                        "Expected ContractEnv output value".to_string()
+                        ExecutionError::EXPECTED_CONTRACT_ENV_VALUE.to_string()
                     ))
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be ContractEnv value".to_string()
+                ExecutionError::INPUT_MUST_BE_CONTRACT_ENV.to_string()
             ))
         }
     };
@@ -146,7 +146,7 @@ macro_rules! get_memory {
                             }
                         },
                         _ => return Err(ExecutionError::ExecutionError(
-                            "Expected Memory output value".to_string()
+                            ExecutionError::EXPECTED_MEMORY_VALUE.to_string()
                         ))
                     }
                 }
@@ -154,7 +154,7 @@ macro_rules! get_memory {
                 memory
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be Memory value".to_string()
+                ExecutionError::INPUT_MUST_BE_MEMORY_VALUE.to_string()
             ))
         }
     };
@@ -171,12 +171,12 @@ macro_rules! get_return_data_buffer {
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::ReturnDataBuffer(value) => value,
                     _ => return Err(ExecutionError::ExecutionError(
-                        "Expected ReturnDataBuffer output value".to_string()
+                        ExecutionError::EXPECTED_RETURN_DATA_BUFFER.to_string()
                     ))
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be ReturnDataBuffer value".to_string()
+                ExecutionError::INPUT_MUST_BE_RETURN_DATA_BUFFER.to_string()
             ))
         }
     };
@@ -196,13 +196,13 @@ macro_rules! get_call_input {
                     match &dep_node.outputs[index as usize] {
                         SSAOutput::CallInput(input) => input,
                         _ => return Err(ExecutionError::ExecutionError(
-                            "Expected CallInput output value".to_string()
+                            ExecutionError::EXPECTED_CALL_INPUT.to_string()
                         ))
                     }
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be CallInput value".to_string()
+                ExecutionError::INPUT_MUST_BE_CALL_INPUT.to_string()
             ))
         }
     };
@@ -219,12 +219,12 @@ macro_rules! get_interpreter_result {
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::InterpreterResult(result) => result,
                     _ => return Err(ExecutionError::ExecutionError(
-                        "Expected InterpreterResult output value".to_string()
+                        ExecutionError::EXPECTED_INTERPRETER_RESULT.to_string()
                     ))
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(
-                "Input must be InterpreterResult value".to_string()
+                ExecutionError::INPUT_MUST_BE_INTERPRETER_RESULT.to_string()
             ))
         }
     };

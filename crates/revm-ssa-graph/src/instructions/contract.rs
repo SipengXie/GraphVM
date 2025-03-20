@@ -24,7 +24,7 @@ use crate::{
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
 
     /// Execute deduct caller operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_deduct_caller(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let caller = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let is_create = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -50,7 +50,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn execute_refund_gas(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let caller = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
@@ -73,7 +73,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn execute_reward_beneficiary(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let beneficiary = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
@@ -97,7 +97,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute call operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_call(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -152,7 +152,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute callcode operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_callcode(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -202,7 +202,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute delegatecall operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_delegatecall(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -253,7 +253,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute staticcall operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_staticcall(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -305,7 +305,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute make call frame operation
     /// The initial call frame is created by the evm, we should take from the ssa_logger
-    #[inline]
+    #[inline(always)]
     pub fn execute_make_call_frame(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let call_input = get_call_input!(graph, node.inputs[0], self.get_first_call_input().unwrap());
         let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
@@ -372,7 +372,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute call return operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_call_return(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
         let call_input = get_call_input!(graph, node.inputs[1], self.get_first_call_input().unwrap());
@@ -388,7 +388,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute insert call outcome operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_insert_call_outcome(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let call_outcome = match node.inputs[0] {
@@ -432,7 +432,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute create operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_create(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
@@ -479,7 +479,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute make create frame operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_make_create_frame(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         
         let create_input = match node.inputs[0] {
@@ -549,7 +549,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute create return operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_create_return(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         if node.inputs.len() == 1 {
@@ -596,7 +596,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute insert create outcome operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_insert_create_outcome(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let create_outcome = match node.inputs[0] {
             SSAInput::CreateOutcome((lsn, index)) => {

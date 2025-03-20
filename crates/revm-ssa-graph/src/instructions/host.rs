@@ -18,7 +18,7 @@ use super::{
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute SLOAD operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_sload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let value = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
@@ -35,7 +35,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute SSTORE operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_sstore(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let address = get_contract_env!(graph, node.inputs[0]).target_address;
 
@@ -51,7 +51,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute BALANCE operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_balance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let balance = account.as_account_info().unwrap().balance;
@@ -60,7 +60,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute SELFBALANCE operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_selfbalance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let balance = account.as_account_info().unwrap().balance;
@@ -69,7 +69,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute EXTCODESIZE operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_extcodesize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()>  {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         // we ignore EIP 7702 here
@@ -84,7 +84,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute EXTCODEHASH operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_extcodehash(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let code_hash = account.as_account_info().unwrap().code_hash;
@@ -93,7 +93,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute EXTCODECOPY operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_extcodecopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let mem_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -134,7 +134,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute BLOCKHASH operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_blockhash(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let number = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let number = as_u64_saturated!(number);
@@ -144,7 +144,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute LOG operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_log(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let address = get_contract_env!(graph, node.inputs[0]).target_address;
@@ -167,7 +167,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute SELFDESTRUCT operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_selfdestruct(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
         let contract_address = get_contract_env!(graph, node.inputs[0]).target_address;

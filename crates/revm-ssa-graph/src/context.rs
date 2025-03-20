@@ -57,17 +57,17 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Get environment
-    #[inline]
+    #[inline(always)]
     pub fn env(&self) -> &'a Env {
         self.env.as_ref()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_precompile(&mut self, address: &Address) -> bool {
         self.precompiles.contains(address)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn call_precompile(&mut self, address: &Address, input_data: &Bytes, gas: u64) -> SSAInterpreterResult {
         let precompile = self.precompiles.get(address);
 
@@ -93,18 +93,18 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_first_call_input(&self) -> Option<SSACallInput> {
         self.first_call_input.clone()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_first_create_input(&self) -> Option<SSACreateInput> {
         self.first_create_input.clone()
     }
 
     /// Get state value based on storage key
-    #[inline]
+    #[inline(always)]
     pub fn get_state(&self, storage_key: &StorageKey) -> Result<StorageValue> {
         match storage_key {
             StorageKey::Slot(address, slot) => {
@@ -128,7 +128,7 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Get blockhash
-    #[inline]
+    #[inline(always)]
     pub fn get_blockhash(&mut self, requested_number: u64) -> Result<U256> {
         let block_number = as_u64_saturated!(self.env().block.number);
         let Some(diff) = block_number.checked_sub(requested_number) else {
@@ -152,13 +152,13 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     /// Get current memory size
-    #[inline]
+    #[inline(always)]
     pub fn memory_size(&self) -> usize {
         self.memory_size.load(Ordering::Relaxed)
     }
 
     /// Set memory size
-    #[inline]
+    #[inline(always)]
     pub fn set_memory_size(&mut self, size: usize) {
         self.memory_size.store(size, Ordering::Relaxed);
     }

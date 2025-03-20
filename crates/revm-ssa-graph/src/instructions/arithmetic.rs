@@ -6,7 +6,7 @@ use super::i256::{i256_div, i256_mod};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute addition operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_add(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -15,7 +15,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute multiplication operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_mul(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -24,7 +24,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute subtraction operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_sub(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -33,7 +33,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute division operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_div(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -46,7 +46,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute modulo operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_mod(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -59,7 +59,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute addition modulo operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_addmod(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -73,7 +73,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute multiplication modulo operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_mulmod(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -87,7 +87,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute signed division operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_sdiv(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -100,7 +100,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute signed modulo operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_smod(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -113,7 +113,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute exponentiation operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_exp(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let base = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let exponent = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -122,7 +122,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     /// Execute sign extension operation
-    #[inline]
+    #[inline(always)]
     pub fn execute_signextend(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let ext = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let word = get_ssa_output_stack_or_const!(graph, node.inputs[1]);

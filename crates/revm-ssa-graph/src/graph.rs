@@ -25,18 +25,18 @@ impl SsaGraph {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn num_nodes(&self) -> usize {
         self.lsn_to_node.len()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_node_by_index(&self, index: NodeIndex) -> Result<&SSALogEntry> {
         Ok(&self.graph[index])
     }
 
     /// Add a node
-    #[inline]
+    #[inline(always)]
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
@@ -52,7 +52,7 @@ impl SsaGraph {
     }
 
     /// Get LSN dependencies from SSAInput
-    #[inline]
+    #[inline(always)]
     pub fn get_lsn_from_input(input: &SSAInput) -> Vec<LsnType> {
         let mut lsn_vec = Vec::with_capacity(1);
         match input {
@@ -108,7 +108,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Option<T>>` - The extracted result if found
-    #[inline]
+    #[inline(always)]
     pub fn get_result<T, F>(&self, lsn: LsnType, extractor: F) -> Result<Option<T>>
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
@@ -122,7 +122,7 @@ impl SsaGraph {
     }
 
     /// Add edges
-    #[inline]
+    #[inline(always)]
     pub fn add_edges(&mut self, lsn: LsnType) -> Result<()> {
         let lsn = lsn as usize;
         if lsn >= self.lsn_to_node.len() {
@@ -163,7 +163,7 @@ impl SsaGraph {
     }
 
     /// Get topological sort
-    #[inline]
+    #[inline(always)]
     pub fn topological_sort(&self) -> Result<Vec<NodeIndex>> {
         let sorted_indices = toposort(&self.graph, None)
             .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
@@ -172,7 +172,7 @@ impl SsaGraph {
     }
 
     /// Get mutable node
-    #[inline]
+    #[inline(always)]
     pub fn get_node_mut(&mut self, lsn: LsnType) -> Result<&mut SSALogEntry> {
         let lsn = lsn as usize;
         if lsn >= self.lsn_to_node.len() {
@@ -184,7 +184,7 @@ impl SsaGraph {
     }
 
     /// Get immutable node
-    #[inline]
+    #[inline(always)]
     pub fn get_node(&self, lsn: LsnType) -> Result<&SSALogEntry> {
         let lsn = lsn as usize;
         if lsn >= self.lsn_to_node.len() {
@@ -202,7 +202,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Vec<NodeIndex>>` - A vector of reachable node indices in dependency order
-    #[inline]
+    #[inline(always)]
     pub fn get_reachable_nodes(&self, start_lsn: LsnType) -> Result<Vec<NodeIndex>> {
         let lsn = start_lsn as usize;
         // Get the starting node index
@@ -230,7 +230,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `&mut SSALogEntry` - A mutable reference to the node
-    #[inline]
+    #[inline(always)]
     pub fn get_node_by_index_mut(&mut self, index: NodeIndex) -> &mut SSALogEntry {
         &mut self.graph[index]
     }
@@ -239,7 +239,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Vec<SSAOutput>>` - A vector of all storage write outputs
-    #[inline]
+    #[inline(always)]
     pub fn get_storage_write_outputs(&self) -> Result<Vec<SSAOutput>> {
         // Pre-allocate capacity to avoid reallocations
         let mut storage_outputs = Vec::with_capacity(self.storage_write.len());
@@ -314,7 +314,7 @@ impl SsaGraph {
     /// 
     /// # Returns
     /// * `Result<Vec<Vec<SSALogEntry>>>` - Nodes grouped by layers where each layer can be executed in parallel
-    #[inline]
+    #[inline(always)]
     pub fn execution_layers(&self) -> Result<Vec<Vec<SSALogEntry>>> {
         // Get topologically sorted node indices
         let sorted_indices = toposort(&self.graph, None)
