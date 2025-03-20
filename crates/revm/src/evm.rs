@@ -9,7 +9,7 @@ use crate::{
     }, Context, ContextWithHandlerCfg, Frame, FrameOrResult, FrameResult
 };
 use core::fmt;
-use std::{boxed::Box, time::Instant, vec::Vec};
+use std::{boxed::Box, vec::Vec};
 
 /// EVM call stack limit.
 pub const CALL_STACK_LIMIT: u64 = 1024;
@@ -423,7 +423,6 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         let eip7702_gas_refund = pre_exec.apply_eip7702_auth_list(ctx)? as i64;
 
         let exec = self.handler.execution();
-        let start = Instant::now();
         // call inner handling of call/create
         let first_frame_or_result = match ctx.evm.env.tx.transact_to {
             TxKind::Call(_) => exec.call(
@@ -461,9 +460,6 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         self.handler
             .execution()
             .last_frame_return(ctx, &mut result)?;
-
-        let end = Instant::now();
-        println!("revm_execution time: {:?}", end.duration_since(start));
 
         let post_exec = self.handler.post_execution();
         // calculate final refund and add EIP-7702 refund to gas.
