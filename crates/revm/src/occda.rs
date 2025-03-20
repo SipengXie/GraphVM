@@ -300,7 +300,12 @@ impl Occda {
                                 self.first_call_input_store[idx].clone(), 
                                 self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
-                            match executor.execute() {
+
+                            profiler::start("ssa-execution");
+                            let ssa_execution = executor.execute();
+                            profiler::end("ssa-execution");
+
+                            match ssa_execution {
                                 Ok(nodes_to_execute_len) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
@@ -658,7 +663,12 @@ impl Occda {
                             self.first_call_input_store[idx].clone(), 
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
-                        match executor.execute() {
+                        
+                        profiler::start("ssa-execution");
+                        let ssa_execution = executor.execute();
+                        profiler::end("ssa-execution");
+
+                        match ssa_execution {
                             Ok(nodes_to_execute_len) => {
                                 let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
