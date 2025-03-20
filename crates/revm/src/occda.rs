@@ -303,7 +303,7 @@ impl Occda {
                                 self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                             match executor.execute() {
-                                Ok((nodes_to_execute_len, _duration)) => {
+                                Ok(nodes_to_execute_len) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                     task_result.gas_limit = task.gas;
@@ -679,7 +679,7 @@ impl Occda {
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                         match executor.execute() {
-                            Ok((nodes_to_execute_len, _duration)) => {
+                            Ok(nodes_to_execute_len) => {
                                 let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;

@@ -9,7 +9,6 @@ use std::{
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result
 };
-use metrics::histogram;
 // use metrics::histogram;
 use rayon::{iter::ParallelIterator, slice::ParallelSlice, ThreadPool};
 use revm_primitives::{db::DatabaseRef, Bytes, Spec, Env};
@@ -150,7 +149,7 @@ where
     }
 
     /// Execute the entire graph
-    pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {
+    pub fn execute(&mut self) -> Result<usize> {
         let nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
@@ -166,24 +165,10 @@ where
                 reachable_nodes
             }
         };
-        // eprintln!("Nodes to execute (sorted by LSN):");
-        // let mut sorted_nodes = nodes_to_execute.clone();
-        // sorted_nodes.sort_by_key(|node| node.lsn);
-        // for node in sorted_nodes {
-        //     eprintln!("LSN: {}, OpCode: 0x{:02X}, Inputs: {:?}, Old Outputs: {:?}", 
-        //         node.lsn, 
-        //         node.opcode,
-        //         node.inputs,
-        //         node.outputs
-        //     );
-        // }
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
-        let execute_start = Instant::now();
         for node in &nodes_to_execute {
             Self::execute_node(node, graph, &self.context)?;
         }
-        let execute_duration = execute_start.elapsed();
-
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
             for node in &nodes_to_execute {
@@ -191,8 +176,7 @@ where
                 tracer.record_graph(node.lsn, outputs.into(), node.opcode);
             }
         }
-        
-        Ok((nodes_to_execute.len(), execute_duration))
+        Ok(nodes_to_execute.len())
     }
 
     pub fn execute_parallel_batches(&mut self) -> Result<std::time::Duration> {
