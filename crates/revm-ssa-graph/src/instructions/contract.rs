@@ -474,10 +474,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         
         let create_input = match node.inputs[0] {
             SSAInput::CreateInput((lsn, index)) => {
-                let dep_node = graph.get_node(lsn)?;
-                match &dep_node.outputs[index as usize] {
-                    SSAOutput::CreateInput(input) => input,
-                    _ => return Err(ExecutionError::ExecutionError("Expected CreateInput output value".to_string()))
+                if lsn == 0 {   
+                    &Box::new(self.get_first_create_input().unwrap())
+                } else {
+                    let dep_node = graph.get_node(lsn)?;
+                    match &dep_node.outputs[index as usize] {
+                        SSAOutput::CreateInput(input) => input,
+                        _ => return Err(ExecutionError::ExecutionError("Expected CreateInput output value".to_string()))
+                    }
                 }
             },
             _ => return Err(ExecutionError::ExecutionError("Expected CreateInput input value".to_string()))
