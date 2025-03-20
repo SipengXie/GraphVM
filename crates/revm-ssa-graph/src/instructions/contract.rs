@@ -297,7 +297,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// The initial call frame is created by the evm, we should take from the ssa_logger
     #[inline]
     pub fn execute_make_call_frame(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-        let call_input = get_call_input!(graph, node.inputs[0]);
+        let call_input = get_call_input!(graph, node.inputs[0], self.get_first_call_input().unwrap());
         let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let bytecode_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
@@ -365,7 +365,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     #[inline]
     pub fn execute_call_return(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
-        let call_input = get_call_input!(graph, node.inputs[1]);
+        let call_input = get_call_input!(graph, node.inputs[1], self.get_first_call_input().unwrap());
 
         let ret_range = call_input.ret_range.clone();
         

@@ -148,14 +148,6 @@ where
     pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {        
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
-        // if let Some(tracer) = &mut self.tracer {
-        //     let graph = self.graph.clone();
-        //     for node in &nodes_to_execute {
-        //         let outputs = graph.get_original_outputs(node.lsn)?.unwrap();
-        //         tracer.record_graph(node.lsn, outputs.into(), node.opcode);
-        //     }
-        // }
-
         let nodes_to_execute = match &self.mode {
             ExecutionMode::Full => {
                 self.graph.topological_sort()?
@@ -174,6 +166,15 @@ where
                 reachable_nodes
             }
         };
+
+        if let Some(tracer) = &mut self.tracer {
+            let graph = self.graph.clone();
+            for node_index in &nodes_to_execute {
+                let node = graph.get_node_by_index(*node_index)?;
+                let outputs = graph.get_original_outputs(node.lsn)?.unwrap();
+                tracer.record_graph(node.lsn, outputs.into(), node.opcode);
+            }
+        }
         
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();

@@ -186,15 +186,19 @@ macro_rules! get_return_data_buffer {
 /// Returns the call input value if input is valid CallInput, otherwise returns an ExecutionError
 #[macro_export]
 macro_rules! get_call_input {
-    ($graph:expr, $input:expr) => {
+    ($graph:expr, $input:expr, $first_call_input:expr) => {
         match $input {
             SSAInput::CallInput((lsn, index)) => {
-                let dep_node = $graph.get_node(lsn)?;
-                match &dep_node.outputs[index as usize] {
-                    SSAOutput::CallInput(input) => input,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        "Expected CallInput output value".to_string()
-                    ))
+                if lsn == 0 {
+                    &Box::new($first_call_input)
+                } else {
+                    let dep_node = $graph.get_node(lsn)?;
+                    match &dep_node.outputs[index as usize] {
+                        SSAOutput::CallInput(input) => input,
+                        _ => return Err(ExecutionError::ExecutionError(
+                            "Expected CallInput output value".to_string()
+                        ))
+                    }
                 }
             },
             _ => return Err(ExecutionError::ExecutionError(

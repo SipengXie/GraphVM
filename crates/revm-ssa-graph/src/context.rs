@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use revm_precompile::{PrecompileSpecId, Precompiles};
 use revm_primitives::{
-    db::DatabaseRef, AccountInfo, Address, Bytes, Env, PrecompileErrors, Spec, BLOCK_HASH_HISTORY, U256
+    db::DatabaseRef, AccountInfo, AccountStatus, Address, Bytes, Env, PrecompileErrors, Spec, BLOCK_HASH_HISTORY, U256
 };
 use revm_ssa::{SSACallInput, SSACreateInput, SSAInstructionResult, SSAInterpreterResult, StorageKey, StorageValue};
 
@@ -106,9 +106,9 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
                     Ok(StorageValue::AccountInfo(AccountInfo::default()))
                 }
             },
-            _ => Err(ExecutionError::ExecutionError(
-                "Storage key is not supported".to_string()
-            ))
+            StorageKey::AccountStatus(_address) => {
+                Ok(StorageValue::AccountStatus(AccountStatus::default()))
+            },
         }
     }
 
