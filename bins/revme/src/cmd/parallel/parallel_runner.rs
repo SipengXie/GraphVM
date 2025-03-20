@@ -375,6 +375,8 @@ pub fn run_parallel(
     // eprintln!("Storage Content: {:?}", storage);
     // eprintln!("===========================================\n");
 
+    profiler::dump_json("./profiler_output.json");
+
     println!("\nState root: {:#?}", state_merkle_trie_root(state.cache.trie_account()));
     println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
     println!("You can use curl http://127.0.0.1:9090/metrics to view them");

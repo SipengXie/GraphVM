@@ -268,6 +268,11 @@ impl Occda {
                     // Track individual transaction times for performance analysis
                     let mut transact_times = Vec::with_capacity(indexes.len());
                     let mut gas_used = 0;
+                    let mut re_execution_opcodes = 0;
+                    let mut reo_count = 0;
+                    let mut reo_max = 0;
+                    
+                    let mut prefetch_time = 0;
 
                     // Process each transaction assigned to this thread
                     for idx in indexes {
@@ -298,7 +303,7 @@ impl Occda {
                                 self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
                             match executor.execute() {
-                                Ok(_nodes_to_execute_len) => {
+                                Ok((nodes_to_execute_len, _duration)) => {
                                     let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                     let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                     task_result.gas_limit = task.gas;
@@ -321,11 +326,17 @@ impl Occda {
                                         *result_raw_ptr.add(idx) = task_result;
                                     }
                                     drop(executor);
+                                    re_execution_opcodes += nodes_to_execute_len;
+                                    reo_count += 1;
+                                    reo_max = reo_max.max(nodes_to_execute_len);
                                     continue;
                                 }
                                 Err(_err) => {
                                     // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                     drop(executor);
+                                    re_execution_opcodes += opcode_counts_store[idx];
+                                    reo_count += 1;
+                                    reo_max = reo_max.max(opcode_counts_store[idx]);
                                     // fall through to EVM re-execution path below
                                 }
                             }
@@ -333,30 +344,31 @@ impl Occda {
 
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time 
-                        profiler::start("prefetch");
                         let init_start = std::time::Instant::now();
                         let mut evm = if is_prefetch && enable_ssa {
                             // enable ssa and prefetch, then we will pre-process the ssa graph
-                            Evm::builder()
-                            .with_ref_db(db_ref)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .with_ssa_logger(SSALogger::new())
-                            .build_with_ssa_logger()
+                            let prefetch_start = std::time::Instant::now();
+                            let evm_inside = Evm::builder()
+                                .with_ref_db(db_ref)
+                                .modify_env(|env| env.clone_from(&task.env))
+                                .with_external_context(&mut inspector)
+                                .with_spec_id(task.spec_id)
+                                .append_handler_register(inspector_handle_register)
+                                .with_ssa_logger(SSALogger::new())
+                                .build_with_ssa_logger();
+                            prefetch_time += prefetch_start.elapsed().as_nanos();
+                            evm_inside
                         } else {
                             Evm::builder()
-                            .with_ref_db(db_ref)
-                            .modify_env(|env| env.clone_from(&task.env))
-                            .with_external_context(&mut inspector)
-                            .with_spec_id(task.spec_id)
-                            .append_handler_register(inspector_handle_register)
-                            .build()
+                                .with_ref_db(db_ref)
+                                .modify_env(|env| env.clone_from(&task.env))
+                                .with_external_context(&mut inspector)
+                                .with_spec_id(task.spec_id)
+                                .append_handler_register(inspector_handle_register)
+                                .build()
                         };
                         let init_end = std::time::Instant::now();
                         init_time += init_end - init_start;
-                        profiler::end("prefetch");
 
                         // Execute the transaction and measure execution time
                         // This is the core EVM execution phase
@@ -445,7 +457,31 @@ impl Occda {
                         &thread_id.to_string(), 
                         &gas_used.to_string(),
                     );
-                    
+                    profiler::note_str_unchecked(
+                        "re-execution-opcodes", 
+                        &thread_id.to_string(), 
+                        &re_execution_opcodes.to_string(),
+                    );
+                    profiler::note_str_unchecked(
+                        "re-execution-opcodes",
+                        &format!("{}-max", thread_id),
+                        &reo_max.to_string(),
+                    );
+                    profiler::note_str_unchecked(
+                        "re-execution-opcodes",
+                        &format!("{}-mean", thread_id),
+                        &if reo_count == 0 { "0".to_string() } else { 
+                            (re_execution_opcodes as f64 / reo_count as f64).to_string() 
+                        },
+                    );
+
+                    if is_prefetch && enable_ssa {
+                        profiler::note_str_unchecked(
+                            "metrics",
+                            "prefetch",
+                            &(prefetch_time as f64 / 1e6).to_string(),
+                        );
+                    }
                     // Log detailed transaction timing statistics
                     // This helps identify performance patterns and outliers
                     
@@ -530,13 +566,11 @@ impl Occda {
         let mut commit_time = Duration::from_secs(0);
         let mut parallel_time = Duration::from_secs(0);
         let mut seq_time = Duration::from_secs(0);
-        let mut prefetch_time = Duration::from_secs(0);
 
         // AccessTracker monitors read/write sets to detect conflicts between transactions
         // This is crucial for maintaining consistency in parallel execution
         let mut access_tracker = AccessTracker::new();
         
-        let prefetch_start = std::time::Instant::now();
         let mut opcode_counts_store = Vec::<usize>::with_capacity(len);
         // Initialize the store for ssa re-execution, we count the time in the prefetch phase.
         if enable_ssa {
@@ -576,10 +610,11 @@ impl Occda {
             parallel_db.reset_stats();
         }
         
-        let prefetch_end = std::time::Instant::now();
-        prefetch_time += prefetch_end - prefetch_start;
-
         let mut redo_gas_used = 0;
+        let mut re_execution_opcodes = 0;
+        let mut total_opcodes = 0;
+        let mut reo_max = 0;
+        let mut reo_count = 0;
 
         // Initialize execution queue with all transactions
         // Each transaction is ordered by its sequence ID for dependency tracking
@@ -643,10 +678,8 @@ impl Occda {
                             self.first_call_input_store[idx].clone(), 
                             self.first_create_input_store[idx].clone())
                             .with_mode(execution_mode);
-                        profiler::start("ssa-execution");
                         match executor.execute() {
-                            Ok(_nodes_to_execute_len) => {
-                                profiler::end("ssa-execution");
+                            Ok((nodes_to_execute_len, _duration)) => {
                                 let result_state = executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
@@ -666,12 +699,17 @@ impl Occda {
                                 };
                                 result_store[idx] = task_result;
                                 drop(executor);
+                                re_execution_opcodes += nodes_to_execute_len;
+                                reo_count += 1;
+                                reo_max = reo_max.max(nodes_to_execute_len);
                                 continue;
                             }
                             Err(_err) => {
-                                profiler::end("ssa-execution");
                                 // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                 drop(executor);
+                                re_execution_opcodes += opcode_counts_store[idx];
+                                reo_count += 1;
+                                reo_max = reo_max.max(opcode_counts_store[idx]);
                                 // fall through to EVM re-execution path below
                             }
                         }
@@ -795,6 +833,9 @@ impl Occda {
                     // Conflict detected: update sid and retry
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));
+                    if enable_ssa {
+                        total_opcodes += opcode_counts_store[task_idx];
+                    }
                 } else {
                     let state: HashMap<Address, Account> = 
                     if let Some(ssa_state) = &task_result.ssa_output {
@@ -831,12 +872,16 @@ impl Occda {
         // Calculate final statistics and conflict rate
         // High conflict rates might indicate need for better task scheduling
         let conflict_rate = ((exec_size - tx_size) as f64) / (tx_size as f64) * 100.0;
-        profiler::start("metrics");
-        profiler::note_str("metrics", "type", "metrics");
-        profiler::note_str("metrics", "conflict-rate", &conflict_rate.to_string());
-        profiler::note_str("metrics", "redo-gas-used", &redo_gas_used.to_string());
-        profiler::note_str("metrics", "block-tx-num", &tx_size.to_string());
-        profiler::end("metrics");
+        profiler::note_str_unchecked("metrics", "type", "metrics");
+        profiler::note_str_unchecked("metrics", "conflict-rate", &conflict_rate.to_string());
+        profiler::note_str_unchecked("metrics", "redo-gas-used", &redo_gas_used.to_string());
+        profiler::note_str_unchecked("metrics", "block-tx-num", &tx_size.to_string());
+        profiler::note_str_unchecked("metrics", "total-opcodes", &total_opcodes.to_string());
+        profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
+        profiler::note_str_unchecked("re-execution-opcodes", "main-max", &reo_max.to_string());
+        profiler::note_str_unchecked("re-execution-opcodes", "main-mean", &if reo_count == 0 { "0".to_string() } else { 
+            (re_execution_opcodes as f64 / reo_count as f64).to_string() 
+        });
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",
             result_store.len(),
@@ -848,7 +893,6 @@ impl Occda {
         println!("parallel_time: {:?}", parallel_time);
         println!("seq_time: {:?}", seq_time);
         println!("commit_time: {:?}", commit_time); 
-        println!("prefetch_time: {:?}", prefetch_time);
         // Clean up resources in background to avoid blocking
         // This includes access tracker and task management queues
         self.thread_pool.spawn(move || {
