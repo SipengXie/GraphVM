@@ -60,25 +60,6 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(())
     }
 
-    // /// Execute PC operation
-    // #[inline]
-    // pub fn execute_pc(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-    //     if inputs.len() != 1 {
-    //         return Err(ExecutionError::ExecutionError(
-    //             "PC requires exactly 1 operand".to_string()
-    //         ));
-    //     }
-
-    //     let pc = match &inputs[0] { 
-    //         SSAOutput::Constant(value) => value,
-    //         _ => return Err(ExecutionError::ExecutionError(
-    //             "Operand must be Constant value".to_string()
-    //         )),
-    //     };
-
-    //     Ok(vec![SSAOutput::Stack(U256::from(pc.as_limbs()[0] as usize))])
-    // }
-
     /// Execute RETURN/REVERT operation
     #[inline]
     pub fn execute_ret(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, instruction_result: SSAInstructionResult) -> Result<()> {

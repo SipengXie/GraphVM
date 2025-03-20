@@ -1,12 +1,27 @@
 use std::marker::PhantomData;
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
 use revm_precompile::{PrecompileSpecId, Precompiles};
 use revm_primitives::{
-    db::DatabaseRef, AccountInfo, AccountStatus, Address, Bytes, Env, PrecompileErrors, Spec, BLOCK_HASH_HISTORY, U256
+    db::DatabaseRef,
+    AccountInfo, 
+    AccountStatus, 
+    Address, 
+    Bytes, 
+    Env, 
+    PrecompileErrors, 
+    Spec, 
+    BLOCK_HASH_HISTORY, 
+    U256
 };
-use revm_ssa::{SSACallInput, SSACreateInput, SSAInstructionResult, SSAInterpreterResult, StorageKey, StorageValue};
-
-
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use revm_ssa::{
+    SSACallInput, 
+    SSACreateInput, 
+    SSAInstructionResult, 
+    SSAInterpreterResult, 
+    StorageKey, 
+    StorageValue
+};
 
 use crate::{instructions::as_u64_saturated, ExecutionError, Result};
 

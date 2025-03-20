@@ -9,7 +9,6 @@ revm-ssa = { path = "../revm-ssa", version = "1.0.0", default-features = false }
 revm-primitives = { path = "../primitives", version = "14.0.0", default-features = false }
 revm-interpreter = { path = "../interpreter", version = "14.0.0", default-features = false }
 revm-precompile = { path = "../precompile", version = "15.0.0", default-features = false }
-# revm = { path = "../revm", version = "18.0.0", default-features = false }
 either = "1.9.0"
 
 

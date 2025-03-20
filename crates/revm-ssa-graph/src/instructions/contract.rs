@@ -5,11 +5,21 @@ use revm_primitives::{
 };
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
-    output_account_info, output_account_status, ContractEnv, SSAInput, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
+    output_account_info, output_account_status, ContractEnv, SSAInput, 
+    SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, 
+    SSACreateOutcome, SSACreateScheme, SSAInstructionResult, 
+    SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
 };
-use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
+use crate::{
+    get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, 
+    Result, SsaGraph
+};
 
-use super::{as_u64_saturated, as_usize_saturated, get_call_input, get_contract_env, get_interpreter_result, get_memory, get_storage_value, u256_to_bool};
+use crate::{
+    as_u64_saturated, as_usize_saturated, get_call_input, 
+    get_contract_env, get_interpreter_result, get_memory, 
+    get_storage_value, u256_to_bool
+};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
 

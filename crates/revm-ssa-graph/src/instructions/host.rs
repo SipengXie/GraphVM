@@ -4,11 +4,17 @@ use revm_primitives::{
     AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
 };
 use revm_ssa::{
-    output_account_info, output_account_status, SSAInput, SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
+    output_account_info, output_account_status, SSAInput, SSAInstructionResult, 
+    SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
 };
-use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
+use crate::{
+    get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph
+};
 
-use super::{as_u64_saturated, as_usize_saturated, get_contract_env, get_memory, get_storage_value, u256_to_bool};
+use super::{
+    as_u64_saturated, as_usize_saturated, get_contract_env, 
+    get_memory, get_storage_value, u256_to_bool
+};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute SLOAD operation

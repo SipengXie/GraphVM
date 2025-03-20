@@ -145,6 +145,7 @@ where
     }
 
     /// Execute the entire graph
+    #[inline]
     pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {        
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
