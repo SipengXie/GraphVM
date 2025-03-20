@@ -63,6 +63,10 @@ pub enum ExecutionError {
     /// Error during execution
     #[error("Execution error: {0}")]
     ExecutionError(String),
+
+    /// Database error
+    #[error("Database error: {0}")]
+    Database(String),
 }
 
 /// Result type for operations that can fail with an ExecutionError

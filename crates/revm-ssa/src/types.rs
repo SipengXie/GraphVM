@@ -51,7 +51,7 @@ impl From<InternalOp> for u8 {
 }
 
 /// mem[self_offset:self_offset+length] = mem[lsn_offset:lsn_offset+length]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct MemoryDep {
     pub lsn: LsnWithIndex,
@@ -130,40 +130,17 @@ impl StorageValue {
 // as the value is unnecessary.
 pub enum SSAInput {
     Constant(U256),
-    Stack {
-        source: LsnWithIndex,
-    },
-    Memory {
-        source: Vec<MemoryDep>,
-    },
-    Storage {
-        key: Box<StorageKey>,
-        source: LsnWithIndex,
-    },
-    ReturnDataBuffer {
-        source: LsnWithIndex,
-    },
-    InterpreterResult {
-        source: LsnWithIndex,
-    },
-    CallOutcome {
-        source: LsnWithIndex,
-    },
-    CreateOutcome {
-        source: LsnWithIndex,
-    },
-    MemorySizeChange {
-        source: LsnWithIndex,
-    },
-    CreateInput {
-        source: LsnWithIndex,
-    },
-    CallInput {
-        source: LsnWithIndex,
-    },
-    ContractEnv {
-        source: LsnWithIndex,
-    }
+    Stack (LsnWithIndex),
+    Memory(Vec<MemoryDep>),
+    Storage (StorageKey, LsnWithIndex),
+    ReturnDataBuffer (LsnWithIndex),
+    InterpreterResult(LsnWithIndex),
+    CallOutcome(LsnWithIndex),
+    CreateOutcome(LsnWithIndex),
+    MemorySizeChange (LsnWithIndex),
+    CreateInput(LsnWithIndex),
+    CallInput(LsnWithIndex),
+    ContractEnv(LsnWithIndex),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,9 +157,7 @@ pub enum SSAOutput {
         key: Box<StorageKey>,
         value: Box<StorageValue>,
     },
-    Jump {
-        relative_offset: isize,
-    },
+    Jump(isize),
     ReturnDataBuffer(Bytes),
     InterpreterResult(SSAInterpreterResult),
     MemorySize(usize),

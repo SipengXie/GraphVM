@@ -13,8 +13,6 @@ pub struct SsaGraph {
     graph: DiGraph<SSALogEntry, ()>,
     /// Mapping from LSN to node index, using Vec since LSN is sequential from 1..N
     lsn_to_node: Vec<NodeIndex>,
-    /// Mapping from node index to results, using Vec since LSN is sequential from 1..N
-    results: Vec<Vec<SSAOutput>>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<LsnType>,
 }
@@ -25,13 +23,16 @@ impl SsaGraph {
         Self {
             graph: DiGraph::with_capacity(node_num, edge_num),
             lsn_to_node: vec![NodeIndex::new(0); node_num + 1],
-            results: vec![vec![]; node_num + 1],
             storage_write: Vec::with_capacity(node_num + 1),
         }
     }
 
     pub fn num_nodes(&self) -> usize {
         self.lsn_to_node.len()
+    }
+
+    pub fn get_node_by_index(&self, index: NodeIndex) -> Result<&SSALogEntry> {
+        Ok(&self.graph[index])
     }
 
     /// Add a node
@@ -54,8 +55,8 @@ impl SsaGraph {
         let mut lsn_vec = Vec::with_capacity(1);
         match input {
             SSAInput::Constant(_) => lsn_vec.push(0),
-            SSAInput::Stack { source, .. } => lsn_vec.push(source.0),
-            SSAInput::Memory { source, .. } => {
+            SSAInput::Stack(lsn_with_index) => lsn_vec.push(lsn_with_index.0),
+            SSAInput::Memory (source) => {
                 if source.is_empty() {
                     lsn_vec.push(0)
                 } else {
@@ -64,28 +65,21 @@ impl SsaGraph {
                     source.iter().for_each(|dep| lsn_vec.push(dep.lsn.0))
                 }
             },
-            SSAInput::Storage { source, .. } => lsn_vec.push(source.0),
-            SSAInput::ReturnDataBuffer { source, .. } => lsn_vec.push(source.0),
-            SSAInput::ContractEnv { source: entry_lsn, .. } => {
+            SSAInput::Storage (_,source) => lsn_vec.push(source.0),
+            SSAInput::ReturnDataBuffer (source) => lsn_vec.push(source.0),
+            SSAInput::ContractEnv (entry_lsn) => {
                 if entry_lsn.0 != 2 {
                     lsn_vec.push(entry_lsn.0) // we should consider the first contract_env(lsn:2) as a constant
                 }
             },
-            SSAInput::MemorySizeChange { source: last_memory, .. } => lsn_vec.push(last_memory.0),
-            SSAInput::CreateInput { source, .. } => lsn_vec.push(source.0),
-            SSAInput::CallInput { source, .. } => lsn_vec.push(source.0),
-            SSAInput::InterpreterResult { source, .. } => lsn_vec.push(source.0),
-            SSAInput::CallOutcome { source, .. } => lsn_vec.push(source.0),
-            SSAInput::CreateOutcome { source, .. } => lsn_vec.push(source.0),
+            SSAInput::MemorySizeChange (last_memory) => lsn_vec.push(last_memory.0),
+            SSAInput::CreateInput (source) => lsn_vec.push(source.0),
+            SSAInput::CallInput (source) => lsn_vec.push(source.0),
+            SSAInput::InterpreterResult (source) => lsn_vec.push(source.0),
+            SSAInput::CallOutcome (source) => lsn_vec.push(source.0),
+            SSAInput::CreateOutcome (source) => lsn_vec.push(source.0),
         };
         lsn_vec
-    }
-
-    /// Set execution result for a node
-    #[inline]
-    pub fn set_result(&mut self, lsn: LsnType, outputs: Vec<SSAOutput>) -> Result<()> {
-        self.results[lsn as usize] = outputs;
-        Ok(())
     }
 
     /// Get a reference to execution results, primarily used by tracer
@@ -115,11 +109,7 @@ impl SsaGraph {
     pub fn get_result<T, F>(&self, lsn: LsnType, extractor: F) -> Result<Option<T>>
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
-    {       
-        if !self.results[lsn as usize].is_empty() {
-            return Ok(extractor(&self.results[lsn as usize]));
-        }
-        
+    {          
         if lsn as usize >= self.lsn_to_node.len() {
             return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
         }
@@ -129,10 +119,7 @@ impl SsaGraph {
     }
 
     pub fn get_result_by_lsn(&self, lsn: LsnType) -> Result<Option<&Vec<SSAOutput>>> {
-        if !self.results[lsn as usize].is_empty() {
-            return Ok(Some(&self.results[lsn as usize]));
-        }
-        
+
         if lsn as usize >= self.lsn_to_node.len() {
             return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
         }
@@ -182,11 +169,11 @@ impl SsaGraph {
     }
 
     /// Get topological sort
-    pub fn topological_sort(&self) -> Result<Vec<SSALogEntry>> {
+    pub fn topological_sort(&self) -> Result<Vec<NodeIndex>> {
         let sorted_indices = toposort(&self.graph, None)
             .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
             
-        Ok(sorted_indices.iter().map(|&idx| self.graph[idx].clone()).collect())
+        Ok(sorted_indices)
     }
 
     /// Get mutable node
@@ -217,8 +204,8 @@ impl SsaGraph {
     /// * `start_lsn` - The starting LSN to traverse from
     /// 
     /// # Returns
-    /// * `Result<Vec<SSALogEntry>>` - A vector of reachable nodes in dependency order
-    pub fn get_reachable_nodes(&self, start_lsn: LsnType) -> Result<Vec<SSALogEntry>> {
+    /// * `Result<Vec<NodeIndex>>` - A vector of reachable node indices in dependency order
+    pub fn get_reachable_nodes(&self, start_lsn: LsnType) -> Result<Vec<NodeIndex>> {
         let lsn = start_lsn as usize;
         // Get the starting node index
         if lsn >= self.lsn_to_node.len() {
@@ -227,15 +214,26 @@ impl SsaGraph {
         
         let start_idx = self.lsn_to_node[lsn];
         
-        // Use BFS to find all reachable nodes in order
+        // Collect all reachable node indices using BFS
         let mut bfs = petgraph::visit::Bfs::new(&self.graph, start_idx);
-        let mut result = Vec::new();
+        let mut node_indices = Vec::new();
         
         while let Some(nx) = bfs.next(&self.graph) {
-            result.push(self.graph[nx].clone());
+            node_indices.push(nx);
         }
         
-        Ok(result)
+        Ok(node_indices)
+    }
+
+    /// Get a mutable reference to a node by its index
+    /// 
+    /// # Arguments
+    /// * `index` - The node index
+    /// 
+    /// # Returns
+    /// * `&mut SSALogEntry` - A mutable reference to the node
+    pub fn get_node_by_index_mut(&mut self, index: NodeIndex) -> &mut SSALogEntry {
+        &mut self.graph[index]
     }
 
     /// Get all LSNs in the graph

@@ -86,7 +86,7 @@ impl ExecutionTracer {
             (SSAOutput::MemorySize(s1), SSAOutput::MemorySize(s2)) => s1 == s2,
             
             // Compare jumps
-            (SSAOutput::Jump { relative_offset: o1 }, SSAOutput::Jump { relative_offset: o2 }) => o1 == o2,
+            (SSAOutput::Jump(o1), SSAOutput::Jump(o2)) => o1 == o2,
             
             // Compare call frames
             (SSAOutput::CallInput(f1), SSAOutput::CallInput(f2)) => {

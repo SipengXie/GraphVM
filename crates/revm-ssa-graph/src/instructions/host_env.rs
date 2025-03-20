@@ -1,20 +1,13 @@
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{Spec, U256};
-use revm_ssa::SSAOutput;
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_output_stack_or_const};
-
-use super::as_usize_saturated;
+use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
+use crate::{ExecutionContext, ExecutionError, Result, get_ssa_output_stack_or_const, SsaGraph};
+use crate::as_usize_saturated;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute host environment operation
     #[inline]
-    pub fn execute_host_env(&self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
-        if !inputs.is_empty() {
-            return Err(ExecutionError::ExecutionError(
-                format!("opcode 0x{:x} requires 0 operands", opcode)
-            ));
-        }
-
+    pub fn execute_host_env(&self, node: &mut SSALogEntry, _graph: & SsaGraph, opcode: u8) -> Result<()> {
         let value = match opcode {
             // CHAINID
             0x46 => U256::from(self.env().cfg.chain_id),
@@ -48,24 +41,21 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 format!("Unknown host environment opcode: 0x{:x}", opcode)
             )),
         };
-        Ok(vec![SSAOutput::Stack(value)])
+        node.outputs[0] = SSAOutput::Stack(value);
+        Ok(())
     }
 
     /// Execute BLOBHASH operation
     #[inline]
-    pub fn execute_blobhash(&self, inputs: Vec<SSAOutput>, opcode: u8) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 1 {
-            return Err(ExecutionError::ExecutionError(
-                format!("opcode 0x{:x} requires 1 operand", opcode)
-            ));
-        }
-        let value = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let index = as_usize_saturated(*value);
+    pub fn execute_blobhash(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let value = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let index = as_usize_saturated!(value);
         let tx = &self.env().tx;
         let value = match tx.blob_hashes.get(index) {
             Some(hash) => U256::from_be_bytes(hash.0),
             None => U256::ZERO,
         };
-        Ok(vec![SSAOutput::Stack(value)])
+        node.outputs[0] = SSAOutput::Stack(value);
+        Ok(())
     }
 }

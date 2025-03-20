@@ -1,130 +1,115 @@
-use revm_primitives::{db::DatabaseRef, Bytes, Spec, U256};
-use revm_ssa::{
-    as_usize_saturated,
-    SSAOutput,
-    SSAInstructionResult, SSAInterpreterResult,
+use revm_primitives::{db::DatabaseRef, Bytes, Spec};
+use revm_ssa::{SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, SSAInput
 };
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_output_stack_or_const};
+use crate::{get_ssa_output_stack_or_const, get_memory, as_usize_saturated,ExecutionContext, ExecutionError, Result, SsaGraph};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute JUMP operation
     #[inline]
-    pub fn execute_jump(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "JUMP requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let target = match_ssa_output_stack_or_const!(&inputs[0], "First");
-
-        let current_pc = match &inputs[1] {
-            SSAOutput::Constant(value) => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Second operand must be Constant value".to_string()
-            )),
-        };
+    pub fn execute_jump(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let target = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let current_pc = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         // Calculate relative offset
         let target_usize = target.as_limbs()[0] as usize;
         let relative_offset = target_usize as isize - current_pc.as_limbs()[0] as isize;
 
-        Ok(vec![SSAOutput::Jump {
-            relative_offset,
-        }])
+        // Control flow verification
+        if let SSAOutput::Jump(old_jump) = node.outputs[0] {
+            if old_jump != relative_offset {
+                return Err(ExecutionError::ExecutionError(
+                    format!("Control flow is not deterministic. Node: {:?}, Old jump: {}, New jump: {}", 
+                    node, old_jump, relative_offset)
+                ));
+            }
+        }
+
+        node.outputs[0] = SSAOutput::Jump(relative_offset);
+
+        Ok(())
     }
 
     /// Execute JUMPI operation
     #[inline]
-    pub fn execute_jumpi(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 3 {
-            return Err(ExecutionError::ExecutionError(
-                "JUMPI requires exactly 3 operands".to_string()
-            ));
-        }
-
-        let target = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let condition = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        let current_pc = match &inputs[2] {
-            SSAOutput::Constant(value) => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Constant value".to_string()
-            )),
-        };
+    pub fn execute_jumpi(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let target = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let condition = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let current_pc = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
 
         // If condition is 0, no jump, relative offset is 0
-        if condition.is_zero() {
-            return Ok(vec![SSAOutput::Jump {
-                relative_offset: 0,
-            }]);
-        }
-
-        // Calculate relative offset
-        let target_usize = target.as_limbs()[0] as usize;
-        let relative_offset = target_usize as isize - current_pc.as_limbs()[0] as isize;
-
-        Ok(vec![SSAOutput::Jump {
-            relative_offset,
-        }])
-    }
-
-    /// Execute PC operation
-    #[inline]
-    pub fn execute_pc(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 1 {
-            return Err(ExecutionError::ExecutionError(
-                "PC requires exactly 1 operand".to_string()
-            ));
-        }
-
-        let pc = match &inputs[0] { 
-            SSAOutput::Constant(value) => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                "Operand must be Constant value".to_string()
-            )),
+        let new_jump = if condition.is_zero() {
+            0
+        } else {
+            // Calculate relative offset
+            let target_usize = target.as_limbs()[0] as usize;
+            let relative_offset = target_usize as isize - current_pc.as_limbs()[0] as isize;
+            relative_offset
         };
 
-        Ok(vec![SSAOutput::Stack(U256::from(pc.as_limbs()[0] as usize))])
+        // Control flow verification
+        if let SSAOutput::Jump(old_jump) = node.outputs[0] {
+            if old_jump != new_jump {
+                return Err(ExecutionError::ExecutionError(
+                    format!("Control flow is not deterministic. Node: {:?}, Old jump: {}, New jump: {}", 
+                    node, old_jump, new_jump)
+                ));
+            }
+        }
+
+        node.outputs[0] = SSAOutput::Jump(new_jump);
+
+        Ok(())
     }
+
+    // /// Execute PC operation
+    // #[inline]
+    // pub fn execute_pc(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
+    //     if inputs.len() != 1 {
+    //         return Err(ExecutionError::ExecutionError(
+    //             "PC requires exactly 1 operand".to_string()
+    //         ));
+    //     }
+
+    //     let pc = match &inputs[0] { 
+    //         SSAOutput::Constant(value) => value,
+    //         _ => return Err(ExecutionError::ExecutionError(
+    //             "Operand must be Constant value".to_string()
+    //         )),
+    //     };
+
+    //     Ok(vec![SSAOutput::Stack(U256::from(pc.as_limbs()[0] as usize))])
+    // }
 
     /// Execute RETURN/REVERT operation
     #[inline]
-    pub fn execute_ret(&mut self, inputs: Vec<SSAOutput>, instruction_result: SSAInstructionResult) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 3 {
-            return Err(ExecutionError::ExecutionError(
-                "RETURN/REVERT requires exactly 3 operands".to_string()
-            ));
-        }
-
-        let offset = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let length = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        let output = match &inputs[2] {
-            SSAOutput::Memory(value) => value.clone(),
-            _ => return Err(ExecutionError::ExecutionError(
-                "Third operand must be Memory value".to_string()
-            )),
-        };
+    pub fn execute_ret(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, instruction_result: SSAInstructionResult) -> Result<()> {
+        let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let length = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let output = get_memory!(graph, &node.inputs[2]);
 
         let result = instruction_result;
-        let mut ssa_outputs = vec![
-            SSAOutput::InterpreterResult(
+        let offset = as_usize_saturated!(offset);
+        let length = as_usize_saturated!(length);
+        let new_size = self.check_memory_size(offset, length);
+
+        node.outputs[0] = SSAOutput::InterpreterResult(
             SSAInterpreterResult {
                 result,
-                output: output.clone(),
-            })];
-        // eprintln!("return: {:?}", ssa_outputs);
-        let offset = as_usize_saturated(*offset);
-        let length = as_usize_saturated(*length);
-        let new_size = self.check_memory_size(offset, length);
+                output: output.into(),
+            }
+        );
+        
         if new_size > self.memory_size() {
-            ssa_outputs.push(SSAOutput::MemorySize(new_size));
+            if node.outputs.len() < 2 {
+                node.outputs.push(SSAOutput::MemorySize(new_size));
+            } else {
+                node.outputs[1] = SSAOutput::MemorySize(new_size);
+            }
             self.set_memory_size(new_size);
         }
-        Ok(ssa_outputs)
+        Ok(())
     }
 
-    pub fn execute_change_instruction_result(&self, opcode: u8) -> Result<Vec<SSAOutput>> {
+    pub fn execute_change_instruction_result(&self, node: &mut SSALogEntry, _graph: & SsaGraph, opcode: u8) -> Result<()> {
         let result = match opcode {
             0x00 => SSAInstructionResult::Ok,      // STOP
             0xFE => SSAInstructionResult::Error,   // INVALID
@@ -134,11 +119,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             )),
         };
 
-        Ok(vec![
-            SSAOutput::InterpreterResult(SSAInterpreterResult {
-                result,
-                output: Bytes::new(),
-            })
-        ])
+        node.outputs[0] = SSAOutput::InterpreterResult(SSAInterpreterResult {
+            result,
+            output: Bytes::new(),
+        });
+
+        Ok(())
     }
 }

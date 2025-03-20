@@ -282,9 +282,10 @@ fn graph_execute_parallel(
     
     
     // Execute
-    let execution_time = executor.execute_parallel_batches().unwrap();
+    // let execution_time = executor.execute_parallel_batches().unwrap();
+    let execution_time = executor.execute().unwrap();
     
-    (executor.into_tracer(), Some(execution_time))
+    (executor.into_tracer(), Some(execution_time.1))
 }
 
 mod arithmetic_tests {
