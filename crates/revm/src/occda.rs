@@ -979,7 +979,7 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result = HashMap::with_capacity(ssa_state.len() / 2);
+        let mut result = HashMap::default();
 
         for output in ssa_state {
             if let SSAOutput::Storage { key, value } = output {
