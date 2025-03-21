@@ -250,11 +250,10 @@ impl SsaGraph {
                 // Operate directly on iterator to avoid creating intermediate Vec
                 outputs.iter()
                     .filter_map(|o| {
-                        if let SSAOutput::Storage { key, value, dirty } = o {
+                        if let SSAOutput::Storage { key, value } = o {
                             Some(SSAOutput::Storage {
                                 key: key.clone(),
                                 value: value.clone(),
-                                dirty: *dirty,
                             })
                         } else {
                             None

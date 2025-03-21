@@ -51,7 +51,6 @@ macro_rules! output_account_info {
         SSAOutput::Storage {
             key: Box::new(StorageKey::AccountInfo($address)),
             value: Box::new(StorageValue::AccountInfo($info)),
-            dirty: false,
         }
     }};
 }
@@ -63,7 +62,6 @@ macro_rules! output_account_status {
         SSAOutput::Storage {
             key: Box::new(StorageKey::AccountStatus($address)),
             value: Box::new(StorageValue::AccountStatus($status)),
-            dirty: false,
         }
     }};
 }
@@ -1472,7 +1470,6 @@ impl SSALogger {
             SSAOutput::Storage { 
                 key: Box::new(StorageKey::Slot(address, index)), 
                 value: Box::new(StorageValue::Slot(value)), 
-                dirty: false,
             }
         );
         self.log_storage_write(StorageKey::Slot(address, index), lsn, 0);

@@ -979,10 +979,10 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result = HashMap::with_capacity(ssa_state.len() / 2); // 预分配合理容量
+        let mut result = HashMap::with_capacity(ssa_state.len() / 2);
 
         for output in ssa_state {
-            if let SSAOutput::Storage { key, value, dirty } = output {
+            if let SSAOutput::Storage { key, value } = output {
                 match **key {
                     StorageKey::AccountInfo(address) | StorageKey::AccountStatus(address) => {
                         let account = result.entry(address).or_insert_with(|| {
@@ -993,15 +993,15 @@ impl Occda {
                         
                         account.status |= AccountStatus::Touched;
 
-                        if *dirty {
-                            if let Some(info) = value.as_account_info() {
-                                account.info = info.clone();
-                            }
-                            
-                            if let Some(status) = value.as_account_status() {
-                                account.status |= *status;
-                            }
+                        
+                        if let Some(info) = value.as_account_info() {
+                            account.info = info.clone();
                         }
+                        
+                        if let Some(status) = value.as_account_status() {
+                            account.status |= *status;
+                        }
+                        
                     },
                     StorageKey::Slot(address, index) => {
                         let account = result.entry(address).or_insert_with(|| {
@@ -1018,9 +1018,7 @@ impl Occda {
                                 EvmStorageSlot::new(value)
                             });
                             
-                            if *dirty {
-                                slot.present_value = new_value;
-                            }
+                            slot.present_value = new_value;
                         }
                     },
                 }
