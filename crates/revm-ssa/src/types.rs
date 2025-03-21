@@ -156,6 +156,9 @@ pub enum SSAOutput {
     Storage {
         key: Box<StorageKey>,
         value: Box<StorageValue>,
+        // used for ssa-execution, when ssa_executor modified the storage, 
+        // we need to set the dirty to true
+        dirty: bool, 
     },
     Jump(isize),
     ReturnDataBuffer(Bytes),

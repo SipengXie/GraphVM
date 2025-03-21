@@ -75,7 +75,7 @@ impl ExecutionTracer {
             (SSAOutput::Memory(v1), SSAOutput::Memory(v2)) => v1 == v2,
             
             // Compare storage outputs
-            (SSAOutput::Storage { key: k1, value: v1 }, SSAOutput::Storage { key: k2, value: v2 }) => {
+            (SSAOutput::Storage { key: k1, value: v1, .. }, SSAOutput::Storage { key: k2, value: v2, .. }) => {
                 k1 == k2 && v1 == v2
             },
             

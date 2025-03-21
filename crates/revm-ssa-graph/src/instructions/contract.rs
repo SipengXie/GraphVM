@@ -45,6 +45,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         node.outputs[0] = SSAOutput::Storage {
             key: Box::new(StorageKey::AccountInfo(caller)),
             value: Box::new(StorageValue::AccountInfo(new_caller_info)),
+            dirty: true,
         };
 
         Ok(())
@@ -69,6 +70,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         node.outputs[0] = SSAOutput::Storage {
             key: Box::new(StorageKey::AccountInfo(caller)),
             value: Box::new(StorageValue::AccountInfo(new_caller_info)),
+            dirty: true,
         };
         Ok(())
     }
@@ -92,6 +94,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         node.outputs[0] = SSAOutput::Storage {
             key: Box::new(StorageKey::AccountInfo(beneficiary)),
             value: Box::new(StorageValue::AccountInfo(new_beneficiary_account_info)),
+            dirty: true,
         };
         Ok(())
     }

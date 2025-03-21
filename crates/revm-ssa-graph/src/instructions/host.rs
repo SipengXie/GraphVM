@@ -45,6 +45,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         node.outputs[0] = SSAOutput::Storage {
             key: Box::new(StorageKey::Slot(address, index)),
             value: Box::new(StorageValue::Slot(value)),
+            dirty: true,
         };
 
         Ok(())
