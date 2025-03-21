@@ -329,7 +329,7 @@ impl Occda {
                                         *result_raw_ptr.add(idx) = task_result;
                                     }
                                     drop(executor);
-                                    re_execution_opcodes += nodes_to_execute_len;
+                                    re_execution_opcodes += nodes_to_execute_len.0;
                                     continue;
                                 }
                                 Err(_err) => {
@@ -689,7 +689,7 @@ impl Occda {
                                 };
                                 result_store[idx] = task_result;
                                 drop(executor);
-                                re_execution_opcodes += nodes_to_execute_len;
+                                re_execution_opcodes += nodes_to_execute_len.0;
                                 continue;
                             }
                             Err(_err) => {
