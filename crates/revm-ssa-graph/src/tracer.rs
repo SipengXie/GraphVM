@@ -75,7 +75,7 @@ impl ExecutionTracer {
             (SSAOutput::Memory(v1), SSAOutput::Memory(v2)) => v1 == v2,
             
             // Compare storage outputs
-            (SSAOutput::Storage { key: k1, value: v1 }, SSAOutput::Storage { key: k2, value: v2 }) => {
+            (SSAOutput::Storage { key: k1, value: v1, .. }, SSAOutput::Storage { key: k2, value: v2, .. }) => {
                 k1 == k2 && v1 == v2
             },
             
@@ -85,11 +85,8 @@ impl ExecutionTracer {
             // Compare memory size
             (SSAOutput::MemorySize(s1), SSAOutput::MemorySize(s2)) => s1 == s2,
             
-            // Compare addresses
-            (SSAOutput::Address(a1), SSAOutput::Address(a2)) => a1 == a2,
-            
             // Compare jumps
-            (SSAOutput::Jump { relative_offset: o1 }, SSAOutput::Jump { relative_offset: o2 }) => o1 == o2,
+            (SSAOutput::Jump(o1), SSAOutput::Jump(o2)) => o1 == o2,
             
             // Compare call frames
             (SSAOutput::CallInput(f1), SSAOutput::CallInput(f2)) => {

@@ -2,234 +2,153 @@ use std::cmp::Ordering;
 use revm_primitives::db::DatabaseRef;
 use super::i256::i256_cmp;
 use revm_primitives::{Spec, U256};
-use revm_ssa::SSAOutput;
-use crate::{ExecutionContext, ExecutionError, Result, match_ssa_output_stack_or_const};
-use super::utils::as_usize_saturated;
+use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
+use crate::{ExecutionContext, ExecutionError, Result, get_ssa_output_stack_or_const, SsaGraph};
+use crate::as_usize_saturated;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute LT operation
-    #[inline]
-    pub fn execute_lt(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "LT requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(U256::from(a < b))])
+    #[inline(always)]
+    pub fn execute_lt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(if a < b { U256::from(1) } else { U256::from(0) });
+        Ok(())
     }
 
     /// Execute GT operation
-    #[inline]
-    pub fn execute_gt(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "GT requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(U256::from(a > b))])
+    #[inline(always)]
+    pub fn execute_gt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(if a > b { U256::from(1) } else { U256::from(0) });
+        Ok(())
     }
 
     /// Execute SLT operation
-    #[inline]
-    pub fn execute_slt(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "SLT requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(U256::from(i256_cmp(a, b) == Ordering::Less))])
+    #[inline(always)]
+    pub fn execute_slt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(if i256_cmp(&a, &b) == Ordering::Less { U256::from(1) } else { U256::from(0) });
+        Ok(())
     }
 
     /// Execute SGT operation
-    #[inline]
-    pub fn execute_sgt(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "SGT requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(U256::from(i256_cmp(a, b) == Ordering::Greater))])
+    #[inline(always)]
+    pub fn execute_sgt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(if i256_cmp(&a, &b) == Ordering::Greater { U256::from(1) } else { U256::from(0) });
+        Ok(())
     }
 
     /// Execute EQ operation
-    #[inline]
-    pub fn execute_eq(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "EQ requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(U256::from(a == b))])
+    #[inline(always)]
+    pub fn execute_eq(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(if a == b { U256::from(1) } else { U256::from(0) });
+        Ok(())
     }
 
     /// Execute ISZERO operation
-    #[inline]
-    pub fn execute_iszero(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 1 {
-            return Err(ExecutionError::ExecutionError(
-                "ISZERO requires exactly 1 operand".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "");
-
-        Ok(vec![SSAOutput::Stack(U256::from(a.is_zero()))])
+    #[inline(always)]
+    pub fn execute_iszero(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        node.outputs[0] = SSAOutput::Stack(if a.is_zero() { U256::from(1) } else { U256::from(0) });
+        Ok(())
     }
 
     /// Execute AND operation
-    #[inline]
-    pub fn execute_and(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "AND requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(a & b)])
+    #[inline(always)]
+    pub fn execute_and(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(a & b);
+        Ok(())
     }
 
     /// Execute OR operation
-    #[inline]
-    pub fn execute_or(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "OR requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(a | b)])
+    #[inline(always)]
+    pub fn execute_or(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(a | b);
+        Ok(())
     }
 
     /// Execute XOR operation
-    #[inline]
-    pub fn execute_xor(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "XOR requires exactly 2 operands".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let b = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        Ok(vec![SSAOutput::Stack(a ^ b)])
+    #[inline(always)]
+    pub fn execute_xor(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        node.outputs[0] = SSAOutput::Stack(a ^ b);
+        Ok(())
     }
 
     /// Execute NOT operation
-    #[inline]
-    pub fn execute_not(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 1 {
-            return Err(ExecutionError::ExecutionError(
-                "NOT requires exactly 1 operand".to_string()
-            ));
-        }
-
-        let a = match_ssa_output_stack_or_const!(&inputs[0], "");
-
-        Ok(vec![SSAOutput::Stack(!a)])
+    #[inline(always)]
+    pub fn execute_not(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        node.outputs[0] = SSAOutput::Stack(!a);
+        Ok(())
     }
 
     /// Execute BYTE operation
-    #[inline]
-    pub fn execute_byte(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "BYTE requires exactly 2 operands".to_string()
-            ));
-        }
+    #[inline(always)]
+    pub fn execute_byte(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let index = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let word = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
 
-        let index = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let word = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        let index = as_usize_saturated(*index);
+        let index = as_usize_saturated!(index);
         let result = if index < 32 {
             U256::from(word.byte(31 - index))
         } else {
             U256::ZERO
         };
 
-        Ok(vec![SSAOutput::Stack(result)])
+        node.outputs[0] = SSAOutput::Stack(result);
+        Ok(())
     }
 
     /// Execute SHL operation (left shift)
-    #[inline]
-    pub fn execute_shl(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "SHL requires exactly 2 operands".to_string()
-            ));
-        }
+    #[inline(always)]
+    pub fn execute_shl(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let shift = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
 
-        let shift = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let value = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        if *shift >= U256::from(256) {
-            Ok(vec![SSAOutput::Stack(U256::from(0))])
+        node.outputs[0] = if shift >= U256::from(256) {
+            SSAOutput::Stack(U256::from(0))
         } else {
-            let shift_amount = as_usize_saturated(*shift);
-            Ok(vec![SSAOutput::Stack(*value << shift_amount)])
-        }
+            let shift_amount = as_usize_saturated!(shift);
+            SSAOutput::Stack(value << shift_amount)
+        };
+        Ok(())
     }
 
     /// Execute SHR operation (logical right shift)
-    #[inline]
-    pub fn execute_shr(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "SHR requires exactly 2 operands".to_string()
-            ));
-        }
+    #[inline(always)]
+    pub fn execute_shr(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let shift = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
 
-        let shift = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let value = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-
-        if *shift >= U256::from(256) {
-            Ok(vec![SSAOutput::Stack(U256::from(0))])
+        node.outputs[0] = if shift >= U256::from(256) {
+            SSAOutput::Stack(U256::from(0))
         } else {
-            let shift_amount = as_usize_saturated(*shift);
-            Ok(vec![SSAOutput::Stack(*value >> shift_amount)])
-        }
+            let shift_amount = as_usize_saturated!(shift);
+            SSAOutput::Stack(value >> shift_amount)
+        };
+        Ok(())
     }
 
     /// Execute SAR operation (arithmetic right shift)
-    #[inline]
-    pub fn execute_sar(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "SAR requires exactly 2 operands".to_string()
-            ));
-        }
-    
-        let shift = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let value = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-    
-        let shift_amount = as_usize_saturated(*shift);
+    #[inline(always)]
+    pub fn execute_sar(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let shift = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+
+        let shift_amount = as_usize_saturated!(shift);
         let result = if shift_amount < 256 {
             value.arithmetic_shr(shift_amount)
         } else if value.bit(255) {
@@ -238,6 +157,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             U256::ZERO
         };
         
-        Ok(vec![SSAOutput::Stack(result)])
+        node.outputs[0] = SSAOutput::Stack(result);
+        Ok(())
     }
 }

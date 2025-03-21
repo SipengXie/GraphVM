@@ -121,9 +121,8 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
 
             // Execute transact and record time
             let start_time = Instant::now();
-            let _result = evm.transact().unwrap();
+            let _result = evm.transact_preverified().unwrap();
             let execution_time = start_time.elapsed();
-            eprintln!("Non-SSA transact time: {:?}", execution_time);
 
             ExecutionResult {
                 execution_time: Some(execution_time),
@@ -283,9 +282,10 @@ fn graph_execute_parallel(
     
     
     // Execute
-    let execution_time = executor.execute_parallel_batches().unwrap();
+    // let execution_time = executor.execute_parallel_batches().unwrap();
+    let execution_time = executor.execute().unwrap();
     
-    (executor.into_tracer(), Some(execution_time))
+    (executor.into_tracer(), Some(execution_time.1))
 }
 
 mod arithmetic_tests {
@@ -2065,7 +2065,7 @@ mod erc20_tests {
     const SLOT2 : &str = "0xac0ab67043ecc9a2f17c6f6ba97786b2b1051a49d0101c2e2da0641d9a0e6da7";
 
     // Simple test runtime code
-    const TEST_RUNTIME_CODE : &str = "0x608060405234801561000f575f80fd5b5060043610610055575f3560e01c80631a43c3381461005957806325aa322c14610063578063853255cc14610081578063bf9ce9521461009f578063f0ba8440146100bd575b5f80fd5b6100616100ed565b005b61006b610171565b60405161007891906101b5565b60405180910390f35b610089610179565b60405161009691906101b5565b60405180910390f35b6100a761017f565b6040516100b491906101b5565b60405180910390f35b6100d760048036038101906100d291906101fc565b610185565b6040516100e491906101b5565b60405180910390f35b5f80600190505f5b606481101561015e575f816064811061011157610110610227565b5b01548361011e9190610281565b9250633b9aca035f826064811061013857610137610227565b5b01548361014591906102b4565b61014f9190610322565b915080806001019150506100f5565b5081606481905550806065819055505050565b633b9aca0381565b60645481565b60655481565b5f8160648110610193575f80fd5b015f915090505481565b5f819050919050565b6101af8161019d565b82525050565b5f6020820190506101c85f8301846101a6565b92915050565b5f80fd5b6101db8161019d565b81146101e5575f80fd5b50565b5f813590506101f6816101d2565b92915050565b5f60208284031215610211576102106101ce565b5b5f61021e848285016101e8565b91505092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52603260045260245ffd5b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f61028b8261019d565b91506102968361019d565b92508282019050808211156102ae576102ad610254565b5b92915050565b5f6102be8261019d565b91506102c98361019d565b92508282026102d78161019d565b915082820484148315176102ee576102ed610254565b5b5092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601260045260245ffd5b5f61032c8261019d565b91506103378361019d565b925082610347576103466102f5565b5b82820690509291505056fea26469706673582212207d0c80b90619e9c227a05b58542459b0869645f3ca50f63fd067775d53897cc064736f6c634300081a0033";
+    const TEST_RUNTIME_CODE : &str = "0x608060405234801561000f575f80fd5b5060043610610055575f3560e01c80631a43c3381461005957806325aa322c14610078578063853255cc14610096578063bf9ce952146100b4578063f0ba8440146100d2575b5f80fd5b610061610102565b60405161006f9291906101c9565b60405180910390f35b610080610185565b60405161008d91906101f0565b60405180910390f35b61009e61018d565b6040516100ab91906101f0565b60405180910390f35b6100bc610193565b6040516100c991906101f0565b60405180910390f35b6100ec60048036038101906100e79190610237565b610199565b6040516100f991906101f0565b60405180910390f35b5f805f80600190505f5b61271081101561016657600181610123919061028f565b8361012e919061028f565b9250633b9aca03600182610142919061028f565b8361014d91906102c2565b6101579190610330565b9150808060010191505061010c565b5081606481905550806065819055506064546065549350935050509091565b633b9aca0381565b60645481565b60655481565b5f81606481106101a7575f80fd5b015f915090505481565b5f819050919050565b6101c3816101b1565b82525050565b5f6040820190506101dc5f8301856101ba565b6101e960208301846101ba565b9392505050565b5f6020820190506102035f8301846101ba565b92915050565b5f80fd5b610216816101b1565b8114610220575f80fd5b50565b5f813590506102318161020d565b92915050565b5f6020828403121561024c5761024b610209565b5b5f61025984828501610223565b91505092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f610299826101b1565b91506102a4836101b1565b92508282019050808211156102bc576102bb610262565b5b92915050565b5f6102cc826101b1565b91506102d7836101b1565b92508282026102e5816101b1565b915082820484148315176102fc576102fb610262565b5b5092915050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601260045260245ffd5b5f61033a826101b1565b9150610345836101b1565b92508261035557610354610303565b5b82820690509291505056fea2646970667358221220788e371fb21283a8f9e8fe6b3431df49a04de0efe5941b8d92c1e1e4e58f5ab364736f6c634300081a0033";
 
     // Simpe test input
     const TEST_INPUT : &str = "0x1a43c338";
@@ -2104,26 +2104,26 @@ mod erc20_tests {
             pre_deployed_contract: vec![],
             pre_determined_slots: vec![],
             input: Some(input.clone()),
-            thread_number: Some(rayon::current_num_threads()),
+            thread_number: Some(8),
             enable_tracer: false,
             is_deployed_contract: false
         };
         let parallel_full_result = execute_case(runtime_code.clone(), "parallel_full", parallel_full_config);
         println!("Parallel Full Graph Time Cost: {:?}", parallel_full_result.execution_time);
-        println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
-        println!("You can use curl http://127.0.0.1:12345/metrics to view them");
-        println!("The metrics will be in standard Prometheus format");
+        // println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
+        // println!("You can use curl http://127.0.0.1:12345/metrics to view them");
+        // println!("The metrics will be in standard Prometheus format");
         std::thread::sleep(std::time::Duration::from_secs(15));
     }
 
     #[test]
     fn test_compute() {
         // Initialize prometheus metrics exporter
-        let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
-        let _handle = builder
-            .with_http_listener(([127, 0, 0, 1], 12345))
-            .install()
-            .expect("failed to install Prometheus recorder");
+        // let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
+        // let _handle = builder
+        //     .with_http_listener(([127, 0, 0, 1], 12345))
+        //     .install()
+        //     .expect("failed to install Prometheus recorder");
         let runtime_hex = hex::decode(TEST_RUNTIME_CODE).unwrap();
         let runtime_code = Bytes::from(runtime_hex);
         let input_hex = hex::decode(TEST_INPUT).unwrap();
@@ -2156,9 +2156,9 @@ mod erc20_tests {
         };
         let serial_full_result = execute_case(runtime_code.clone(), "serial_full", serial_full_config);
         println!("Serial Full Graph Time Cost: {:?}", serial_full_result.execution_time);
-        println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
-        println!("You can use curl http://127.0.0.1:12345/metrics to view them");
-        println!("The metrics will be in standard Prometheus format");
+        // println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
+        // println!("You can use curl http://127.0.0.1:12345/metrics to view them");
+        // println!("The metrics will be in standard Prometheus format");
         // std::thread::sleep(std::time::Duration::from_secs(15));
     }
 

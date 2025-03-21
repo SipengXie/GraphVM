@@ -965,57 +965,49 @@ impl Occda {
         let mut result = HashMap::default();
 
         for output in ssa_state {
-            let (storage_key, storage_value) = match output {
-                SSAOutput::Storage { key, value } => (key, value),
-                _ => panic!("SSAOutput is not a storage output"),
-            };
-            match **storage_key {
-                StorageKey::AccountInfo(address) | StorageKey::AccountStatus(address) => {
-                    let account = result.entry(address)
-                    .or_insert_with(
-                        || 
-                        db.basic_ref(address)
-                        .map(|info| match info {
-                            None => Account::new_not_existing(),
-                            Some(account) => account.into(),
-                        })
-                        .unwrap_or_else(|_| Account::new_not_existing())
-                    );
-                    account.status |= AccountStatus::Touched;
-                    if let Some(info) = storage_value.as_account_info() {
-                        account.info = info.clone();
-                    }
-                    if let Some(status) = storage_value.as_account_status() {
-                        account.status |= *status;
-                    }
-                },
-                StorageKey::Slot(address, index) => {
-                    let account = result.entry(address)
-                    .or_insert_with(
-                        || 
-                        db.basic_ref(address)
-                        .map(|info| match info {
-                            None => Account::new_not_existing(),
-                            Some(account) => account.into(),
-                        })
-                        .unwrap_or_else(|_| Account::new_not_existing())
-                    );
-                    account.status |= AccountStatus::Touched;
-                    match **storage_value {
-                        StorageValue::Slot(new_value) => {
-                            let evm_storage = account.storage.entry(index).or_insert_with(|| {
+            if let SSAOutput::Storage { key, value } = output {
+                match **key {
+                    StorageKey::AccountInfo(address) | StorageKey::AccountStatus(address) => {
+                        let account = result.entry(address).or_insert_with(|| {
+                            db.basic_ref(address)
+                                .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
+                                .unwrap_or_else(|_| Account::new_not_existing())
+                        });
+                        
+                        account.status |= AccountStatus::Touched;
+
+                        
+                        if let Some(info) = value.as_account_info() {
+                            account.info = info.clone();
+                        }
+                        
+                        if let Some(status) = value.as_account_status() {
+                            account.status |= *status;
+                        }
+                        
+                    },
+                    StorageKey::Slot(address, index) => {
+                        let account = result.entry(address).or_insert_with(|| {
+                            db.basic_ref(address)
+                                .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
+                                .unwrap_or_else(|_| Account::new_not_existing())
+                        });
+                        
+                        account.status |= AccountStatus::Touched;
+                        
+                        if let StorageValue::Slot(new_value) = **value {
+                            let slot = account.storage.entry(index).or_insert_with(|| {
                                 let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
                                 EvmStorageSlot::new(value)
                             });
-                            evm_storage.present_value = new_value;
+                            
+                            slot.present_value = new_value;
                         }
-                        _ => {}
-                    }
-                },
+                    },
+                }
             }
         }
-        // eprintln!("SSA State: {:?}", ssa_state);
-        // eprintln!("result: {:?}", result);
+        
         Ok(result)
     }
 

@@ -1,6 +1,6 @@
 pub mod arithmetic;
 pub mod bitwise;
-pub mod stack;
+// pub mod stack;
 pub mod memory;
 pub mod control;
 pub mod contract;
@@ -9,13 +9,5 @@ pub mod host;
 pub mod utils;
 pub mod host_env;
 pub mod i256;
-// Re-export all implementations
-// pub use arithmetic::*;
-// pub use bitwise::*;
-// pub use stack::*;
-// pub use memory::*;
-// pub use control::*;
-// pub use contract::*;
-// pub use system::*;
-// pub use host::*;
+
 pub use utils::*;

@@ -27,7 +27,7 @@ pub const MIN_NEGATIVE_VALUE: U256 = U256::from_limbs([
 
 const FLIPH_BITMASK_U64: u64 = 0x7FFFFFFFFFFFFFFF;
 
-#[inline]
+#[inline(always)]
 pub fn i256_sign(val: &U256) -> Sign {
     if val.bit(U256::BITS - 1) {
         Sign::Minus
@@ -37,7 +37,7 @@ pub fn i256_sign(val: &U256) -> Sign {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn i256_sign_compl(val: &mut U256) -> Sign {
     let sign = i256_sign(val);
     if sign == Sign::Minus {
@@ -46,7 +46,7 @@ pub fn i256_sign_compl(val: &mut U256) -> Sign {
     sign
 }
 
-#[inline]
+#[inline(always)]
 fn u256_remove_sign(val: &mut U256) {
     // SAFETY: U256 does not have any padding bytes
     unsafe {
@@ -54,17 +54,17 @@ fn u256_remove_sign(val: &mut U256) {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn two_compl_mut(op: &mut U256) {
     *op = two_compl(*op);
 }
 
-#[inline]
+#[inline(always)]
 pub fn two_compl(op: U256) -> U256 {
     op.wrapping_neg()
 }
 
-#[inline]
+#[inline(always)]
 pub fn i256_cmp(first: &U256, second: &U256) -> Ordering {
     let first_sign = i256_sign(first);
     let second_sign = i256_sign(second);
@@ -76,7 +76,7 @@ pub fn i256_cmp(first: &U256, second: &U256) -> Ordering {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn i256_div(mut first: U256, mut second: U256) -> U256 {
     let second_sign = i256_sign_compl(&mut second);
     if second_sign == Sign::Zero {
@@ -105,7 +105,7 @@ pub fn i256_div(mut first: U256, mut second: U256) -> U256 {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn i256_mod(mut first: U256, mut second: U256) -> U256 {
     let first_sign = i256_sign_compl(&mut first);
     if first_sign == Sign::Zero {

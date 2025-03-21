@@ -4,130 +4,106 @@ use revm_primitives::{
     AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
 };
 use revm_ssa::{
-    output_account_info, output_account_status, SSAInstructionResult, SSAInterpreterResult, SSAOutput, StorageKey, StorageValue
+    output_account_info, output_account_status, SSAInput, SSAInstructionResult, 
+    SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
 };
-use crate::{match_input, match_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result};
+use crate::{
+    get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph
+};
 
-use super::{as_u64_saturated, as_usize_saturated, u256_to_bool};
+use super::{
+    as_u64_saturated, as_usize_saturated, get_contract_env, 
+    get_memory, get_storage_value, u256_to_bool
+};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute SLOAD operation
-    #[inline]
-    pub fn execute_sload(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 4 {
-            return Err(ExecutionError::ExecutionError(
-                "SLOAD requires exactly 1 operand".to_string()
-            ));
-        }
+    #[inline(always)]
+    pub fn execute_sload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
-        let value = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value, "Third");
-        let account_status = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Fourth");
-        let value = if account_status.contains(AccountStatus::Created) {
+        let value = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
+        let account_status = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
+
+        let value = if account_status.as_account_status().unwrap().contains(AccountStatus::Created) {
             U256::ZERO
         } else {
             *value.as_slot().unwrap()
         };
-        Ok(vec![SSAOutput::Stack(value)])
+        node.outputs[0] = SSAOutput::Stack(value);
+
+        Ok(())
     }
 
     /// Execute SSTORE operation
-    #[inline]
-    pub fn execute_sstore(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 3 {
-            return Err(ExecutionError::ExecutionError(
-                "SSTORE requires exactly 2 operands".to_string()
-            ));
-        }
+    #[inline(always)]
+    pub fn execute_sstore(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let address = get_contract_env!(graph, node.inputs[0]).target_address;
 
-        let address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
+        let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
 
-        let index = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-        let value = match_ssa_output_stack_or_const!(&inputs[2], "Third");
+        node.outputs[0] = SSAOutput::Storage {
+            key: Box::new(StorageKey::Slot(address, index)),
+            value: Box::new(StorageValue::Slot(value)),
+        };
 
-        Ok(vec![SSAOutput::Storage {
-            key: Box::new(StorageKey::Slot(address, *index)),
-            value: Box::new(StorageValue::Slot(*value)),
-        }])
+        Ok(())
     }
 
     /// Execute BALANCE operation
-    #[inline]
-    pub fn execute_balance(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "BALANCE requires exactly 2 operand".to_string()
-            ));
-        }
-        // check first operand is stack/constant value
-        match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
-        Ok(vec![SSAOutput::Stack(account_info.balance)])
+    #[inline(always)]
+    pub fn execute_balance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let balance = account.as_account_info().unwrap().balance;
+        node.outputs[0] = SSAOutput::Stack(balance);
+        Ok(())
     }
 
     /// Execute SELFBALANCE operation
-    #[inline]
-    pub fn execute_selfbalance(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "SELFBALANCE requires exactly 2 operand".to_string()
-            ));
-        }
-        let _target = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
-        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
-        Ok(vec![SSAOutput::Stack(account_info.balance)])
+    #[inline(always)]
+    pub fn execute_selfbalance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let balance = account.as_account_info().unwrap().balance;
+        node.outputs[0] = SSAOutput::Stack(balance);
+        Ok(())
     }
 
     /// Execute EXTCODESIZE operation
-    #[inline]
-    pub fn execute_extcodesize(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "EXTCODESIZE requires exactly 2 operand".to_string()
-            ));
-        }
-        let _address = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
+    #[inline(always)]
+    pub fn execute_extcodesize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()>  {
+        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         // we ignore EIP 7702 here
-        let code = match &account_info.code {
+        let code = match &account.as_account_info().unwrap().code {
             Some(code) => code,
             None => {
                 &Bytecode::default()
             }
         };
-        Ok(vec![SSAOutput::Stack(U256::from(code.len()))])
+        node.outputs[0] = SSAOutput::Stack(U256::from(code.len()));
+        Ok(())
     }
 
     /// Execute EXTCODEHASH operation
-    #[inline]
-    pub fn execute_extcodehash(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 2 {
-            return Err(ExecutionError::ExecutionError(
-                "EXTCODEHASH requires exactly 2 operand".to_string()
-            ));
-        }
-        match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let account_info = match_input!(inputs, 1, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Second");
-        Ok(vec![SSAOutput::Stack(account_info.code_hash.into())])
+    #[inline(always)]
+    pub fn execute_extcodehash(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let code_hash = account.as_account_info().unwrap().code_hash;
+        node.outputs[0] = SSAOutput::Stack(code_hash.into());
+        Ok(())
     }
 
     /// Execute EXTCODECOPY operation
-    #[inline]
-    pub fn execute_extcodecopy(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 5 {
-            return Err(ExecutionError::ExecutionError(
-                "CODECOPY requires exactly 4 operands".to_string()
-            ));
-        }
-        match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let mem_offset = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-        let code_offset = match_ssa_output_stack_or_const!(&inputs[2], "Third");
-        let len = match_ssa_output_stack_or_const!(&inputs[3], "Fourth");
-        let account_info = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Fifth");
-        let code = account_info.code.as_ref().unwrap().original_bytes();
+    #[inline(always)]
+    pub fn execute_extcodecopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let mem_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
+        let len = get_ssa_output_stack_or_const!(graph, node.inputs[3]);
+        let account_info = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
         
-        let mem_offset = as_usize_saturated(*mem_offset);
-        let code_offset = as_usize_saturated(*code_offset);
-        let len = as_usize_saturated(*len);
+        let mem_offset = as_usize_saturated!(mem_offset);
+        let code_offset = as_usize_saturated!(code_offset);
+        let len = as_usize_saturated!(len);
+        let code = account_info.as_account_info().unwrap().code.as_ref().unwrap().original_bytes();
 
         // When len is 0, return an empty vector
         let padded_code_slice = if len == 0 {
@@ -141,105 +117,129 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             padded_data
         };
         
-        let mut outputs = vec![SSAOutput::Memory(padded_code_slice.into())];
+        node.outputs[0] = SSAOutput::Memory(padded_code_slice.into());
 
         let new_size = self.check_memory_size(mem_offset, len);
         if new_size > self.memory_size() {
-            outputs.push(SSAOutput::MemorySize(new_size));
+            if node.outputs.len() == 2 {
+                // original memory size
+                node.outputs[1] = SSAOutput::MemorySize(new_size);
+            } else {
+                node.outputs.push(SSAOutput::MemorySize(new_size));
+            }
             self.set_memory_size(new_size);
         }
-        Ok(outputs)
+
+        Ok(())
     }
 
     /// Execute BLOCKHASH operation
-    #[inline]
-    pub fn execute_blockhash(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 1 {
-            return Err(ExecutionError::ExecutionError(
-                "BLOCKHASH requires exactly 2 operand".to_string()
-            ));
-        }
-
-        let number = match_ssa_output_stack_or_const!(&inputs[0], "First");
-        let number = as_u64_saturated(*number);
-        let blockhash = self.get_blockhash(number);
-        Ok(vec![SSAOutput::Stack(blockhash)])
+    #[inline(always)]
+    pub fn execute_blockhash(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let number = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let number = as_u64_saturated!(number);
+        let blockhash = self.get_blockhash(number)?;
+        node.outputs[0] = SSAOutput::Stack(blockhash);
+        Ok(())
     }
 
     /// Execute LOG operation
-    #[inline]
-    pub fn execute_log(&self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() < 4 {
-            return Err(ExecutionError::ExecutionError(
-                "LOG requires at least 4 operands".to_string()
-            ));
-        }
-        let address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
-        let _ = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-        let _ = match_ssa_output_stack_or_const!(&inputs[2], "Third");
-        let memory = match_input!(inputs, 3, SSAOutput::Memory(value) => value, "Fourth");
+    #[inline(always)]
+    pub fn execute_log(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+
+        let address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let memory = get_memory!(graph, &node.inputs[3]);
 
         let mut topics: Vec<FixedBytes<32>> = vec![];
-        for i in 4..inputs.len() {
-            let topic = match_ssa_output_stack_or_const!(&inputs[i], format!("Topic {}", i-3).as_str());
+        for i in 4..node.inputs.len() {
+            let topic = get_ssa_output_stack_or_const!(graph, node.inputs[i]);
             topics.push(topic.to_be_bytes::<32>().into());
         }
 
         let log = Log {
             address: address,
-            data: LogData::new(topics, memory.clone()).expect("LogData should have <=4 topics"),
+            data: LogData::new(topics, memory.into()).expect("LogData should have <=4 topics"),
         };
 
-        Ok(vec![SSAOutput::Log(Box::new(log))])
+        node.outputs[0] = SSAOutput::Log(Box::new(log));
+
+        Ok(())
     }
 
     /// Execute SELFDESTRUCT operation
-    #[inline]
-    pub fn execute_selfdestruct(&mut self, inputs: Vec<SSAOutput>) -> Result<Vec<SSAOutput>> {
-        if inputs.len() != 6 {
-            return Err(ExecutionError::ExecutionError(
-                "SELFDESTRUCT requires exactly 6 operands".to_string()
-            ));
-        }
-        let contract_address = match_input!(inputs, 0, SSAOutput::ContractEnv(value) => value.target_address, "First");
-        let target = match_ssa_output_stack_or_const!(&inputs[1], "Second");
-        let address_info = match_input!(inputs, 2, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
-        let target_info = match_input!(inputs, 3, SSAOutput::Storage { value, .. } => value.as_account_info().unwrap(), "Storage");
-        let address_status = match_input!(inputs, 4, SSAOutput::Storage { value, .. } => value.as_account_status().unwrap(), "Storage");
-        let is_cancun_enabled = match_ssa_output_stack_or_const!(&inputs[5], "Fifth");
+    #[inline(always)]
+    pub fn execute_selfdestruct(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
-        
+        let contract_address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let target = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let address_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
+        let target_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
+        let address_status = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
+        let is_cancun_enabled = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
+
+        let address_info = address_info.as_account_info().unwrap();
+        let target_info = target_info.as_account_info().unwrap();
+        let address_status = address_status.as_account_status().unwrap();
+        let is_cancun_enabled = u256_to_bool!(is_cancun_enabled).unwrap();
+
         let target = Address::from_word(target.to_be_bytes::<32>().into());
         let is_created = address_status.contains(AccountStatus::Created);
-        let is_cancun_enabled = u256_to_bool(*is_cancun_enabled).unwrap();
 
-        let mut outputs = Vec::with_capacity(4);
+        let mut index = 0;
+        let outputs = &mut node.outputs;
+
+        // Calculate the required number of outputs
+        let mut required_outputs = 1; // At least one InterpreterResult output is needed
+        
+        // If contract address is not equal to target, we need one output to update target account info
+        if contract_address != target {
+            required_outputs += 1;
+        }
+        
+        // If it's a newly created contract or Cancun is not enabled, we need two outputs
+        // to update contract address account info and status
+        if is_created || !is_cancun_enabled {
+            required_outputs += 2;
+        } else if contract_address != target {
+            // If not newly created and Cancun is enabled, but contract address is not equal to target,
+            // we need one output to update contract address account info
+            required_outputs += 1;
+        }
+        
+        // Ensure outputs has enough space
+        if outputs.len() < required_outputs {
+            outputs.resize(required_outputs, SSAOutput::Constant(U256::ZERO));
+        }
 
         if contract_address != target {
             let mut new_target_info = target_info.clone();
             new_target_info.balance = new_target_info.balance.saturating_add(address_info.balance);
-            outputs.push(output_account_info!(target, new_target_info));
+            outputs[index] = output_account_info!(target, new_target_info);
+            index += 1;
         }
 
         if is_created || !is_cancun_enabled {
             let new_address_status = *address_status | AccountStatus::SelfDestructed;
             let mut new_address_info = address_info.clone();
             new_address_info.balance = U256::ZERO;
-            outputs.push(output_account_info!(contract_address, new_address_info));
-            outputs.push(output_account_status!(contract_address, new_address_status));
+            outputs[index] = output_account_info!(contract_address, new_address_info);
+            index += 1;
+            outputs[index] = output_account_status!(contract_address, new_address_status);
+            index += 1;
         } else if contract_address != target {
             let mut new_address_info = address_info.clone();
             new_address_info.balance = U256::ZERO;
-            outputs.push(output_account_info!(contract_address, new_address_info));
+            outputs[index] = output_account_info!(contract_address, new_address_info);
+            index += 1;
         }
 
         let result = SSAOutput::InterpreterResult(SSAInterpreterResult{
             result: SSAInstructionResult::Ok,
             output: Bytes::default(),
         });
-        outputs.push(result);
+        outputs[index] = result;
 
-        Ok(outputs)
+        Ok(())
     }
 }
 
