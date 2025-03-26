@@ -126,10 +126,10 @@ impl ExecutionTracer {
                 r1.result == r2.result && r1.output == r2.output
             },
             
-            // 添加常量比较
+            // Compare constant values
             (SSAOutput::Constant(v1), SSAOutput::Constant(v2)) => v1 == v2,
             
-            // 添加合约环境比较
+            // Compare contract environment
             (SSAOutput::ContractEnv(e1), SSAOutput::ContractEnv(e2)) => {
                 e1.target_address == e2.target_address &&
                 e1.caller == e2.caller &&
@@ -140,6 +140,12 @@ impl ExecutionTracer {
                 e1.bytecode_address == e2.bytecode_address
             },
             
+            // Compare gas refund
+            (SSAOutput::GasRefund(r1), SSAOutput::GasRefund(r2)) => r1 == r2,
+
+            // Compare gas cost
+            (SSAOutput::GasCost(c1), SSAOutput::GasCost(c2)) => c1 == c2,
+
             // Different types of outputs are considered unequal
             _ => false,
         }

@@ -130,6 +130,7 @@ impl StorageValue {
 // as the value is unnecessary.
 pub enum SSAInput {
     Constant(U256),
+    ConstantI64(i64), // for gas_refunded
     Stack (LsnWithIndex),
     Memory(Vec<MemoryDep>),
     Storage (StorageKey, LsnWithIndex),
@@ -141,6 +142,8 @@ pub enum SSAInput {
     CreateInput(LsnWithIndex),
     CallInput(LsnWithIndex),
     ContractEnv(LsnWithIndex),
+    GasCost(LsnWithIndex),
+    GasRefund(LsnWithIndex),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,6 +170,8 @@ pub enum SSAOutput {
     CallOutcome(Box<SSACallOutcome>),
     Log(Box<Log>),
     ContractEnv(Box<ContractEnv>),
+    GasCost(u64),
+    GasRefund(i64),
 }
 
 // Implement TryFrom trait to convert SSAOutput to Bytes

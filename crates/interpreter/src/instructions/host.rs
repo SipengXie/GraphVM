@@ -177,21 +177,23 @@ pub fn sstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;
     };
-    gas_or_fail!(interpreter, {
-        let remaining_gas = interpreter.gas.remaining();
-        gas::sstore_cost(
-            SPEC::SPEC_ID,
-            &state_load.data,
-            remaining_gas,
-            state_load.is_cold,
-        )
-    });
+
+    let gas_cost = gas::sstore_cost(
+        SPEC::SPEC_ID,
+        &state_load.data,
+        interpreter.gas.remaining(),
+        state_load.is_cold,
+    );
+    let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &state_load.data); 
+
+    gas_or_fail!(interpreter, gas_cost);
     refund!(
         interpreter,
-        gas::sstore_refund(SPEC::SPEC_ID, &state_load.data)
+        gas_refund
     );
+    
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_sstore(SSTORE, interpreter.contract.target_address, index, value);
+        logger.log_sstore(SSTORE, interpreter.contract.target_address, index, value, gas_cost.unwrap(), gas_refund);
     }
 }
 

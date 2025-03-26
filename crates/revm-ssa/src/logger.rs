@@ -126,6 +126,10 @@ pub struct SSALogger {
     // memory buffer for storing inputs and outputs
     input_buf: Vec<SSAInput>,
     output_buf: Vec<SSAOutput>,
+
+    // for gas calculation
+    gas_cost: Vec<(LsnWithIndex, u64)>,
+    gas_refund: Vec<(LsnWithIndex, i64)>,
 }
 
 #[derive(Clone, Debug)]
@@ -180,6 +184,9 @@ impl SSALogger {
 
             input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
             output_buf: vec![SSAOutput::Stack(U256::ZERO); 1],
+
+            gas_cost: vec![],
+            gas_refund: vec![],
         }
     }
 
@@ -204,6 +211,9 @@ impl SSALogger {
 
             input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
             output_buf: vec![SSAOutput::Stack(U256::ZERO); 1],
+
+            gas_cost: vec![],
+            gas_refund: vec![],
         }
     }
 
@@ -275,12 +285,26 @@ impl SSALogger {
     // Corresponding Execution Function
     /// [execute_refund_gas](revm_ssa_graph/instructions/contract.rs -> execute_refund_gas)
     #[inline(always)]
-    pub fn log_refund_gas(&mut self, caller: Address, new_info: AccountInfo, refund_gas : U256) {
+    pub fn log_refund_gas(&mut self, caller: Address, new_info: AccountInfo, effective_gas_price: U256, gas_remaining: u64, gas_refunded: i64) {
         let lsn = self.current_lsn;
-        let mut ssa_inputs = Vec::with_capacity(3);
+        let mut ssa_inputs = Vec::with_capacity(5 + self.gas_cost.len() + self.gas_refund.len());
+        let mut gas_remaining = gas_remaining;
+        let mut gas_refunded = gas_refunded;
+        for gas_cost in self.gas_cost.iter() {
+            ssa_inputs.push(SSAInput::GasCost(gas_cost.0)); // dependency to the dynamic gas cost
+            gas_remaining += gas_cost.1; // we ignore the sstore gas cost, and will re-calculate it in the execution phase
+        }
+        for gas_refund in self.gas_refund.iter() {
+            ssa_inputs.push(SSAInput::GasRefund(gas_refund.0)); // dependency to the dynamic gas refund
+            gas_refunded -= gas_refund.1; // we ignore the sstore gas refund, and will re-calculate it in the execution phase
+        }
+
         ssa_inputs.push(SSAInput::Constant(caller.into_word().into()));
-        ssa_inputs.push(SSAInput::Constant(refund_gas));
+        ssa_inputs.push(SSAInput::Constant(effective_gas_price));
+        ssa_inputs.push(SSAInput::Constant(U256::from(gas_remaining))); // base gas remaining
+        ssa_inputs.push(SSAInput::ConstantI64(gas_refunded));  // base gas refunded
         ssa_inputs.push(input_account_info!(self, caller));
+
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);
 
         let mut ssa_outputs = Vec::with_capacity(1);
@@ -1457,23 +1481,28 @@ impl SSALogger {
     }
 
     #[inline(always)]
-    pub fn log_sstore(&mut self, opcode: u8, address: Address, index: U256, value: U256) {
+    pub fn log_sstore(&mut self, opcode: u8, address: Address, index: U256, value: U256, gas_cost: u64, gas_refund: i64) {
         let lsn = self.current_lsn;
-
-        let mut ssa_inputs = Vec::with_capacity(3);
+        let key = StorageKey::Slot(address, index);
+        let mut ssa_inputs = Vec::with_capacity(5);
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
         ssa_inputs.push(pop_stack_or_const!(self, value));
+        ssa_inputs.push(SSAInput::Storage(key, (0,0))); // origin value
+        ssa_inputs.push(SSAInput::Storage(key, self.get_storage_def(key))); // present value
 
-        let mut ssa_outputs = Vec::with_capacity(1);
+        let mut ssa_outputs = Vec::with_capacity(3);
         ssa_outputs.push( 
             SSAOutput::Storage { 
-                key: Box::new(StorageKey::Slot(address, index)), 
+                key: Box::new(key), 
                 value: Box::new(StorageValue::Slot(value)), 
             }
         );
+        ssa_outputs.push(SSAOutput::GasCost(gas_cost));
+        ssa_outputs.push(SSAOutput::GasRefund(gas_refund));
         self.log_storage_write(StorageKey::Slot(address, index), lsn, 0);
-
+        self.gas_cost.push(((lsn, 1), gas_cost));
+        self.gas_refund.push(((lsn,2), gas_refund));
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
     }
 

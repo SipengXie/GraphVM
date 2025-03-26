@@ -21,6 +21,8 @@ use crate::{
     get_storage_value, u256_to_bool
 };
 
+use super::{get_constant_i64, get_gas_cost, get_gas_refund};
+
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
 
     /// Execute deduct caller operation
@@ -53,14 +55,33 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     #[inline(always)]
     pub fn execute_refund_gas(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
 
-        let caller = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
-        let refund_gas = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        let caller_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
+        let gas_length = (node.inputs.len() - 5) / 2;
+
+        let mut dynamic_gas_cost: u64 = 0;
+        for input in node.inputs[0..gas_length].iter() {
+            dynamic_gas_cost += get_gas_cost!(graph, *input);
+        }
+
+        let mut dynamic_gas_refund: i64 = 0;
+        for input in node.inputs[gas_length..2*gas_length].iter() {
+            dynamic_gas_refund += get_gas_refund!(graph, *input);
+        }
+        
+        let offset = 2*gas_length;
+        let caller = get_ssa_output_stack_or_const!(graph, node.inputs[offset]);
+        let effective_gas_price = get_ssa_output_stack_or_const!(graph, node.inputs[offset+1]);
+        let base_gas_remaining = get_ssa_output_stack_or_const!(graph, node.inputs[offset+2]);
+        let base_gas_remaining = as_u64_saturated!(base_gas_remaining);
+        let base_gas_refunded = get_constant_i64!(graph, node.inputs[offset+3]);
+        let caller_info = get_storage_value!(graph, node.inputs[offset+4], |key| self.get_state(key));
+
+        let refund_gas = base_gas_remaining - dynamic_gas_cost + (base_gas_refunded + dynamic_gas_refund) as u64;
+        let reimbursed_value = effective_gas_price * U256::from(refund_gas);
         
         let caller = Address::from_word(B256::from(caller));
         let caller_info = caller_info.as_account_info().unwrap();
         let new_caller_info = AccountInfo {
-            balance: caller_info.balance + refund_gas,
+            balance: caller_info.balance + reimbursed_value,
             nonce: caller_info.nonce,
             code: caller_info.code.clone(),
             code_hash: caller_info.code_hash,

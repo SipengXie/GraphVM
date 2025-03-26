@@ -1,4 +1,5 @@
 use std::cmp::min;
+use revm_interpreter::{gas, SStoreResult};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
     AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
@@ -41,11 +42,33 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
+        let origin_value = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
+        let present_value = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
+
+        let origin_value = origin_value.as_slot().unwrap();
+        let present_value = present_value.as_slot().unwrap();
+
+        let sstore_result = SStoreResult {
+            original_value: origin_value.clone(),
+            present_value: present_value.clone(),
+            new_value: value.clone(),
+        };
+        let is_cold = match node.inputs[4] {
+            SSAInput::Storage(_, lsn_with_index) => {
+                lsn_with_index.0 == 0
+            }
+            _ => false,
+        };
+
+        let gas_cost = gas::sstore_cost(SPEC::SPEC_ID, &sstore_result, 2301/* just to bypass the gas check */, is_cold).unwrap();
+        let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &sstore_result);
 
         node.outputs[0] = SSAOutput::Storage {
             key: Box::new(StorageKey::Slot(address, index)),
             value: Box::new(StorageValue::Slot(value)),
         };
+        node.outputs[1] = SSAOutput::GasCost(gas_cost);
+        node.outputs[2] = SSAOutput::GasRefund(gas_refund);
 
         Ok(())
     }

@@ -86,6 +86,9 @@ impl ExecutionError {
     pub const INPUT_MUST_BE_INTERPRETER_RESULT: &'static str = "Input must be InterpreterResult value";
     pub const INVALID_BOOLEAN_VALUE: &'static str = "Invalid boolean value";
     pub const INVALID_OPCODE_FOR_RESULT_CHANGE: &'static str = "Invalid opcode for instruction result change";
+    pub const EXPECTED_GAS_COST: &'static str = "Expected GasCost output value";
+    pub const EXPECTED_GAS_REFUND: &'static str = "Expected GasRefund output value";
+    pub const EXPECTED_CONSTANT_I64: &'static str = "Expected ConstantI64 output value";
     
     #[inline(always)]
     pub fn control_flow_not_deterministic(node: &impl std::fmt::Debug, old_jump: isize, new_jump: isize) -> String {

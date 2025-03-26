@@ -230,9 +230,65 @@ macro_rules! get_interpreter_result {
     };
 }
 
+/// Macro for getting gas cost from SSAInput::GasCost
+/// Returns the gas cost value if input is valid GasCost, otherwise returns an ExecutionError
+#[macro_export]
+macro_rules! get_gas_cost {
+    ($graph:expr, $input:expr) => {
+        match $input {
+            SSAInput::GasCost((lsn, index)) => {
+                let dep_node = $graph.get_node(lsn)?;
+                match &dep_node.outputs[index as usize] {
+                    SSAOutput::GasCost(gas_cost) => gas_cost,
+                    _ => return Err(ExecutionError::ExecutionError(
+                        ExecutionError::EXPECTED_GAS_COST.to_string()
+                    ))
+                }
+            },
+            _ => return Err(ExecutionError::ExecutionError(
+                ExecutionError::EXPECTED_GAS_COST.to_string()
+            ))
+        }
+    };
+}
+
+/// Macro for getting gas refund from SSAInput::GasRefund
+/// Returns the gas refund value if input is valid GasRefund, otherwise returns an ExecutionError
+#[macro_export]
+macro_rules! get_gas_refund {
+    ($graph:expr, $input:expr) => {
+        match $input {
+            SSAInput::GasRefund((lsn, index)) => {
+                let dep_node = $graph.get_node(lsn)?;
+                match &dep_node.outputs[index as usize] {
+                    SSAOutput::GasRefund(gas_refund) => gas_refund,
+                    _ => return Err(ExecutionError::ExecutionError(
+                        ExecutionError::EXPECTED_GAS_REFUND.to_string()
+                    ))
+                }
+            },
+            _ => return Err(ExecutionError::ExecutionError(
+                ExecutionError::EXPECTED_GAS_REFUND.to_string()
+            ))
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! get_constant_i64 {
+    ($graph:expr, $input:expr) => {
+        match $input {
+            SSAInput::ConstantI64(value) => value,
+            _ => return Err(ExecutionError::ExecutionError(
+                ExecutionError::EXPECTED_CONSTANT_I64.to_string()
+            ))
+        }
+    };
+}
+
 /// Re-export macros for convenience
 pub use {
     as_u64_saturated, as_usize_saturated, u256_to_bool,
     get_storage_value, get_contract_env, get_memory, get_return_data_buffer, 
-    get_call_input, get_interpreter_result
+    get_call_input, get_interpreter_result, get_gas_cost, get_gas_refund, get_constant_i64
 };

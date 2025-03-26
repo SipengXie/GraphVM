@@ -17,6 +17,11 @@ macro_rules! tri {
     };
 }
 
+// ! All Dynamic Gas Calculation is here
+/// If we want the most precise execution result
+/// SSA should consider all these gas calculation function.
+/// In this version, we only consider the `sstore` function
+
 /// `SSTORE` opcode refund calculation.
 #[allow(clippy::collapsible_else_if)]
 #[inline]

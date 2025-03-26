@@ -57,6 +57,7 @@ impl SsaGraph {
         let mut lsn_vec = Vec::with_capacity(1);
         match input {
             SSAInput::Constant(_) => lsn_vec.push(0),
+            SSAInput::ConstantI64(_) => lsn_vec.push(0),
             SSAInput::Stack(lsn_with_index) => lsn_vec.push(lsn_with_index.0),
             SSAInput::Memory (source) => {
                 if source.is_empty() {
@@ -80,6 +81,8 @@ impl SsaGraph {
             SSAInput::InterpreterResult (source) => lsn_vec.push(source.0),
             SSAInput::CallOutcome (source) => lsn_vec.push(source.0),
             SSAInput::CreateOutcome (source) => lsn_vec.push(source.0),
+            SSAInput::GasCost (source) => lsn_vec.push(source.0),
+            SSAInput::GasRefund (source) => lsn_vec.push(source.0),
         };
         lsn_vec
     }

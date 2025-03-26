@@ -466,13 +466,6 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
         if ctx.evm.inner.ssa_logger.is_some() {
-            let origin_balance = ctx
-            .evm
-            .inner
-            .journaled_state
-            .account(ctx.evm.inner.env.tx.caller)
-            .info.balance;
-
             post_exec.reimburse_caller(ctx, result.gas())?;
 
             let after_account = ctx
@@ -481,10 +474,12 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             .journaled_state
             .account(ctx.evm.inner.env.tx.caller);
 
-            let gas_refund = origin_balance - after_account.info.balance;
+            let effecive_gas_prices = ctx.evm.env.effective_gas_price();
+            let gas_remaining = result.gas().remaining();
+            let gas_refunded = result.gas().refunded();
 
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
-            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, after_account.info.clone(), gas_refund);
+            logger.log_refund_gas(ctx.evm.inner.env.tx.caller, after_account.info.clone(), effecive_gas_prices, gas_remaining, gas_refunded);
         } else {
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
