@@ -153,7 +153,7 @@ impl Occda {
     ) -> Duration 
     where
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        I: Send + Sync + 'static + 
+        I: Send + Sync + 
            for<'db> GetInspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>> +
            for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
         <DB as DatabaseRef>::Error: Send + Sync,
@@ -519,7 +519,7 @@ impl Occda {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        I: Send + Sync + 'static + 
+        I: Send + Sync + 
            for<'db> GetInspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>> +
            for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
         <DB as DatabaseRef>::Error: Send + Sync,
