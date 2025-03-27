@@ -85,7 +85,7 @@ pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
         .inner
         .journaled_state
         .load_account(caller, &mut context.evm.inner.db)?;
-
+    
     let gas_refund = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
 
     caller_account.data.info.balance =

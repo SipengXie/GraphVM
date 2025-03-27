@@ -508,6 +508,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // } else {
         //     post_exec.reward_beneficiary(ctx, result.gas())?;
         // }
+        // TODO: Fix the reward_beneficiary
         post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
 

@@ -15,11 +15,11 @@ pub struct Cmd {
     #[structopt(short, long, default_value = "2")]
     num_of_threads: usize,
 
-    #[structopt(short, long, parse(try_from_str), default_value = "false")]
+    #[structopt(long, parse(try_from_str), default_value = "false")]
     enable_ssa: bool,
-    #[structopt(short, long, parse(try_from_str), default_value = "false")]
+    #[structopt(long, parse(try_from_str), default_value = "false")]
     enable_dep_graph: bool, 
-    #[structopt(short, long, parse(try_from_str), default_value = "false")]
+    #[structopt(long, parse(try_from_str), default_value = "false")]
     enable_prefetch: bool,
 }
 

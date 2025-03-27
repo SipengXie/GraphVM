@@ -6,11 +6,23 @@ use crate::cmd::statetest::{
     models::MultiTestSuite,
 };
 use revm::{
-    db::{CacheState, DatabaseCommit, State}, inspector_handle_register, inspectors::NoOpInspector, occda::Occda, primitives::{keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256}, profiler, task::{Task, TaskResultItem}, Evm
+    db::{CacheState, DatabaseCommit, State},
+    inspector_handle_register,
+    inspectors::NoOpInspector,
+    occda::Occda,
+    primitives::{
+        keccak256, AccountInfo, Bytecode, Bytes, Env,
+        ResultAndState, SpecId, TxKind, B256
+    },
+    profiler,
+    task::{Task, TaskResultItem},
+    Evm,
 };
 
 use std::{
-    fmt::Debug, path::PathBuf, time::{Duration, Instant}
+    fmt::Debug,
+    path::PathBuf,
+    time::{Duration, Instant},
 };
 
 use thiserror::Error;

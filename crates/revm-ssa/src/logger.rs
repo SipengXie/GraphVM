@@ -1484,12 +1484,14 @@ impl SSALogger {
     pub fn log_sstore(&mut self, opcode: u8, address: Address, index: U256, value: U256, gas_cost: u64, gas_refund: i64) {
         let lsn = self.current_lsn;
         let key = StorageKey::Slot(address, index);
-        let mut ssa_inputs = Vec::with_capacity(5);
+        let is_read = self.first_reads.contains_key(&key);
+        let mut ssa_inputs = Vec::with_capacity(6);
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
         ssa_inputs.push(pop_stack_or_const!(self, value));
         ssa_inputs.push(SSAInput::Storage(key, (0,0))); // origin value
         ssa_inputs.push(SSAInput::Storage(key, self.get_storage_def(key))); // present value
+        ssa_inputs.push(SSAInput::Constant(U256::from(is_read)));
 
         let mut ssa_outputs = Vec::with_capacity(3);
         ssa_outputs.push( 

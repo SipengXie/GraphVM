@@ -44,21 +44,24 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
         let origin_value = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
         let present_value = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
+        let is_read = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
 
         let origin_value = origin_value.as_slot().unwrap();
         let present_value = present_value.as_slot().unwrap();
+        let is_read = u256_to_bool!(is_read).unwrap();
 
         let sstore_result = SStoreResult {
             original_value: origin_value.clone(),
             present_value: present_value.clone(),
             new_value: value.clone(),
         };
+
         let is_cold = match node.inputs[4] {
             SSAInput::Storage(_, lsn_with_index) => {
-                lsn_with_index.0 == 0
+                lsn_with_index.0 == 0 // not been written before
             }
-            _ => false,
-        };
+            _ => panic!("present value of sstore input is not a storage key"),
+        } && !is_read; // not been read before
 
         let gas_cost = gas::sstore_cost(SPEC::SPEC_ID, &sstore_result, 2301/* just to bypass the gas check */, is_cold).unwrap();
         let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &sstore_result);
