@@ -1,4 +1,5 @@
 use crate::graph_wrapper::GraphWrapper;
+use crate::inspectors::NoOpInspector;
 /// OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
 /// 
 /// This module implements parallel execution of EVM transactions using optimistic concurrency control.
@@ -152,10 +153,8 @@ impl Occda {
         enable_ssa: bool,
     ) -> Duration 
     where
+        I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        I: Send + Sync + 
-           for<'db> GetInspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>> +
-           for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
         <DB as DatabaseRef>::Error: Send + Sync,
     {
         let result_ptr = result_store.as_mut_ptr() as usize;
@@ -350,7 +349,7 @@ impl Occda {
                             let evm_inside = Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(&mut inspector)
+                                .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .with_ssa_logger(SSALogger::new())
@@ -361,7 +360,7 @@ impl Occda {
                             Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(&mut inspector)
+                                .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .build()
@@ -518,10 +517,8 @@ impl Occda {
         enable_ssa: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
     where
+        I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        I: Send + Sync + 
-           for<'db> GetInspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>> +
-           for<'db> Inspector<WrapDatabaseRef<&'db ParallelDB<&'db DB>>>,
         <DB as DatabaseRef>::Error: Send + Sync,
     {
         let len = h_tx.len();
@@ -706,7 +703,7 @@ impl Occda {
                     Evm::builder()
                         .with_ref_db(&parallel_db)
                         .modify_env(|env| env.clone_from(&task.env))
-                        .with_external_context(&mut inspector)
+                        .with_external_context(NoOpInspector)
                         .with_spec_id(task.spec_id)
                         .append_handler_register(inspector_handle_register)
                         .build();
