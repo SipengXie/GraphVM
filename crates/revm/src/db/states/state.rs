@@ -250,7 +250,9 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
             }).transpose()?
             .unwrap_or_default())
         } else {
-            unreachable!("For accessing any storage account is guaranteed to be loaded beforehand")
+            self.database.storage_ref(address, index)
+            // We should find a better way to handle this.
+            // unreachable!("For accessing any storage account {} is guaranteed to be loaded beforehand", address)
         }
     }
 
