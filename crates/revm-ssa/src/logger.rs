@@ -83,6 +83,20 @@ macro_rules! is_constant {
 pub type LsnType = u32;
 pub type LsnWithIndex = (LsnType, u8);
 
+/// Macro for padding data with zeros
+macro_rules! pad_data {
+    ($source:expr, $offset:expr, $len:expr) => {{
+        if $offset >= $source.len() {
+            vec![0u8; $len]
+        } else {
+            let end = std::cmp::min($source.len(), $offset + $len);
+            let slice = $source.slice($offset..end);
+            let mut padded_data = vec![0u8; $len];
+            padded_data[..slice.len()].copy_from_slice(&slice);
+            padded_data
+        }
+    }};
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -651,12 +665,7 @@ impl SSALogger {
         let padded_return_data_slice = if len == 0 {
             Vec::new()
         } else {
-            let return_data_len = min(data_offset + len, return_data.len());
-            let return_data_slice = return_data.slice(data_offset..return_data_len);
-            // Pad return_data_slice to len
-            let mut padded_data = vec![0u8; len];
-            padded_data[..return_data_slice.len()].copy_from_slice(&return_data_slice);
-            padded_data
+            pad_data!(return_data, data_offset, len)
         };
 
 
@@ -693,12 +702,7 @@ impl SSALogger {
         let padded_code_slice = if len == 0 {
             Vec::new()
         } else {
-            let code_end = min(code.len(), code_offset+len);
-            let code_slice = code.slice(code_offset..code_end);
-            // Pad code_slice to len
-            let mut padded_data = vec![0u8; len];
-            padded_data[..code_slice.len()].copy_from_slice(&code_slice);
-            padded_data
+            pad_data!(code, code_offset, len)
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
@@ -729,12 +733,7 @@ impl SSALogger {
         let padded_data_slice = if len == 0 {
             Vec::new()
         } else {
-            let data_len = min(data_offset + len, data.len());
-            let data_slice = data.slice(data_offset..data_len);
-            // Pad data_slice to len
-            let mut padded_data = vec![0u8; len];
-            padded_data[..data_slice.len()].copy_from_slice(&data_slice);
-            padded_data
+            pad_data!(data, data_offset, len)
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
@@ -1430,12 +1429,7 @@ impl SSALogger {
         let padded_code_slice = if len == 0 {
             Vec::new()
         } else {
-            let code_end = min(code.len(), code_offset+len);
-            let code_slice = &code[code_offset..code_end];
-            // Pad code_slice to len
-            let mut padded_data = vec![0u8; len];
-            padded_data[..code_slice.len()].copy_from_slice(&code_slice);
-            padded_data
+            pad_data!(code, code_offset, len)
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
