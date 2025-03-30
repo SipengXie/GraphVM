@@ -97,6 +97,10 @@ pub struct SSALogger {
     // records the latest lsn of sstore that write to the slot
     // used for dependency tracking
     latest_writes: HashMap<StorageKey, LsnWithIndex>,
+
+    // Latest writes to transient storage
+    latest_transient_writes: HashMap<(Address, U256), LsnWithIndex>,
+
     // First reads of storage slots
     // records the first lsn of sload that read the slot
     // used for identifying storage conflicts
@@ -170,6 +174,7 @@ impl SSALogger {
             logs: Vec::with_capacity(512),
             stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
+            latest_transient_writes: HashMap::default(),
             first_reads: HashMap::default(),
             last_memory: (0,0),
             last_return_data_buffer: (0,0),
@@ -197,6 +202,7 @@ impl SSALogger {
             logs: Vec::with_capacity(capacity),
             stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
+            latest_transient_writes: HashMap::default(),
             first_reads: HashMap::default(),
             last_memory: (0,0),
             last_return_data_buffer: (0,0),
@@ -1509,6 +1515,35 @@ impl SSALogger {
     }
 
     #[inline(always)]
+    pub fn log_tstore(&mut self, opcode: u8, address: Address, index: U256, value: U256) {
+        let lsn = self.current_lsn;
+        let mut ssa_inputs = Vec::with_capacity(3);
+        ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn())); // address
+        ssa_inputs.push(pop_stack_or_const!(self, U256::from(index))); // index
+        ssa_inputs.push(pop_stack_or_const!(self, value)); // value
+
+        let mut ssa_outputs = Vec::with_capacity(1);
+        ssa_outputs.push(SSAOutput::Transient(value));
+        self.log_transient_write((address, index), lsn, 0);
+        self.log_operation(opcode, ssa_inputs, ssa_outputs);
+    }
+
+    #[inline(always)]
+    pub fn log_tload(&mut self, opcode: u8, address: Address, index: U256, value: U256) {
+        let lsn = self.current_lsn;
+        let mut ssa_inputs = Vec::with_capacity(3);
+        ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn())); // address
+        ssa_inputs.push(pop_stack_or_const!(self, U256::from(index))); // index
+        ssa_inputs.push(SSAInput::Transient(self.get_transient_def((address, index))));
+
+        let mut ssa_outputs = Vec::with_capacity(1);
+        ssa_outputs.push(SSAOutput::Stack(value));
+        self.push_stack_def((lsn, 0)).unwrap();
+
+        self.log_operation(opcode, ssa_inputs, ssa_outputs);
+    }
+
+    #[inline(always)]
     pub fn log_log_opcode(&mut self, opcode: u8,
         offset: usize,
         len: usize,
@@ -1599,15 +1634,25 @@ impl SSALogger {
     }
 
     #[inline(always)]
+    pub fn log_transient_write(&mut self, key: (Address, U256), lsn: LsnType, index: u8) {
+        self.latest_transient_writes.insert(key, (lsn, index));
+    }
+
+    #[inline(always)]
     pub fn log_storage_read(&mut self, key: StorageKey, lsn: LsnType) {
         if !self.latest_writes.contains_key(&key) {
             self.first_reads.entry(key).or_insert(lsn);
         }
     }
-    
+
     #[inline(always)]
     pub fn get_storage_def(&self, key: StorageKey) -> LsnWithIndex {
         *self.latest_writes.get(&key).unwrap_or(&(0,0))
+    }
+
+    #[inline(always)]
+    pub fn get_transient_def(&self, key: (Address, U256)) -> LsnWithIndex {
+        *self.latest_transient_writes.get(&key).unwrap_or(&(0,0))
     }
 
     #[inline(always)]

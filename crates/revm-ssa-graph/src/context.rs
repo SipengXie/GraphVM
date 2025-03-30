@@ -123,7 +123,7 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
             },
             StorageKey::AccountStatus(_address) => {
                 Ok(StorageValue::AccountStatus(AccountStatus::default()))
-            },
+            }
         }
     }
 

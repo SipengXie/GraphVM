@@ -207,6 +207,10 @@ pub fn tstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
     pop!(interpreter, index, value);
 
     host.tstore(interpreter.contract.target_address, index, value);
+
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_tstore(TSTORE, interpreter.contract.target_address, index, value);
+    }
 }
 
 /// EIP-1153: Transient storage opcodes
@@ -216,8 +220,13 @@ pub fn tload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
     gas!(interpreter, gas::WARM_STORAGE_READ_COST);
 
     pop_top!(interpreter, index);
+    let original_index = *index;
 
     *index = host.tload(interpreter.contract.target_address, *index);
+
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_tload(TLOAD, interpreter.contract.target_address, original_index, *index);
+    }
 }
 
 pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {

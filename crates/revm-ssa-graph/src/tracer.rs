@@ -146,6 +146,9 @@ impl ExecutionTracer {
             // Compare gas cost
             (SSAOutput::GasCost(c1), SSAOutput::GasCost(c2)) => c1 == c2,
 
+            // Compare transient values
+            (SSAOutput::Transient(v1), SSAOutput::Transient(v2)) => v1 == v2,
+
             // Different types of outputs are considered unequal
             _ => false,
         }

@@ -76,6 +76,41 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(())
     }
 
+    #[inline(always)]
+    pub fn execute_tstore(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let _address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let _index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
+
+        node.outputs[0] = SSAOutput::Transient(value);
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn execute_tload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+        let _address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let _index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let value = match node.inputs[2] {
+            SSAInput::Transient((lsn, index)) => {
+                let dep_node = graph.get_node(lsn)?;
+                match dep_node.outputs[index as usize] {
+                    SSAOutput::Transient(value) => value,
+                    _ => return Err(ExecutionError::ExecutionError( 
+                        ExecutionError::EXPECTED_TRANSIENT_VALUE.to_string()
+                    ))
+                }
+            }
+            _ => return Err(ExecutionError::ExecutionError(
+                ExecutionError::EXPECTED_TRANSIENT_VALUE.to_string()
+            ))
+        };
+
+        node.outputs[0] = SSAOutput::Stack(value);
+
+        Ok(())
+    }
+
     /// Execute BALANCE operation
     #[inline(always)]
     pub fn execute_balance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {

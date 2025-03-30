@@ -83,6 +83,7 @@ impl SsaGraph {
             SSAInput::CreateOutcome (source) => lsn_vec.push(source.0),
             SSAInput::GasCost (source) => lsn_vec.push(source.0),
             SSAInput::GasRefund (source) => lsn_vec.push(source.0),
+            SSAInput::Transient (source) => lsn_vec.push(source.0),
         };
         lsn_vec
     }

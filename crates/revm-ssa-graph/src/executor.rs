@@ -440,6 +440,8 @@ where
             0x58 => Ok(()),                                                         // PC
             0x59 => context.execute_msize(node, graph),                             // MSIZE
             0x5A => context.execute_gas(node, graph),                               // GAS
+            0x5C => context.execute_tload(node, graph),                             // TLOAD
+            0x5D => context.execute_tstore(node, graph),                            // TSTORE
             0x5E => context.execute_mcopy(node, graph),                             // MCOPY
             0x5F..=0x7f => Ok(()),                                                  // PUSH0-32
 

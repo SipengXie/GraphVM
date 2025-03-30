@@ -89,7 +89,8 @@ impl ExecutionError {
     pub const EXPECTED_GAS_COST: &'static str = "Expected GasCost output value";
     pub const EXPECTED_GAS_REFUND: &'static str = "Expected GasRefund output value";
     pub const EXPECTED_CONSTANT_I64: &'static str = "Expected ConstantI64 output value";
-    
+    pub const EXPECTED_TRANSIENT_VALUE: &'static str = "Expected Transient output value";
+
     #[inline(always)]
     pub fn control_flow_not_deterministic(node: &impl std::fmt::Debug, old_jump: isize, new_jump: isize) -> String {
         format!("Control flow is not deterministic. Node: {:?}, Old jump: {}, New jump: {}", 

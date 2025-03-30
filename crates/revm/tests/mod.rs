@@ -1578,6 +1578,20 @@ mod host_tests{
     }
 
     #[test]
+    fn test_tstore_tload() {
+        let code = Bytes::from(vec![
+            0x60, 0x42,     // PUSH1 0x42 (Value)
+            0x60, 0x24,     // PUSH1 0x24 (Key)
+            0x5D,           // TSTORE
+            0x60, 0x24,     // PUSH1 0x24 (Key)
+            0x5C,           // TLOAD
+            0x00,           // STOP
+        ]);
+        
+        execute_case(code, "tload after tstore", ExecutionConfig::default());
+    }
+
+    #[test]
     fn test_storage_update() {
         // Test storage update:
         // 1. First store a value
