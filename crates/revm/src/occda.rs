@@ -19,8 +19,7 @@ use crate::journaled_state::AccessType;
 use crate::task::{Task, TaskResultItem};
 use crate::dag::TaskDag;
 use crate::evm::Evm;
-use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel_db::ParallelDB};
-use crate::inspector::{GetInspector, Inspector};
+use crate::db::{Database, DatabaseCommit, DatabaseRef, parallel_db::ParallelDB};
 use crate::inspector_handle_register;
 use crate::profiler;
 use std::sync::Arc;
@@ -276,7 +275,7 @@ impl Occda {
                         let task = &h_tx[idx];
                         // Create new inspector instance for this transaction
                         // Each transaction needs its own inspector to track execution
-                        let mut inspector = inspector_setup();
+                        let inspector = inspector_setup();
                         let db_ref = &*db;
                         
                         // use ssa to re-execute the transaction
@@ -640,7 +639,7 @@ impl Occda {
                 seq_exec_size += ready_tasks.len();
                 for &idx in &ready_tasks {
                     let task = &mut h_tx[idx];
-                    let mut inspector = inspector_setup();
+                    let inspector = inspector_setup();
 
                     // Handle re-execution case (using SSA)
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
