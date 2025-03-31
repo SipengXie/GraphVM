@@ -3701,6 +3701,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "revm-benchmarks"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "metrics-exporter-prometheus",
+ "parking_lot",
+ "rayon",
+ "revm",
+ "revm-interpreter",
+ "revm-precompile",
+ "revm-primitives",
+ "revm-ssa",
+ "revm-ssa-graph",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "revm-interpreter"
 version = "14.0.0"
 dependencies = [

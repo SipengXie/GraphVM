@@ -152,7 +152,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
             
             // Execute and get logs
             let start_time = Instant::now();
-            let _result = evm.transact().unwrap();
+            let _result = evm.transact_preverified().unwrap();
             let execution_time = start_time.elapsed();
             eprintln!("SSA transact time: {:?}", execution_time);
             let mut logger = evm.take_ssa_logger().unwrap();
@@ -2042,7 +2042,7 @@ mod contract_tests {
 
 mod erc20_tests {
 
-    use revm_primitives::hex;
+    use revm_primitives::{b256, hex};
     use revm::primitives::Bytes;
     use super::*;
 
@@ -2262,8 +2262,8 @@ mod erc20_tests {
             collect_metrics: true,
             pre_deployed_contract: vec![],
             pre_determined_slots: vec![
-                (slot1, value),
-                (slot2, U256::ZERO)
+                (b256!("d2869508550c71a0ebfe05ddd28ce832b357803f6f387154b1a5451da28aca19").into(), U256::from(10000000000 as u64)),
+                (b256!("ac0ab67043ecc9a2f17c6f6ba97786b2b1051a49d0101c2e2da0641d9a0e6da7").into(), U256::from(9900000000 as u64)),
             ],
             input: Some(input.clone()),
             thread_number: None,

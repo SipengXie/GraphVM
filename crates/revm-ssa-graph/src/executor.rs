@@ -368,7 +368,7 @@ where
 
     /// Execute operation based on opcode
     #[inline(always)]
-    fn execute_node(node: &mut SSALogEntry, graph: & SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
+    pub fn execute_node(node: &mut SSALogEntry, graph: & SsaGraph, context: &Arc<ExecutionContext<'a, DB, SPEC>>) -> Result<()> {
         let context = unsafe { Self::get_mut_context(context) };
         match node.opcode {
             // Arithmetic Operations (0x00-0x0B)
