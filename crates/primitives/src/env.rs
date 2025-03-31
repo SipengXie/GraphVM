@@ -3,9 +3,7 @@ pub mod handler_cfg;
 pub use handler_cfg::{CfgEnvWithHandlerCfg, EnvWithHandlerCfg, HandlerCfg};
 
 use crate::{
-    calc_blob_gasprice, AccessListItem, Account, Address, AuthorizationList, Bytes, InvalidHeader,
-    InvalidTransaction, Spec, SpecId, B256, GAS_PER_BLOB, MAX_BLOB_NUMBER_PER_BLOCK, MAX_CODE_SIZE,
-    MAX_INITCODE_SIZE, U256, VERSIONED_HASH_VERSION_KZG,
+    calc_blob_gasprice, AccessListItem, Account, Address, AuthorizationList, Bytes, InvalidHeader, InvalidTransaction, Spec, SpecId, B256, GAS_PER_BLOB, MAX_BLOB_NUMBER_PER_BLOCK, MAX_CODE_SIZE, MAX_INITCODE_SIZE, U256, U256_ONE, VERSIONED_HASH_VERSION_KZG
 };
 use alloy_primitives::TxKind;
 use core::cmp::{min, Ordering};
@@ -516,7 +514,7 @@ impl Default for BlockEnv {
         Self {
             number: U256::ZERO,
             coinbase: Address::ZERO,
-            timestamp: U256::from(1),
+            timestamp: U256_ONE,
             gas_limit: U256::MAX,
             basefee: U256::ZERO,
             difficulty: U256::ZERO,

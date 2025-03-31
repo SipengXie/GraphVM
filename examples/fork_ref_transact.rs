@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
             // calldata formed via abigen
             tx.data = encoded.into();
             // transaction value in wei
-            tx.value = U256::from(0);
+            tx.value = U256::ZERO;
         })
         .build();
 

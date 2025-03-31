@@ -16,7 +16,7 @@ use crate::{
     FunctionStack, Gas, Host, InstructionResult, InterpreterAction,
 };
 use core::cmp::min;
-use revm_primitives::{Bytecode, Eof, U256};
+use revm_primitives::{Bytecode, Eof, U256, U256_ONE};
 use std::borrow::ToOwned;
 use std::sync::Arc;
 
@@ -291,7 +291,7 @@ impl Interpreter {
                     if self.is_eof {
                         U256::ZERO
                     } else {
-                        U256::from(1)
+                        U256_ONE
                     }
                 );
             }
@@ -301,7 +301,7 @@ impl Interpreter {
                 push!(
                     self,
                     if self.is_eof {
-                        U256::from(1)
+                        U256_ONE
                     } else {
                         U256::ZERO
                     }

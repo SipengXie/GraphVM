@@ -255,7 +255,7 @@ pub fn unknown<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
 mod test {
     use std::sync::Arc;
 
-    use revm_primitives::{bytes, eof::TypesSection, Bytecode, Eof, PragueSpec};
+    use revm_primitives::{bytes, eof::TypesSection, Bytecode, Eof, PragueSpec, U256_ONE};
 
     use super::*;
     use crate::{
@@ -285,8 +285,8 @@ mod test {
             RJUMPI, 0x00, 0x03, RJUMPI, 0x00, 0x01, STOP, STOP,
         ])));
         interp.is_eof = true;
-        interp.stack.push(U256::from(1)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256_ONE).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.gas = Gas::new(10000);
 
         // dont jump
@@ -332,7 +332,7 @@ mod test {
         assert_eq!(interp.program_counter(), 0);
 
         // jump to first index of vtable
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.program_counter(), 7);
 
@@ -343,7 +343,7 @@ mod test {
         assert_eq!(interp.program_counter(), 0);
 
         // jump to second index of vtable
-        interp.stack.push(U256::from(1)).unwrap();
+        interp.stack.push(U256_ONE).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.program_counter(), 8);
     }

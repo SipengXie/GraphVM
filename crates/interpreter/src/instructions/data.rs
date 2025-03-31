@@ -83,7 +83,7 @@ pub fn data_copy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H)
 
 #[cfg(test)]
 mod test {
-    use revm_primitives::{b256, bytes, Bytecode, Bytes, Eof, PragueSpec};
+    use revm_primitives::{b256, bytes, Bytecode, Bytes, Eof, PragueSpec, U256_ONE};
     use std::sync::Arc;
 
     use super::*;
@@ -118,7 +118,7 @@ mod test {
         interp.gas = Gas::new(10000);
 
         // DATALOAD
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.stack.data(), &vec![U256::from(0x01)]);
         interp.stack.pop().unwrap();
@@ -173,8 +173,8 @@ mod test {
         // Data copy
         // size, offset mem_offset,
         interp.stack.push(U256::from(32)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(
             interp.shared_memory.context_memory(),
@@ -185,7 +185,7 @@ mod test {
         // size, offset mem_offset,
         interp.stack.push(U256::from(2)).unwrap();
         interp.stack.push(U256::from(35)).unwrap();
-        interp.stack.push(U256::from(1)).unwrap();
+        interp.stack.push(U256_ONE).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(
             interp.shared_memory.context_memory(),
@@ -196,7 +196,7 @@ mod test {
         // size, offset mem_offset,
         interp.stack.push(U256::from(2)).unwrap();
         interp.stack.push(U256::from(37)).unwrap();
-        interp.stack.push(U256::from(1)).unwrap();
+        interp.stack.push(U256_ONE).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(
             interp.shared_memory.context_memory(),
@@ -205,9 +205,9 @@ mod test {
 
         // Data copy (Size == 0)
         // mem_offset, offset, size
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.stack.push(U256::from(37)).unwrap();
-        interp.stack.push(U256::from(1)).unwrap();
+        interp.stack.push(U256_ONE).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(
             interp.shared_memory.context_memory(),

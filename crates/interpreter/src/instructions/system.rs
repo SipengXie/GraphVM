@@ -277,6 +277,8 @@ pub fn gas<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
 
 #[cfg(test)]
 mod test {
+    use revm_primitives::U256_ONE;
+
     use super::*;
     use crate::{
         opcode::{make_instruction_table, RETURNDATACOPY, RETURNDATALOAD},
@@ -301,7 +303,7 @@ mod test {
         interp.is_eof = true;
         interp.gas = Gas::new(10000);
 
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.return_data_buffer =
             bytes!("000000000000000400000000000000030000000000000002000000000000000100");
         interp.step(&table, &mut host);
@@ -311,7 +313,7 @@ mod test {
         );
 
         let _ = interp.stack.pop();
-        let _ = interp.stack.push(U256::from(1));
+        let _ = interp.stack.push(U256_ONE);
 
         interp.step(&table, &mut host);
         assert_eq!(interp.instruction_result, InstructionResult::Continue);
@@ -367,8 +369,8 @@ mod test {
 
         // Copying within bounds
         interp.stack.push(U256::from(32)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.instruction_result, InstructionResult::Continue);
         assert_eq!(
@@ -399,7 +401,7 @@ mod test {
         // Large offset
         interp.stack.push(U256::from(32)).unwrap();
         interp.stack.push(U256::MAX).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.instruction_result, InstructionResult::Continue);
         assert_eq!(&interp.shared_memory.slice(0, 32), &[0u8; 32]);
@@ -410,7 +412,7 @@ mod test {
             .stack
             .push(U256::from(interp.return_data_buffer.len() - 32))
             .unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.instruction_result, InstructionResult::Continue);
         assert_eq!(
@@ -424,7 +426,7 @@ mod test {
             .stack
             .push(U256::from(interp.return_data_buffer.len()))
             .unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.instruction_result, InstructionResult::Continue);
         assert_eq!(&interp.shared_memory.slice(0, 32), &[0u8; 32]);

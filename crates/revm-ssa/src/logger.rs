@@ -2,7 +2,7 @@
 use revm_primitives::bitvec::bitvec;
 use revm_primitives::bitvec::order::Lsb0;
 use revm_primitives::bitvec::vec::BitVec;
-use revm_primitives::{AccountInfo, AccountStatus, Address, AnalysisKind, Bytecode, Bytes, FixedBytes, HashMap, HashSet, JumpTable, LegacyAnalyzedBytecode, Log, B256, U256};
+use revm_primitives::{AccountInfo, AccountStatus, Address, AnalysisKind, Bytecode, Bytes, FixedBytes, HashMap, HashSet, JumpTable, LegacyAnalyzedBytecode, Log, B256, U256, U256_ONE};
 use crate::shadow_stack::ShadowStack;
 use crate::types::{SSALogEntry, StorageKey, ContractEnv, InternalOp, MemoryDep, SSAInput, SSAOutput, StorageValue};
 use crate::{SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
@@ -930,8 +930,8 @@ impl SSALogger {
         self.log_storage_read(StorageKey::AccountInfo(address), lsn);
         ssa_inputs.push(
             match analysis_kind {
-                AnalysisKind::Raw => SSAInput::Constant(U256::from(0)),
-                AnalysisKind::Analyse => SSAInput::Constant(U256::from(1)),
+                AnalysisKind::Raw => SSAInput::Constant(U256::ZERO),
+                AnalysisKind::Analyse => SSAInput::Constant(U256_ONE),
             }
         );
 
@@ -1305,7 +1305,7 @@ impl SSALogger {
         // Index is 1
         ssa_outputs.push(SSAOutput::Memory(data_slice.to_vec().into()));
         let success = match call_outcome.result.result {
-            SSAInstructionResult::Ok => U256::from(1),
+            SSAInstructionResult::Ok => U256_ONE,
             SSAInstructionResult::Revert => U256::ZERO,
             SSAInstructionResult::Error => panic!("Error in insert_call_outcome"),
         };

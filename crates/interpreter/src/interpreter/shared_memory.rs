@@ -741,7 +741,7 @@ mod tests {
         }
         
         // Check new space initialized to zero and None
-        assert_eq!(memory.get_u256(32), U256::from(0));
+        assert_eq!(memory.get_u256(32), U256::ZERO);
         let defs = memory.get_shadow_defs(32..64);
         for def in defs.iter() {
             assert!(def == &EMPTY_MEMORY_DEF);

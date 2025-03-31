@@ -1,6 +1,7 @@
 mod call_helpers;
 
 pub use call_helpers::{calc_call_gas, get_memory_input_and_out_ranges, resize_memory, get_memory_input_and_out_ranges_whether_new_allocation};
+use revm_primitives::U256_ONE;
 
 use crate::{
     gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS}, interpreter::Interpreter, opcode::*, primitives::{
@@ -183,7 +184,7 @@ pub fn extcall_gas_calc<H: Host + ?Sized>(
     if gas_limit < MIN_CALLEE_GAS {
         // Push 1 to stack to indicate that call light failed.
         // It is safe to ignore stack overflow error as we already popped multiple values from stack.
-        let _ = interpreter.stack_mut().push(U256::from(1));
+        let _ = interpreter.stack_mut().push(U256_ONE);
         interpreter.return_data_buffer.clear();
         // Return none to continue execution.
         return None;

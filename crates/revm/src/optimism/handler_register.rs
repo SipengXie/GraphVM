@@ -597,7 +597,7 @@ mod tests {
             .journaled_state
             .load_account(caller, &mut context.evm.inner.db)
             .unwrap();
-        assert_eq!(account.info.balance, U256::from(1));
+        assert_eq!(account.info.balance, U256_ONE);
     }
 
     #[test]

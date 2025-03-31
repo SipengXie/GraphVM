@@ -551,12 +551,14 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
 #[cfg(test)]
 mod tests {
 
+    use revm_primitives::U256_ONE;
+
     use super::*;
     use crate::{
         db::BenchmarkDB,
         interpreter::opcode::{PUSH1, SSTORE},
         primitives::{
-            address, Authorization, Bytecode, RecoveredAuthority, RecoveredAuthorization, U256,
+            address, Authorization, Bytecode, RecoveredAuthority, RecoveredAuthorization,
         },
     };
 
@@ -594,8 +596,8 @@ mod tests {
         assert_eq!(auth_acc.info.code, Some(Bytecode::new_eip7702(delegate)));
         assert_eq!(auth_acc.info.nonce, 1);
         assert_eq!(
-            auth_acc.storage.get(&U256::from(1)).unwrap().present_value,
-            U256::from(1)
+            auth_acc.storage.get(&U256_ONE).unwrap().present_value,
+            U256_ONE
         );
     }
 }

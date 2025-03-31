@@ -421,7 +421,7 @@ mod tests {
             l1_base_fee: U256::from(1055991687),
             l1_base_fee_scalar: U256::from(5227),
             l1_blob_base_fee_scalar: Some(U256::from(1014213)),
-            l1_blob_base_fee: Some(U256::from(1)),
+            l1_blob_base_fee: Some(U256_ONE),
             ..Default::default() // l1 fee overhead (l1 gas used) deprecated since Fjord
         };
 

@@ -1,5 +1,5 @@
 use revm_primitives::db::DatabaseRef;
-use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode};
+use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode, U256_ONE};
 use revm_primitives::{
     Address, Bytes, B256, Spec, U256,
 };
@@ -416,7 +416,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         match call_outcome.result.result {
             SSAInstructionResult::Ok => {
                 node.outputs[1] = SSAOutput::Memory(data_slice.to_vec().into());
-                node.outputs[2] = SSAOutput::Stack(U256::from(1));
+                node.outputs[2] = SSAOutput::Stack(U256_ONE);
             },
             SSAInstructionResult::Revert => {
                 node.outputs[1] = SSAOutput::Memory(data_slice.to_vec().into());

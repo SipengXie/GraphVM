@@ -106,6 +106,8 @@ pub fn exchange<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
 
 #[cfg(test)]
 mod test {
+    use revm_primitives::U256_ONE;
+
     use super::*;
     use crate::{
         opcode::{make_instruction_table, DUPN, EXCHANGE, SWAPN},
@@ -144,10 +146,10 @@ mod test {
 
         interp.stack.push(U256::from(10)).unwrap();
         interp.stack.push(U256::from(20)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
         interp.step(&table, &mut host);
         assert_eq!(interp.stack.peek(0), Ok(U256::from(20)));
-        assert_eq!(interp.stack.peek(1), Ok(U256::from(0)));
+        assert_eq!(interp.stack.peek(1), Ok(U256::ZERO));
         interp.step(&table, &mut host);
         assert_eq!(interp.stack.peek(0), Ok(U256::from(10)));
         assert_eq!(interp.stack.peek(2), Ok(U256::from(20)));
@@ -163,17 +165,17 @@ mod test {
         interp.is_eof = true;
         interp.gas = Gas::new(10000);
 
-        interp.stack.push(U256::from(1)).unwrap();
+        interp.stack.push(U256_ONE).unwrap();
         interp.stack.push(U256::from(5)).unwrap();
         interp.stack.push(U256::from(10)).unwrap();
         interp.stack.push(U256::from(15)).unwrap();
-        interp.stack.push(U256::from(0)).unwrap();
+        interp.stack.push(U256::ZERO).unwrap();
 
         interp.step(&table, &mut host);
         assert_eq!(interp.stack.peek(1), Ok(U256::from(10)));
         assert_eq!(interp.stack.peek(2), Ok(U256::from(15)));
         interp.step(&table, &mut host);
-        assert_eq!(interp.stack.peek(2), Ok(U256::from(1)));
+        assert_eq!(interp.stack.peek(2), Ok(U256_ONE));
         assert_eq!(interp.stack.peek(4), Ok(U256::from(15)));
     }
 }

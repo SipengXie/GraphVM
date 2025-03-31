@@ -1,3 +1,5 @@
+use revm_primitives::U256_ONE;
+
 use super::i256::{i256_div, i256_mod};
 use crate::{
     gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
@@ -210,7 +212,7 @@ pub fn signextend<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H
         let ext = ext.as_limbs()[0];
         let bit_index = (8 * ext + 7) as usize;
         let bit = x.bit(bit_index);
-        let mask = (U256::from(1) << bit_index) - U256::from(1);
+        let mask = (U256_ONE << bit_index) - U256_ONE;
         *x = if bit { *x | !mask } else { *x & mask };
     }
     

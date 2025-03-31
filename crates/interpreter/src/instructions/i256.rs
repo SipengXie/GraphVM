@@ -1,3 +1,5 @@
+use revm_primitives::U256_ONE;
+
 use crate::primitives::U256;
 use core::cmp::Ordering;
 
@@ -84,7 +86,7 @@ pub fn i256_div(mut first: U256, mut second: U256) -> U256 {
     }
 
     let first_sign = i256_sign_compl(&mut first);
-    if first == MIN_NEGATIVE_VALUE && second == U256::from(1) {
+    if first == MIN_NEGATIVE_VALUE && second == U256_ONE {
         return two_compl(MIN_NEGATIVE_VALUE);
     }
 

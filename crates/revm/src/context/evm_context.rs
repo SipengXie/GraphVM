@@ -672,6 +672,7 @@ mod tests {
         Frame, JournalEntry,
     };
     use std::boxed::Box;
+    use revm_primitives::U256_ONE;
     use test_utils::*;
 
     // Tests that the `EVMContext::make_call_frame` function returns an error if the
@@ -704,7 +705,7 @@ mod tests {
         let mut evm_context = test_utils::create_empty_evm_context(Box::new(env), db);
         let contract = address!("dead10000000000000000000000000000001dead");
         let mut call_inputs = test_utils::create_mock_call_inputs(contract);
-        call_inputs.value = CallValue::Transfer(U256::from(1));
+        call_inputs.value = CallValue::Transfer(U256_ONE);
         let res = evm_context.make_call_frame(&call_inputs);
         let Ok(FrameOrResult::Result(result)) = res else {
             panic!("Expected FrameOrResult::Result");

@@ -97,7 +97,7 @@ fn balance_of(token: Address, address: Address, cache_db: &mut AlloyCacheDB) -> 
             tx.caller = address!("0000000000000000000000000000000000000001");
             tx.transact_to = TxKind::Call(token);
             tx.data = encoded.into();
-            tx.value = U256::from(0);
+            tx.value = U256::ZERO;
         })
         .build();
 
@@ -141,7 +141,7 @@ async fn get_amount_out(
             tx.caller = address!("0000000000000000000000000000000000000000");
             tx.transact_to = TxKind::Call(uniswap_v2_router);
             tx.data = encoded.into();
-            tx.value = U256::from(0);
+            tx.value = U256::ZERO;
         })
         .build();
 
@@ -174,7 +174,7 @@ fn get_reserves(pair_address: Address, cache_db: &mut AlloyCacheDB) -> Result<(U
             tx.caller = address!("0000000000000000000000000000000000000000");
             tx.transact_to = TxKind::Call(pair_address);
             tx.data = encoded.into();
-            tx.value = U256::from(0);
+            tx.value = U256::ZERO;
         })
         .build();
 
@@ -206,8 +206,8 @@ fn swap(
         function swap(uint amount0Out, uint amount1Out, address target, bytes callback) external;
     }
 
-    let amount0_out = if is_token0 { amount_out } else { U256::from(0) };
-    let amount1_out = if is_token0 { U256::from(0) } else { amount_out };
+    let amount0_out = if is_token0 { amount_out } else { U256::ZERO };
+    let amount1_out = if is_token0 { U256::ZERO } else { amount_out };
 
     let encoded = swapCall {
         amount0Out: amount0_out,
@@ -223,7 +223,7 @@ fn swap(
             tx.caller = from;
             tx.transact_to = TxKind::Call(pool_address);
             tx.data = encoded.into();
-            tx.value = U256::from(0);
+            tx.value = U256::ZERO;
         })
         .build();
 
@@ -256,7 +256,7 @@ fn transfer(
             tx.caller = from;
             tx.transact_to = TxKind::Call(token);
             tx.data = encoded.into();
-            tx.value = U256::from(0);
+            tx.value = U256::ZERO;
         })
         .build();
 

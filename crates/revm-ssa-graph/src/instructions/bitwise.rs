@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use revm_primitives::db::DatabaseRef;
 use super::i256::i256_cmp;
-use revm_primitives::{Spec, U256};
+use revm_primitives::{Spec, U256, U256_ONE};
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 use crate::{ExecutionContext, ExecutionError, Result, get_ssa_output_stack_or_const, SsaGraph};
 use crate::as_usize_saturated;
@@ -12,7 +12,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_lt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = SSAOutput::Stack(if a < b { U256::from(1) } else { U256::from(0) });
+        node.outputs[0] = SSAOutput::Stack(if a < b { U256_ONE } else { U256::ZERO });
         Ok(())
     }
 
@@ -21,7 +21,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_gt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = SSAOutput::Stack(if a > b { U256::from(1) } else { U256::from(0) });
+        node.outputs[0] = SSAOutput::Stack(if a > b { U256_ONE } else { U256::ZERO });
         Ok(())
     }
 
@@ -30,7 +30,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_slt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = SSAOutput::Stack(if i256_cmp(&a, &b) == Ordering::Less { U256::from(1) } else { U256::from(0) });
+        node.outputs[0] = SSAOutput::Stack(if i256_cmp(&a, &b) == Ordering::Less { U256_ONE } else { U256::ZERO });
         Ok(())
     }
 
@@ -39,7 +39,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_sgt(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = SSAOutput::Stack(if i256_cmp(&a, &b) == Ordering::Greater { U256::from(1) } else { U256::from(0) });
+        node.outputs[0] = SSAOutput::Stack(if i256_cmp(&a, &b) == Ordering::Greater { U256_ONE } else { U256::ZERO });
         Ok(())
     }
 
@@ -48,7 +48,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_eq(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = SSAOutput::Stack(if a == b { U256::from(1) } else { U256::from(0) });
+        node.outputs[0] = SSAOutput::Stack(if a == b { U256_ONE } else { U256::ZERO });
         Ok(())
     }
 
@@ -56,7 +56,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     #[inline(always)]
     pub fn execute_iszero(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
-        node.outputs[0] = SSAOutput::Stack(if a.is_zero() { U256::from(1) } else { U256::from(0) });
+        node.outputs[0] = SSAOutput::Stack(if a.is_zero() { U256_ONE } else { U256::ZERO });
         Ok(())
     }
 
@@ -119,7 +119,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
 
         node.outputs[0] = if shift >= U256::from(256) {
-            SSAOutput::Stack(U256::from(0))
+            SSAOutput::Stack(U256::ZERO)
         } else {
             let shift_amount = as_usize_saturated!(shift);
             SSAOutput::Stack(value << shift_amount)
@@ -134,7 +134,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
 
         node.outputs[0] = if shift >= U256::from(256) {
-            SSAOutput::Stack(U256::from(0))
+            SSAOutput::Stack(U256::ZERO)
         } else {
             let shift_amount = as_usize_saturated!(shift);
             SSAOutput::Stack(value >> shift_amount)

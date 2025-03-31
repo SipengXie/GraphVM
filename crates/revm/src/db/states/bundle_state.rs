@@ -919,8 +919,8 @@ mod tests {
                         code: None,
                     }),
                     HashMap::from_iter([
-                        (slot1(), (U256::from(0), U256::from(10))),
-                        (slot2(), (U256::from(0), U256::from(15))),
+                        (slot1(), (U256::ZERO, U256::from(10))),
+                        (slot2(), (U256::ZERO, U256::from(15))),
                     ]),
                 ),
                 (
@@ -939,7 +939,7 @@ mod tests {
                 (
                     account1(),
                     Some(None),
-                    vec![(slot1(), U256::from(0)), (slot2(), U256::from(0))],
+                    vec![(slot1(), U256::ZERO), (slot2(), U256::ZERO)],
                 ),
                 (account2(), Some(None), vec![]),
             ]],
@@ -960,7 +960,7 @@ mod tests {
                     code_hash: KECCAK_EMPTY,
                     code: None,
                 }),
-                HashMap::from_iter([(slot1(), (U256::from(0), U256::from(15)))]),
+                HashMap::from_iter([(slot1(), (U256::ZERO, U256::from(15)))]),
             )],
             vec![vec![(
                 account1(),
@@ -990,7 +990,7 @@ mod tests {
             )
             .state_storage(
                 account1(),
-                HashMap::from_iter([(slot1(), (U256::from(0), U256::from(10)))]),
+                HashMap::from_iter([(slot1(), (U256::ZERO, U256::from(10)))]),
             )
             .state_address(account2())
             .state_present_account_info(
@@ -1004,7 +1004,7 @@ mod tests {
             )
             .revert_address(0, account1())
             .revert_account_info(0, account1(), Some(None))
-            .revert_storage(0, account1(), vec![(slot1(), U256::from(0))])
+            .revert_storage(0, account1(), vec![(slot1(), U256::ZERO)])
             .revert_account_info(0, account2(), Some(None))
             .build()
     }
@@ -1023,7 +1023,7 @@ mod tests {
             )
             .state_storage(
                 account1(),
-                HashMap::from_iter([(slot1(), (U256::from(0), U256::from(15)))]),
+                HashMap::from_iter([(slot1(), (U256::ZERO, U256::from(15)))]),
             )
             .revert_address(0, account1())
             .revert_account_info(
@@ -1312,7 +1312,7 @@ mod tests {
         assert!(builder.get_revert_storage_mut().is_empty());
         builder
             .get_revert_storage_mut()
-            .insert((0, account1()), vec![(slot1(), U256::from(0))]);
+            .insert((0, account1()), vec![(slot1(), U256::ZERO)]);
         assert!(builder
             .get_revert_storage_mut()
             .contains_key(&(0, account1())));

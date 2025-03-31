@@ -363,14 +363,14 @@ impl AccountInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Account, KECCAK_EMPTY, U256};
+    use crate::{Account, KECCAK_EMPTY, U256, U256_ONE};
 
     #[test]
     fn account_is_empty_balance() {
         let mut account = Account::default();
         assert!(account.is_empty());
 
-        account.info.balance = U256::from(1);
+        account.info.balance = U256_ONE;
         assert!(!account.is_empty());
 
         account.info.balance = U256::ZERO;

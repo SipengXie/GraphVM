@@ -1,4 +1,4 @@
-use revm_primitives::{Spec, U256, db::DatabaseRef};
+use revm_primitives::{db::DatabaseRef, Spec, U256, U256_ONE};
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 
@@ -37,8 +37,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_div(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = if b == U256::from(0) {
-            SSAOutput::Stack(U256::from(0))
+        node.outputs[0] = if b == U256::ZERO {
+            SSAOutput::Stack(U256::ZERO)
         } else {
             SSAOutput::Stack(a.wrapping_div(b))
         };
@@ -50,8 +50,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_mod(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = if b == U256::from(0) {
-            SSAOutput::Stack(U256::from(0))
+        node.outputs[0] = if b == U256::ZERO {
+            SSAOutput::Stack(U256::ZERO)
         } else {
             SSAOutput::Stack(a.wrapping_rem(b))
         };
@@ -64,8 +64,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let n = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        node.outputs[0] = if n == U256::from(0) {
-            SSAOutput::Stack(U256::from(0))
+        node.outputs[0] = if n == U256::ZERO {
+            SSAOutput::Stack(U256::ZERO)
         } else {
             SSAOutput::Stack(a.add_mod(b, n))
         };
@@ -78,8 +78,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let n = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        node.outputs[0] = if n == U256::from(0) {
-            SSAOutput::Stack(U256::from(0))
+        node.outputs[0] = if n == U256::ZERO {
+            SSAOutput::Stack(U256::ZERO)
         } else {
             SSAOutput::Stack(a.mul_mod(b, n))
         };
@@ -91,8 +91,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_sdiv(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = if b == U256::from(0) {
-            SSAOutput::Stack(U256::from(0))
+        node.outputs[0] = if b == U256::ZERO {
+            SSAOutput::Stack(U256::ZERO)
         } else {
             SSAOutput::Stack(i256_div(a, b))
         };
@@ -104,8 +104,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     pub fn execute_smod(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
         let a = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let b = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        node.outputs[0] = if b == U256::from(0) {
-            SSAOutput::Stack(U256::from(0))
+        node.outputs[0] = if b == U256::ZERO {
+            SSAOutput::Stack(U256::ZERO)
         } else {
             SSAOutput::Stack(i256_mod(a, b))
         };
@@ -130,7 +130,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let ext = ext.as_limbs()[0];
         let bit_index = (8 * ext + 7) as usize;
         let bit = word.bit(bit_index);
-        let mask = (U256::from(1) << bit_index) - U256::from(1);
+        let mask = (U256_ONE << bit_index) - U256_ONE;
         let value = if bit { 
             word | !mask 
         } else { 
