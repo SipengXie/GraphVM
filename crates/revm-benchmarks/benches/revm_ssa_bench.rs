@@ -98,7 +98,7 @@ fn get_bench_cases() -> Vec<BenchCase> {
         BenchCase::new(
             "weth",
             include_str!("../../../data/weth.rt.hex"),
-            ""
+            "0x6b7c477a"
         ),
         // Hash 10k测试
         BenchCase::new(
