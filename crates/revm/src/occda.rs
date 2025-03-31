@@ -154,7 +154,7 @@ impl Occda {
     where
         I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        <DB as DatabaseRef>::Error: Send + Sync + std::fmt::Debug,
+        <DB as DatabaseRef>::Error: Send + Sync,
     {
         let result_ptr = result_store.as_mut_ptr() as usize;
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
@@ -433,7 +433,13 @@ impl Occda {
                                 task_result.result = Some(result);
                             }
                             Err(err) => {
-                                println!("TxHash: {:?} failed: {:?}", task.tx_hash, err);
+                                match err {
+                                    EVMError::Transaction(error) => println!("TxHash: {:?} failed: {:?}", task.tx_hash, error),
+                                    EVMError::Header(error) => println!("TxHash: {:?} failed: {:?}", task.tx_hash, error),
+                                    EVMError::Database(error) => println!("TxHash: {:?} failed: {:?}", task.tx_hash, error),
+                                    EVMError::Custom(msg) => println!("TxHash: {:?} failed: {}", task.tx_hash, msg),
+                                    EVMError::Precompile(msg) => println!("TxHash: {:?} failed: {}", task.tx_hash, msg),
+                                }
                                 task_result.state = None;
                                 task_result.result = None;
                             }
@@ -521,7 +527,7 @@ impl Occda {
     where
         I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        <DB as DatabaseRef>::Error: Send + Sync  + std::fmt::Debug,
+        <DB as DatabaseRef>::Error: Send + Sync,
     {
         let len = h_tx.len();
         let raw_db_ptr = db as *mut DB;
