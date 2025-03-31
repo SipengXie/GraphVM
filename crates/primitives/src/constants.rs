@@ -1,4 +1,4 @@
-use alloy_primitives::{address, Address};
+use alloy_primitives::{address, Address, U256};
 
 /// EIP-170: Contract code size limit
 ///
@@ -60,3 +60,10 @@ pub const BLOB_GASPRICE_UPDATE_FRACTION: u64 = 3338477;
 
 /// First version of the blob.
 pub const VERSIONED_HASH_VERSION_KZG: u8 = 0x01;
+
+/// U256 constant with value 1.
+///
+/// # Note
+///
+/// This is a convenience constant for the commonly used value of 1 in U256 format.
+pub const U256_ONE: U256 = U256::from_limbs([1,0,0,0]);

@@ -186,16 +186,31 @@ impl TryFrom<SSAOutput> for Bytes {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(align(64))]
 pub struct SSALogEntry {
-    // The LSN of the log entry
-    pub lsn: LsnType,
-    // The opcode of the instruction 
-    pub opcode: u8,
     // The inputs of the instruction
-    pub inputs: Vec<SSAInput>,
+    pub inputs: Vec<SSAInput>, // 24 bytes
     // The outputs of the instruction, it is necessary to record the value
     // because when we construct the SSA graph, the paritially executed nodes may
     // access some nodes unnecessary to execute, thus we can give them the same value
-    pub outputs: Vec<SSAOutput>,
+    pub outputs: Vec<SSAOutput>, // 24 bytes
+    // The LSN of the log entry
+    pub lsn: LsnType, // 4 bytes
+    // The opcode of the instruction 
+    pub opcode: u8, // 1 byte
+
+    _padding: [u8; 11], // 11 bytes
+}
+
+impl SSALogEntry {
+    /// Creates a new SSALogEntry with the given parameters
+    pub fn new(lsn: LsnType, opcode: u8, inputs: Vec<SSAInput>, outputs: Vec<SSAOutput>) -> Self {
+        Self {
+            lsn,
+            opcode,
+            inputs,
+            outputs,
+            _padding: [0; 11],
+        }
+    }
 }
 
 impl std::fmt::Display for SSALogEntry {

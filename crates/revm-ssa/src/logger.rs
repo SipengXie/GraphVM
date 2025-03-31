@@ -223,12 +223,12 @@ impl SSALogger {
             panic!("LSN overflow: reached maximum LsnType value");
         }
         
-        let entry = SSALogEntry {
-            lsn: self.current_lsn,
-            opcode,
-            inputs,
-            outputs,
-        };
+        let entry = SSALogEntry::new(
+            self.current_lsn, 
+            opcode, 
+            inputs, 
+            outputs
+        );
         
         self.logs.push(entry);
         self.current_lsn += 1;
@@ -241,12 +241,13 @@ impl SSALogger {
             panic!("LSN overflow: reached maximum LsnType value");
         }
 
-        let entry = SSALogEntry {
-            lsn: self.current_lsn,
-            opcode,
-            inputs: self.input_buf[0..input_size].to_vec(),
-            outputs: self.output_buf[0..output_size].to_vec(),
-        };
+        let entry = SSALogEntry::new(
+            self.current_lsn, 
+            opcode, 
+            self.input_buf[0..input_size].to_vec(), 
+            self.output_buf[0..output_size].to_vec()
+        );
+        
         self.logs.push(entry);
         self.current_lsn += 1;
         self.current_lsn - 1
