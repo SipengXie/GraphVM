@@ -154,7 +154,7 @@ impl Occda {
     where
         I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        <DB as DatabaseRef>::Error: Send + Sync,
+        <DB as DatabaseRef>::Error: Send + Sync + std::fmt::Debug,
     {
         let result_ptr = result_store.as_mut_ptr() as usize;
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
@@ -432,7 +432,8 @@ impl Occda {
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
                             }
-                            Err(_) => {
+                            Err(err) => {
+                                println!("TxHash: {:?} failed: {:?}", task.tx_hash, err);
                                 task_result.state = None;
                                 task_result.result = None;
                             }
@@ -520,7 +521,7 @@ impl Occda {
     where
         I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
-        <DB as DatabaseRef>::Error: Send + Sync,
+        <DB as DatabaseRef>::Error: Send + Sync  + std::fmt::Debug,
     {
         let len = h_tx.len();
         let raw_db_ptr = db as *mut DB;
