@@ -28,7 +28,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, Bytes, EVMError, EvmStorageSlot, ExecutionResult, LatestSpec, Output, SuccessReason, U256};
+use revm_primitives::{Account, AccountStatus, HaltReason, Bytes, EVMError, EvmStorageSlot, ExecutionResult, LatestSpec, Output, SuccessReason, U256};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -339,6 +339,8 @@ impl Occda {
                                 }
                             }
                         }
+
+                        
 
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time 
@@ -881,13 +883,6 @@ impl Occda {
             drop(h_commit);
             drop(h_ready);
         });
-
-        for i in 0..result_store.len() {
-            if result_store[i].state.is_none() && result_store[i].ssa_output.is_none() {
-                println!("failed task: {:?}", h_tx[i].tid);
-            }
-        }
-
         // Print both parallel and sequential stats at the end
         println!("Parallel execution stats:");
         let (hit_rate, hits, misses, db_time, cache_time, max_read, avg_read) = {
