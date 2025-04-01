@@ -778,6 +778,7 @@ impl Occda {
                 h_commit.extend(ready_tasks.iter()
                     .filter(|&&idx| !failed_tasks.contains(&idx))
                     .map(|&idx| Reverse(idx)));
+                profiler::end("parallel");
             }
 
             if h_commit.len() == 0 {
