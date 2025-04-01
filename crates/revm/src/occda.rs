@@ -150,12 +150,14 @@ impl Occda {
         is_prefetch: bool,
         enable_dep_graph: bool,
         enable_ssa: bool,
-    ) -> Duration 
+    ) -> (Duration, Vec<usize>)
     where
         I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
         <DB as DatabaseRef>::Error: Send + Sync,
     {
+        let failed_task = Arc::new(parking_lot::Mutex::new(Vec::<usize>::new()));
+        let failed_task_clone = failed_task.clone();
         let result_ptr = result_store.as_mut_ptr() as usize;
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
         let first_call_input_ptr = self.first_call_input_store.as_mut_ptr() as usize;
@@ -334,6 +336,8 @@ impl Occda {
                                     // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                     drop(executor);
                                     re_execution_opcodes += opcode_counts_store[idx];
+
+                                    failed_task_clone.lock().push(idx);
                                     // fall through to EVM re-execution path below
                                 }
                             }
@@ -440,8 +444,7 @@ impl Occda {
                                     EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
                                     EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
                                 }
-                                task_result.state = None;
-                                task_result.result = None;
+                                failed_task_clone.lock().push(idx);
                             }
                         }
 
@@ -486,7 +489,8 @@ impl Occda {
         //         thread_id, db_read, init, transact, write);
         // }
         let parallel_end = std::time::Instant::now();
-        parallel_end - parallel_start
+        let failed_tasks = failed_task.lock().clone();
+        (parallel_end - parallel_start, failed_tasks)
     }
 
     /// Main execution function that processes transactions in parallel
@@ -748,12 +752,13 @@ impl Occda {
                 let seq_end = std::time::Instant::now();
                 seq_time += seq_end - seq_start;
                 profiler::end("non-parallel");
+                h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
                 
             } else {
                 profiler::start("parallel");
                 parallel_exec_size += ready_tasks.len();
                 parallel_db.set_parallel_mode(true);
-                parallel_time += self.execute_parallel_tasks(
+                let (duration, failed_tasks) = self.execute_parallel_tasks(
                     &ready_tasks,
                     h_tx,
                     &mut parallel_db,
@@ -764,12 +769,20 @@ impl Occda {
                     enable_dep_graph,
                     enable_ssa,
                 );
-                profiler::end("parallel");
+                parallel_time += duration;
+                let failed_tasks = failed_tasks.clone();
+                for task_idx in failed_tasks.iter() {
+                    h_tx[*task_idx].sid = h_tx[*task_idx].tid - 1;
+                    h_exec.push(Reverse((h_tx[*task_idx].sid, h_tx[*task_idx].tid as usize)));
+                }
+                h_commit.extend(ready_tasks.iter()
+                    .filter(|&&idx| !failed_tasks.contains(&idx))
+                    .map(|&idx| Reverse(idx)));
             }
 
-
-            // Prepare completed tasks for commit phase
-            h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
+            if h_commit.len() == 0 {
+                break;
+            }
 
             let commit_start = std::time::Instant::now();
             profiler::start("commit-all");
