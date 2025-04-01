@@ -310,38 +310,8 @@ impl<DB: DatabaseRef> DatabaseRef for ParallelDB<DB> {
 impl<DB> DatabaseCommit for ParallelDB<DB> {
     fn commit(&mut self, changes: HashMap<Address, Account>) {
         let mut cache = self.cache.write();
-        for (address, mut account) in changes {
-            if !account.is_touched() {
-                continue;
-            }
-            if account.is_selfdestructed() {
-                let db_account = cache.accounts.entry(address).or_default();
-                db_account.storage.clear();
-                db_account.account_state = AccountState::NotExisting;
-                db_account.info = AccountInfo::default();
-                continue;
-            }
-            let is_newly_created = account.is_created();
-            cache.insert_contract(&mut account.info);
+        println!("changes: {:?}", &changes);
+        cache.commit(changes);
 
-            let db_account = cache.accounts.entry(address).or_default();
-            db_account.info = account.info;
-
-            db_account.account_state = if is_newly_created {
-                db_account.storage.clear();
-                AccountState::StorageCleared
-            } else if db_account.account_state.is_storage_cleared() {
-                // Preserve old account state if it already exists
-                AccountState::StorageCleared
-            } else {
-                AccountState::Touched
-            };
-            db_account.storage.extend(
-                account
-                    .storage
-                    .into_iter()
-                    .map(|(key, value)| (key, value.present_value())),
-            );
-        }
     }
 }
