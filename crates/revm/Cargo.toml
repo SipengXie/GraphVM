@@ -32,7 +32,7 @@ revm-ssa-graph = { path = "../revm-ssa-graph", version = "1.0.0", default-featur
 auto_impl = { version = "1.2", default-features = false }
 cfg-if = "1.0"
 dyn-clone = "1.0"
-daggy = "0.8.0"
+daggy = "0.8.1"
 # hashbrown = "0.12.3"
 metrics = "0.21.1"
 # tokio = { version = "1.40", features = [
