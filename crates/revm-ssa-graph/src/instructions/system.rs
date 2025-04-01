@@ -220,17 +220,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         // Calculate new memory size
         let new_size = self.check_memory_size(offset, len);
-        let data_slice = &data[..len];
-        let hash = revm_primitives::keccak256(data_slice);
+        let hash = revm_primitives::keccak256(&data[..len]);
         node.outputs[0] = SSAOutput::Stack(hash.into());
 
         // If memory size changes, add MemorySize output
         if new_size > self.memory_size() {
-            if node.outputs.len() < 2 {
-                node.outputs.push(SSAOutput::MemorySize(new_size));
-            } else {
-                node.outputs[1] = SSAOutput::MemorySize(new_size);
-            }
+            node.outputs.get_mut(1)
+                .map(|output| *output = SSAOutput::MemorySize(new_size))
+                .unwrap_or_else(|| node.outputs.push(SSAOutput::MemorySize(new_size)));
             self.set_memory_size(new_size);
         }
         Ok(())
