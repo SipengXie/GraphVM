@@ -353,7 +353,7 @@ pub fn run_parallel(
         &mut h_tx, 
         &mut state,
          &mut result_store, 
-         Some(|| NoOpInspector),
+         || NoOpInspector,
          enable_prefetch,
          enable_dep_graph, 
          enable_ssa);

@@ -19,8 +19,7 @@ use crate::journaled_state::AccessType;
 use crate::task::{Task, TaskResultItem};
 use crate::dag::TaskDag;
 use crate::evm::Evm;
-use crate::db::{Database, DatabaseCommit, DatabaseRef, WrapDatabaseRef, parallel_db::ParallelDB};
-use crate::inspector::{GetInspector, Inspector};
+use crate::db::{Database, DatabaseCommit, DatabaseRef, parallel_db::ParallelDB};
 use crate::inspector_handle_register;
 use crate::profiler;
 use std::sync::Arc;
@@ -28,7 +27,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, Bytes, EVMError, EvmStorageSlot, ExecutionResult, LatestSpec, Output, SuccessReason, U256};
+use revm_primitives::{Account, AccountStatus, HaltReason, Bytes, EVMError, EvmStorageSlot, ExecutionResult, LatestSpec, Output, SuccessReason, U256};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -151,12 +150,14 @@ impl Occda {
         is_prefetch: bool,
         enable_dep_graph: bool,
         enable_ssa: bool,
-    ) -> Duration 
+    ) -> (Duration, Vec<usize>)
     where
         I: Send + Sync,
         DB: DatabaseRef + Database + DatabaseCommit + Send + Sync,
         <DB as DatabaseRef>::Error: Send + Sync,
     {
+        let failed_task = Arc::new(parking_lot::Mutex::new(Vec::<usize>::new()));
+        let failed_task_clone = failed_task.clone();
         let result_ptr = result_store.as_mut_ptr() as usize;
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
         let first_call_input_ptr = self.first_call_input_store.as_mut_ptr() as usize;
@@ -276,7 +277,7 @@ impl Occda {
                         let task = &h_tx[idx];
                         // Create new inspector instance for this transaction
                         // Each transaction needs its own inspector to track execution
-                        let mut inspector = inspector_setup();
+                        let inspector = inspector_setup();
                         let db_ref = &*db;
                         
                         // use ssa to re-execute the transaction
@@ -324,10 +325,14 @@ impl Occda {
                                     // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                     drop(executor);
                                     re_execution_opcodes += opcode_counts_store[idx];
+
+                                    failed_task_clone.lock().push(idx);
                                     // fall through to EVM re-execution path below
                                 }
                             }
                         }
+
+                        
 
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time 
@@ -420,9 +425,15 @@ impl Occda {
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
                             }
-                            Err(_) => {
-                                task_result.state = None;
-                                task_result.result = None;
+                            Err(_err) => {
+                                // match err {
+                                //     EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
+                                //     EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
+                                //     EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
+                                //     EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
+                                //     EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
+                                // }
+                                failed_task_clone.lock().push(idx);
                             }
                         }
 
@@ -467,7 +478,8 @@ impl Occda {
         //         thread_id, db_read, init, transact, write);
         // }
         let parallel_end = std::time::Instant::now();
-        parallel_end - parallel_start
+        let failed_tasks = failed_task.lock().clone();
+        (parallel_end - parallel_start, failed_tasks)
     }
 
     /// Main execution function that processes transactions in parallel
@@ -627,7 +639,7 @@ impl Occda {
                 seq_exec_size += ready_tasks.len();
                 for &idx in &ready_tasks {
                     let task = &mut h_tx[idx];
-                    let mut inspector = inspector_setup();
+                    let inspector = inspector_setup();
 
                     // Handle re-execution case (using SSA)
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
@@ -729,12 +741,13 @@ impl Occda {
                 let seq_end = std::time::Instant::now();
                 seq_time += seq_end - seq_start;
                 profiler::end("non-parallel");
+                h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
                 
             } else {
                 profiler::start("parallel");
                 parallel_exec_size += ready_tasks.len();
                 parallel_db.set_parallel_mode(true);
-                parallel_time += self.execute_parallel_tasks(
+                let (duration, failed_tasks) = self.execute_parallel_tasks(
                     &ready_tasks,
                     h_tx,
                     &mut parallel_db,
@@ -745,12 +758,21 @@ impl Occda {
                     enable_dep_graph,
                     enable_ssa,
                 );
+                parallel_time += duration;
+                let failed_tasks = failed_tasks.clone();
+                for task_idx in failed_tasks.iter() {
+                    h_tx[*task_idx].sid = h_tx[*task_idx].tid - 1;
+                    h_exec.push(Reverse((h_tx[*task_idx].sid, h_tx[*task_idx].tid as usize)));
+                }
+                h_commit.extend(ready_tasks.iter()
+                    .filter(|&&idx| !failed_tasks.contains(&idx))
+                    .map(|&idx| Reverse(idx)));
                 profiler::end("parallel");
             }
 
-
-            // Prepare completed tasks for commit phase
-            h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
+            if h_commit.len() == 0 {
+                break;
+            }
 
             let commit_start = std::time::Instant::now();
             profiler::start("commit-all");
@@ -870,13 +892,6 @@ impl Occda {
             drop(h_commit);
             drop(h_ready);
         });
-
-        for i in 0..result_store.len() {
-            if result_store[i].state.is_none() && result_store[i].ssa_output.is_none() {
-                println!("failed task: {:?}", h_tx[i].tid);
-            }
-        }
-
         // Print both parallel and sequential stats at the end
         println!("Parallel execution stats:");
         let (hit_rate, hits, misses, db_time, cache_time, max_read, avg_read) = {
