@@ -310,7 +310,6 @@ impl<DB: DatabaseRef> DatabaseRef for ParallelDB<DB> {
 impl<DB> DatabaseCommit for ParallelDB<DB> {
     fn commit(&mut self, changes: HashMap<Address, Account>) {
         let mut cache = self.cache.write();
-        println!("changes: {:?}", &changes);
         cache.commit(changes);
 
     }
