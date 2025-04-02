@@ -17,7 +17,12 @@ parking_lot = "0.12"
 metrics-exporter-prometheus = "0.12"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["alloc", "std"] }
+rand = "0.9.0"
 
 [[bench]]
 name = "revm_ssa_bench"
+harness = false
+
+[[bench]]
+name = "keccak_bench"
 harness = false 
