@@ -239,7 +239,7 @@ macro_rules! get_gas_cost {
             SSAInput::GasCost((lsn, index)) => {
                 let dep_node = $graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
-                    SSAOutput::GasCost(gas_cost) => gas_cost,
+                    SSAOutput::Gas(gas_cost) => gas_cost,
                     _ => return Err(ExecutionError::ExecutionError(
                         ExecutionError::EXPECTED_GAS_COST.to_string()
                     ))

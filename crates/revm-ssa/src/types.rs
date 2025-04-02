@@ -172,7 +172,8 @@ pub enum SSAOutput {
     CallOutcome(Box<SSACallOutcome>),
     Log(Box<Log>),
     ContractEnv(Box<ContractEnv>),
-    GasCost(u64),
+    // Cost or remaining
+    Gas(u64),
     GasRefund(i64),
 }
 

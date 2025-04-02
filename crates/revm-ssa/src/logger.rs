@@ -327,9 +327,11 @@ impl SSALogger {
 
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);
 
-        let mut ssa_outputs = Vec::with_capacity(1);
+        let mut ssa_outputs = Vec::with_capacity(3);
         ssa_outputs.push(output_account_info!(caller, new_info));
         self.log_storage_write(StorageKey::AccountInfo(caller), lsn, 0);
+        ssa_outputs.push(SSAOutput::Gas(gas_remaining));
+        ssa_outputs.push(SSAOutput::GasRefund(gas_refunded));
 
         self.log_operation(0xDB, ssa_inputs, ssa_outputs);    
     }
@@ -1500,7 +1502,7 @@ impl SSALogger {
                 value: Box::new(StorageValue::Slot(value)), 
             }
         );
-        ssa_outputs.push(SSAOutput::GasCost(gas_cost));
+        ssa_outputs.push(SSAOutput::Gas(gas_cost));
         ssa_outputs.push(SSAOutput::GasRefund(gas_refund));
         self.log_storage_write(StorageKey::Slot(address, index), lsn, 0);
         self.gas_cost.push(((lsn, 1), gas_cost));

@@ -312,18 +312,7 @@ impl Occda {
                                     task_result.gas_limit = task.gas;
                                     task_result.inspector = Some(inspector);
                                     task_result.ssa_output = Some(result_state);
-                                    // TODO: simplify the result generation now.
-                                    task_result.result = if result_store[idx].result.is_none() {
-                                        Some(ExecutionResult::Success { 
-                                            reason: SuccessReason::Stop,
-                                            gas_used: 0,
-                                            gas_refunded: 0,
-                                            logs: vec![],
-                                            output: Output::Call(Bytes::default())
-                                        }) 
-                                    } else { 
-                                        result_store[idx].result.clone() 
-                                    };
+                                    task_result.result = Some(executor.graph.generate_result(task.gas).unwrap());
                                     let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
                                     unsafe {
                                         *result_raw_ptr.add(idx) = task_result;
