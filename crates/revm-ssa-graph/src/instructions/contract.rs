@@ -91,6 +91,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             key: Box::new(StorageKey::AccountInfo(caller)),
             value: Box::new(StorageValue::AccountInfo(new_caller_info)),
         };
+        node.outputs[1] = SSAOutput::Gas(base_gas_remaining - dynamic_gas_cost);
+        node.outputs[2] = SSAOutput::GasRefund(base_gas_refunded + dynamic_gas_refund);
         Ok(())
     }
 

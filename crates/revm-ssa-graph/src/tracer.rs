@@ -144,7 +144,7 @@ impl ExecutionTracer {
             (SSAOutput::GasRefund(r1), SSAOutput::GasRefund(r2)) => r1 == r2,
 
             // Compare gas cost
-            (SSAOutput::GasCost(c1), SSAOutput::GasCost(c2)) => c1 == c2,
+            (SSAOutput::Gas(c1), SSAOutput::Gas(c2)) => c1 == c2,
 
             // Compare transient values
             (SSAOutput::Transient(v1), SSAOutput::Transient(v2)) => v1 == v2,

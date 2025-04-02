@@ -1,9 +1,9 @@
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
 use revm_ssa::logger::LsnType;
-use revm_primitives::{HashMap, HashSet};
+use revm_primitives::{ExecutionResult, HaltReason, HashMap, HashSet, Output, SuccessReason};
 use crate::{Result, ExecutionError};
-use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
+use revm_ssa::{SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput};
 
 /// Dependency graph
 pub struct SsaGraph {
@@ -13,6 +13,12 @@ pub struct SsaGraph {
     lsn_to_node: Vec<NodeIndex>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<LsnType>,
+    /// Mapping from lsn to node index with logs
+    logs: Vec<LsnType>,
+    /// Last Return
+    last_return: LsnType,
+    /// Refund gas
+    gas_calc: LsnType,
 }
 
 
@@ -22,6 +28,9 @@ impl SsaGraph {
             graph: DiGraph::with_capacity(node_num, edge_num),
             lsn_to_node: vec![NodeIndex::new(0); node_num + 1],
             storage_write: Vec::with_capacity(node_num + 1),
+            logs: Vec::with_capacity(node_num + 1),
+            last_return: 0,
+            gas_calc: 0,
         }
     }
 
@@ -40,8 +49,12 @@ impl SsaGraph {
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
-        if is_storage_write!(entry.opcode) {
-            self.storage_write.push(lsn);
+        match entry.opcode {
+            op if is_storage_write!(op) => self.storage_write.push(lsn),
+            0xA0..=0xA4 => self.logs.push(lsn),
+            0xD5 | 0xD8 => self.last_return = lsn,
+            0xDB => self.gas_calc = lsn,
+            _ => {}
         }
         let node_idx = self.graph.add_node(entry);
         
@@ -354,5 +367,85 @@ impl SsaGraph {
         }
 
         Ok(layers)
+    }
+
+    pub fn generate_result(&self, gas_limit: u64) -> Result<ExecutionResult> {
+        // 1. Get the result node, handle error cases early
+        let result_node = self.get_node(self.last_return)?;
+        let output = result_node.outputs.get(0).ok_or_else(|| 
+            ExecutionError::GraphError("No output found in last return node".to_string())
+        )?;
+
+        let gas_node = self.get_node(self.gas_calc)?;
+        let gas_remaining = match &gas_node.outputs[1] {
+            SSAOutput::Gas(gas) => *gas,
+            _ => return Err(ExecutionError::GraphError("Expected Gas output".to_string())),
+        };
+        let gas_refunded = match &gas_node.outputs[2] {
+            SSAOutput::GasRefund(refund) => *refund as u64,
+            _ => return Err(ExecutionError::GraphError("Expected GasRefund output".to_string())),
+        };
+
+        let gas_used = gas_limit - gas_remaining - gas_refunded;
+
+        // 2. Pre-allocate log capacity to avoid reallocation
+        let logs = self.logs.iter()
+            .filter_map(|lsn| {
+                self.get_node(*lsn).ok().and_then(|node| {
+                    if let SSAOutput::Log(log) = &node.outputs[0] {
+                        Some(*log.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        // 3. Handle CallOutcome and CreateOutcome separately
+        match output {
+            SSAOutput::CallOutcome(outcome) => {
+                let output = outcome.result.output.clone();
+                match outcome.result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Call(output),
+                    }),
+                    SSAInstructionResult::Revert => Ok(ExecutionResult::Revert {
+                        gas_used,
+                        output,
+                    }),
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    })
+                }
+            },
+            SSAOutput::CreateOutcome(outcome) => {
+                let output = outcome.result.output.clone();
+                match outcome.result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Create(output, outcome.address),
+                    }),
+                    SSAInstructionResult::Revert => Ok(ExecutionResult::Revert {
+                        gas_used,
+                        output,
+                    }),
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    })
+                }
+            },
+            _ => Err(ExecutionError::GraphError(
+                "Last return node is not a call or create outcome".to_string()
+            ))
+        }
     }
 }

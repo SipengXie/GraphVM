@@ -70,7 +70,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             key: Box::new(StorageKey::Slot(address, index)),
             value: Box::new(StorageValue::Slot(value)),
         };
-        node.outputs[1] = SSAOutput::GasCost(gas_cost);
+        node.outputs[1] = SSAOutput::Gas(gas_cost);
         node.outputs[2] = SSAOutput::GasRefund(gas_refund);
 
         Ok(())
