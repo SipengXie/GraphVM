@@ -34,6 +34,7 @@ use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::time::Duration;
+
 // use metrics::histogram;
 
 /// Main struct for handling parallel execution of EVM transactions
@@ -333,7 +334,7 @@ impl Occda {
                         }
 
                         
-
+                        let debug_index = 23;
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time 
                         let init_start = std::time::Instant::now();

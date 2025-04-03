@@ -3694,6 +3694,7 @@ dependencies = [
  "ethers-core",
  "ethers-providers",
  "indicatif",
+ "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
  "once_cell",
