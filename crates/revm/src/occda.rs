@@ -421,6 +421,11 @@ impl Occda {
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
+                                profiler::note_str_unchecked(
+                                    "gas-used",
+                                    &task.tx_hash.unwrap().to_string(), 
+                                    &result.gas_used().to_string(),
+                                );
                                 gas_used += result.gas_used();
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
