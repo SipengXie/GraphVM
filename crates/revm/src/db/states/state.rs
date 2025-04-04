@@ -235,8 +235,14 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        if let Some(account) = self.cache.accounts.get(&address) {
+
+        let is_debug = index == U256::from_str_radix("7989fcd291e985aecca209a5c9644a2014120feb5003e533bad50a8b65f875c1", 16).unwrap();
+        
+        let value = if let Some(account) = self.cache.accounts.get(&address) {
             let is_storage_known = account.status.is_storage_known();
+            if is_debug {
+                println!("storage_ref: address {:?} index {:?} is_storage_known {:?}", address, index, is_storage_known);
+            }
             Ok(account.account.as_ref().map(|a| match a.storage.get(&index) {
                 Some(entry) => Ok(*entry),
                 None => {
@@ -253,7 +259,17 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
             self.database.storage_ref(address, index)
             // We should find a better way to handle this.
             // unreachable!("For accessing any storage account {} is guaranteed to be loaded beforehand", address)
+        };
+
+        if is_debug {
+            if let Ok(v) = &value {
+                println!("storage_ref: address {:?} index {:?} value {:?}", address, index, v);
+            } else {
+                println!("error reading");
+            }
         }
+
+        value
     }
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
