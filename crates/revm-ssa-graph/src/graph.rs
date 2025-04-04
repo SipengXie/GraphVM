@@ -13,6 +13,10 @@ pub struct SsaGraph {
     lsn_to_node: Vec<NodeIndex>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<LsnType>,
+    /// Mapping from LSN to its successor LSNs
+    successors: Vec<Vec<LsnType>>,
+    /// Mapping from LSN to its predecessor LSNs
+    predecessors: Vec<Vec<LsnType>>,
 }
 
 
@@ -22,6 +26,8 @@ impl SsaGraph {
             graph: DiGraph::with_capacity(node_num, edge_num),
             lsn_to_node: vec![NodeIndex::new(0); node_num + 1],
             storage_write: Vec::with_capacity(node_num + 1),
+            successors: vec![Vec::new(); node_num + 1],
+            predecessors: vec![Vec::new(); node_num + 1],
         }
     }
 
@@ -84,6 +90,21 @@ impl SsaGraph {
         lsn_vec
     }
 
+    /// Get all predecessors (dependencies) for a given LSN
+    /// 
+    /// # Arguments
+    /// * `lsn` - Logical sequence number
+    /// 
+    /// # Returns
+    /// * `Result<&[LsnType]>` - Slice of LSNs that are dependencies of the given LSN
+    #[inline(always)]
+    pub fn get_predecessors(&self, lsn: LsnType) -> Result<&[LsnType]> {
+        if lsn as usize >= self.predecessors.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        Ok(&self.predecessors[lsn as usize])
+    }
+
     /// Get a reference to execution results, primarily used by tracer
     /// 
     /// # Arguments
@@ -141,6 +162,10 @@ impl SsaGraph {
             for dep_lsn in deps {
                 if dep_lsn != entry.lsn && dep_lsn != 0 {
                     dep_lsns.insert(dep_lsn);
+                    // Add current LSN as successor to its dependency
+                    self.successors[dep_lsn as usize].push(entry.lsn);
+                    // Add dependency LSN as predecessor to current LSN
+                    self.predecessors[entry.lsn as usize].push(dep_lsn);
                 }
             }
         }
@@ -350,5 +375,14 @@ impl SsaGraph {
         }
 
         Ok(layers)
+    }
+
+    /// Get successors for a given LSN
+    #[inline(always)]
+    pub fn get_successors(&self, lsn: LsnType) -> Result<&[LsnType]> {
+        if lsn as usize >= self.successors.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        Ok(&self.successors[lsn as usize])
     }
 }
