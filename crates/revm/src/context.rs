@@ -16,7 +16,6 @@ use crate::{
     primitives::{Address, Bytes, Env, HandlerCfg, Log, B256, BLOCK_HASH_HISTORY, U256},
 };
 use std::boxed::Box;
-use hex;
 
 /// Main Context structure that contains both EvmContext and External context.
 pub struct Context<EXT, DB: Database> {
@@ -161,17 +160,10 @@ impl<EXT, DB: Database> Host for Context<EXT, DB> {
     }
 
     fn sload(&mut self, address: Address, index: U256) -> Option<StateLoad<U256>> {
-        let value = self.evm
+        self.evm
             .sload(address, index)
             .map_err(|e| self.evm.error = Err(e))
-            .ok();
-        let tx = &self.env().tx;
-        let caller_bytes = hex::decode("4B71e308D561b74A63C12c280789fe9B1BF93442").unwrap();
-        let caller: [u8; 20] = caller_bytes.try_into().unwrap();
-        if tx.caller == Address::from(caller) {
-            println!("sload: address {:?} index {:?} value {:?}", address, index, value);
-        }
-        value
+            .ok()
     }
 
     fn sstore(
