@@ -3693,6 +3693,7 @@ dependencies = [
  "ethers-contract",
  "ethers-core",
  "ethers-providers",
+ "hex",
  "indicatif",
  "lazy_static",
  "metrics",

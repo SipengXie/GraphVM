@@ -1,5 +1,4 @@
 use revm_interpreter::Eip7702CodeLoad;
-use revm_primitives::hex::FromHex;
 
 use crate::{
     interpreter::{AccountLoad, InstructionResult, SStoreResult, SelfDestructResult, StateLoad},
@@ -803,17 +802,6 @@ impl JournaledState {
                 (value, true)
             }
         };
-
-        let debug_list = vec![
-            Address::from_hex("0x44971abf0251958492fee97da3e5c5ada88b9185").unwrap(),
-            // Address::from_hex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
-            Address::from_hex("0xd289ea09aeece390629e9414d41b4d9d9bf43fd9").unwrap(),
-            Address::from_hex("0x197166597cfaf5473e6d4da2c5215fd2159f3bbb").unwrap(),
-        ];
-
-        if debug_list.contains(&address) {
-            println!("sload: {:?} key {:?} value {:?}", &address, key, value);
-        }
 
         if is_cold {
             // add it to journal as cold loaded.
