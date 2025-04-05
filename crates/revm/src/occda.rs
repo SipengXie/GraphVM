@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256, SpecId::LONDON, Spec,
+    Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256, SpecId::LONDON,
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -1001,7 +1001,9 @@ impl Occda {
             let new_balance = account.balance.saturating_add(coinbase_refund);
             let mut updated_account = account;
             updated_account.balance = new_balance;
-            db.commit(HashMap::from([(beneficiary, Account::from(updated_account))]));
+            let mut state = HashMap::default();
+            state.insert(beneficiary, Account::from(updated_account));
+            db.commit(state);
         }
     }
 
