@@ -145,6 +145,7 @@ pub fn byte<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
 
     let o1 = as_usize_saturated!(op1);
     *op2 = if o1 < 32 {
+        // `31 - o1` because `byte` returns LE, while we want BE
         U256::from(op2.byte(31 - o1))
     } else {
         U256::ZERO
@@ -155,6 +156,7 @@ pub fn byte<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     }
 }
 
+/// EIP-145: Bitwise shifting instructions in EVM
 pub fn shl<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
@@ -174,6 +176,7 @@ pub fn shl<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
     }
 }
 
+/// EIP-145: Bitwise shifting instructions in EVM
 pub fn shr<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
@@ -193,6 +196,7 @@ pub fn shr<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
     }
 }
 
+/// EIP-145: Bitwise shifting instructions in EVM
 pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);

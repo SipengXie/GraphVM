@@ -252,7 +252,7 @@ pub struct SelfDestructResult {
     pub had_value: bool,
     pub target_exists: bool,
     pub previously_destroyed: bool,
-    // ! add these two fields to support ssa
+    // ! add these 6 fields to support ssa
     pub is_created: bool,
     pub is_cancun_enabled: bool,
     pub address_info: AccountInfo,
