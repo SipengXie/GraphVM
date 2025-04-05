@@ -18,7 +18,7 @@ pub struct SsaGraph {
     /// Last Return
     last_return: LsnType,
     /// Refund gas
-    gas_calc: LsnType,
+    pub gas_calc: LsnType,
 }
 
 impl SsaGraph {
@@ -48,15 +48,23 @@ impl SsaGraph {
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
-        if is_storage_write!(entry.opcode) {
+        let op = entry.opcode;
+        if is_storage_write!(op) {
             self.storage_write.push(lsn);
         } 
         
-        if lsn >= 0xA0 && lsn <= 0xA4 {
+        // Check if opcode is a LOG operation (LOG0-LOG4)
+        if (0xA0..=0xA4).contains(&op) {
             self.logs.push(lsn);
-        } else if lsn == 0xDB {
+        } 
+        
+        // Track gas calculation operation
+        if op == 0xDB {
             self.gas_calc = lsn; 
-        } else if lsn == 0xD5 || lsn == 0xD8 {
+        } 
+        
+        // Track return operations
+        if op == 0xD5 || op == 0xD8 {
             self.last_return = lsn;
         }
         
@@ -411,7 +419,6 @@ impl SsaGraph {
         })?;
         assert_ne!(self.gas_calc, 0);
         let gas_node = self.get_node(self.gas_calc)?;
-        eprintln!("gas_calc: {}, gas_node: {:?}", self.gas_calc, gas_node);
         let gas_remaining = match &gas_node.outputs[1] {
             SSAOutput::Gas(gas) => *gas,
             _ => {

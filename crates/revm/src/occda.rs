@@ -28,8 +28,8 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    Account, AccountStatus, Bytes, EVMError, EvmStorageSlot, ExecutionResult, HaltReason,
-    LatestSpec, Output, SuccessReason, U256,
+    Account, AccountStatus, EVMError, EvmStorageSlot,
+    LatestSpec, U256,
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -358,7 +358,6 @@ impl Occda {
                             }
                         }
 
-                        let debug_index = 23;
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
@@ -415,7 +414,8 @@ impl Occda {
                         let read_write_set = evm.get_read_write_set();
                         task_result.read_write_set = Some(read_write_set);
 
-                        if let Some(mut logger) = evm.take_ssa_logger() {
+                        if is_prefetch && enable_ssa {
+                            let mut logger = evm.take_ssa_logger().unwrap();
                             let logs = logger.take_logs();
                             let graph_wrapper = self.dag_store[idx].clone();
                             self.thread_pool.spawn(move || {

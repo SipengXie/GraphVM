@@ -54,7 +54,6 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     #[inline(always)]
     pub fn execute_refund_gas(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        eprintln!("execute_refund_gas, node: {:?}", node);
         let gas_length = (node.inputs.len() - 5) / 2;
 
         let mut dynamic_gas_cost: u64 = 0;
