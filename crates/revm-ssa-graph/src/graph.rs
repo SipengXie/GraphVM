@@ -435,7 +435,7 @@ impl SsaGraph {
                 ))
             }
         };
-
+        eprintln!("gas_limit:{}, gas_remaining:{}, gas_refunded:{}", gas_limit, gas_remaining, gas_refunded);
         let gas_used = gas_limit - gas_remaining - gas_refunded;
 
         // 2. Pre-allocate log capacity to avoid reallocation
