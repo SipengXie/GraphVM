@@ -52,7 +52,7 @@ impl SsaGraph {
             op if is_storage_write!(op) => self.storage_write.push(lsn),
             0xA0..=0xA4 => self.logs.push(lsn),
             0xD5 | 0xD8 => self.last_return = lsn,
-            0xDB => self.gas_calc = lsn,
+            0xDB => {self.gas_calc = lsn; eprintln!("gas_calc: {}", lsn)},
             _ => {}
         }
         let node_idx = self.graph.add_node(entry);
@@ -406,7 +406,7 @@ impl SsaGraph {
         })?;
 
         let gas_node = self.get_node(self.gas_calc)?;
-        eprintln!("gas_node: {:?}", gas_node);
+        eprintln!("gas_calc: {}, gas_node: {:?}", self.gas_calc, gas_node);
         let gas_remaining = match &gas_node.outputs[1] {
             SSAOutput::Gas(gas) => *gas,
             _ => {
