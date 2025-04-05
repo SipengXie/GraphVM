@@ -428,7 +428,10 @@ impl SsaGraph {
             }
         };
         let gas_refunded = match &gas_node.outputs[2] {
-            SSAOutput::GasRefund(refund) => *refund as u64,
+            SSAOutput::GasRefund(refund) => {
+                eprintln!("gas_refund_node:{:?}", gas_node);
+                eprintln!("refund:{}", *refund);
+                *refund as u64},
             _ => {
                 return Err(ExecutionError::GraphError(
                     "Expected GasRefund output".to_string(),
