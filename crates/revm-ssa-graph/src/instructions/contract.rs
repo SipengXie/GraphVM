@@ -74,7 +74,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let base_gas_refunded = get_constant_i64!(graph, node.inputs[offset + 3]);
         let caller_info =
             get_storage_value!(graph, node.inputs[offset + 4], |key| self.get_state(key));
-
+        eprintln!("base_gas_refunded:{}, dynamic_gas_refunded:{}", base_gas_refunded, dynamic_gas_refund);
         let refund_gas =
             base_gas_remaining - dynamic_gas_cost + (base_gas_refunded + dynamic_gas_refund) as u64;
         let reimbursed_value = effective_gas_price * U256::from(refund_gas);

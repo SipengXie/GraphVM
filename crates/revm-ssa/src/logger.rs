@@ -352,6 +352,11 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::Constant(effective_gas_price));
         ssa_inputs.push(SSAInput::Constant(U256::from(gas_remaining))); // base gas remaining
         ssa_inputs.push(SSAInput::ConstantI64(gas_refunded)); // base gas refunded
+        
+        if gas_refunded < 0 {
+            eprintln!("base_gas_refund:{}",gas_refunded);
+        }
+        
         ssa_inputs.push(input_account_info!(self, caller));
 
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);
