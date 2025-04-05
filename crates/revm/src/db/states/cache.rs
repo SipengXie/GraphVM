@@ -110,7 +110,10 @@ impl CacheState {
             return None;
         }
 
-        let this_account = self.accounts.entry(address).or_insert(CacheAccount::new_loaded_not_existing());
+        let this_account = self
+            .accounts
+            .entry(address)
+            .or_insert(CacheAccount::new_loaded_not_existing());
 
         // let this_account = self
         //     .accounts

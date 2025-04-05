@@ -1,5 +1,9 @@
 use crate::{
-    gas::{self, warm_cold_cost, warm_cold_cost_with_delegation}, interpreter::Interpreter, opcode::*, primitives::{Bytes, Log, LogData, Spec, SpecId::*, B256, U256}, Host, InstructionResult
+    gas::{self, warm_cold_cost, warm_cold_cost_with_delegation},
+    interpreter::Interpreter,
+    opcode::*,
+    primitives::{Bytes, Log, LogData, Spec, SpecId::*, B256, U256},
+    Host, InstructionResult,
 };
 use core::cmp::min;
 use std::vec::Vec;
@@ -39,7 +43,11 @@ pub fn selfbalance<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     };
     push!(interpreter, balance.data);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_self_balance(SELFBALANCE, interpreter.contract.target_address, balance.data);
+        logger.log_self_balance(
+            SELFBALANCE,
+            interpreter.contract.target_address,
+            balance.data,
+        );
     }
 }
 
@@ -107,15 +115,19 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     if len == 0 {
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
             let mem_length = None;
-            let lsn = logger.log_extcodecopy(EXTCODECOPY,
+            let lsn = logger.log_extcodecopy(
+                EXTCODECOPY,
                 address,
                 memory_offset,
                 code_offset,
                 len,
                 code,
-                mem_length);
+                mem_length,
+            );
             // record the shadow_memory
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+            interpreter
+                .shared_memory
+                .record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -127,16 +139,24 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         .set_data(memory_offset, code_offset, len, &code);
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        let lsn = logger.log_extcodecopy(EXTCODECOPY,
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        let lsn = logger.log_extcodecopy(
+            EXTCODECOPY,
             address,
             memory_offset,
             code_offset,
             len,
             code,
-            mem_length);
+            mem_length,
+        );
         // record the shadow_memory
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+        interpreter
+            .shared_memory
+            .record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -165,7 +185,12 @@ pub fn sload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
     let original_index = *index;
     *index = value.data;
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_sload(SLOAD, interpreter.contract.target_address, original_index, value.data);
+        logger.log_sload(
+            SLOAD,
+            interpreter.contract.target_address,
+            original_index,
+            value.data,
+        );
     }
 }
 
@@ -184,16 +209,20 @@ pub fn sstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
         interpreter.gas.remaining(),
         state_load.is_cold,
     );
-    let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &state_load.data); 
+    let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &state_load.data);
 
     gas_or_fail!(interpreter, gas_cost);
-    refund!(
-        interpreter,
-        gas_refund
-    );
-    
+    refund!(interpreter, gas_refund);
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_sstore(SSTORE, interpreter.contract.target_address, index, value, gas_cost.unwrap(), gas_refund);
+        logger.log_sstore(
+            SSTORE,
+            interpreter.contract.target_address,
+            index,
+            value,
+            gas_cost.unwrap(),
+            gas_refund,
+        );
     }
 }
 
@@ -225,7 +254,12 @@ pub fn tload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
     *index = host.tload(interpreter.contract.target_address, *index);
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_tload(TLOAD, interpreter.contract.target_address, original_index, *index);
+        logger.log_tload(
+            TLOAD,
+            interpreter.contract.target_address,
+            original_index,
+            *index,
+        );
     }
 }
 
@@ -261,15 +295,23 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
             data: log_data,
         };
         let offset = as_usize_or_fail!(interpreter, offset);
-        let mem_deps = interpreter.shared_memory.get_shadow_deps(offset..offset+len);
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        logger.log_log_opcode(LOG0 + N as u8,
+        let mem_deps = interpreter
+            .shared_memory
+            .get_shadow_deps(offset..offset + len);
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_log_opcode(
+            LOG0 + N as u8,
             offset,
             len,
             topics,
             mem_deps,
             log_to_record.clone(),
-            mem_length);
+            mem_length,
+        );
 
         log_to_record
     } else {
@@ -309,10 +351,10 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_selfdestruct(
-            SELFDESTRUCT, 
-            interpreter.contract.target_address, 
-            target, 
-            is_created, 
+            SELFDESTRUCT,
+            interpreter.contract.target_address,
+            target,
+            is_created,
             is_cancun_enabled,
             address_info,
             address_status,

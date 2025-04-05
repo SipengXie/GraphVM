@@ -119,7 +119,10 @@ impl ShadowStack {
             println!("Stack underflow in dup: n={}, stack_len={}", n, len);
             Err(InstructionResult::StackUnderflow)
         } else if len + 1 > STACK_LIMIT {
-            println!("Stack overflow in dup: stack_len={}, limit={}", len, STACK_LIMIT);
+            println!(
+                "Stack overflow in dup: stack_len={}, limit={}",
+                len, STACK_LIMIT
+            );
             Err(InstructionResult::StackOverflow)
         } else {
             // SAFETY: check for out of bounds is done above and it makes this safe to do.
@@ -147,7 +150,10 @@ impl ShadowStack {
         let len = self.data.len();
         let n_m_index = n + m;
         if n_m_index >= len {
-            println!("Stack underflow in exchange: n={}, m={}, n+m={}, stack_len={}", n, m, n_m_index, len);
+            println!(
+                "Stack underflow in exchange: n={}, m={}, n+m={}, stack_len={}",
+                n, m, n_m_index, len
+            );
             return Err(InstructionResult::StackUnderflow);
         }
         // SAFETY: `n` and `n_m` are checked to be within bounds, and they don't overlap.
@@ -161,7 +167,6 @@ impl ShadowStack {
         }
         Ok(())
     }
-
 }
 
 #[cfg(feature = "serde")]
@@ -181,4 +186,4 @@ impl<'de> serde::Deserialize<'de> for ShadowStack {
         data.reserve(STACK_LIMIT - data.len());
         Ok(Self { data })
     }
-} 
+}

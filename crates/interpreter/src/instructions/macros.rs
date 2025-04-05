@@ -108,7 +108,7 @@ macro_rules! resize_memory {
             ) {
                 $interp.instruction_result = $crate::InstructionResult::MemoryOOG;
                 return $ret;
-                }
+            }
             resized = true;
         }
         resized

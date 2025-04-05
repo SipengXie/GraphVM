@@ -33,17 +33,17 @@ impl GraphWrapper {
 
         for lsn in lsns {
             match graph.add_edges(lsn) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     // Output current node and max LSN when error occurs
                     let node = graph.get_node(lsn);
                     let max_lsn = graph.num_nodes();
                     println!("Error adding edges for LSN {}: {:?}", lsn, e);
                     println!("Current node: {:?}", node);
-                    println!("Max LSN: {}", max_lsn+1);
-                    
+                    println!("Max LSN: {}", max_lsn + 1);
+
                     // Output all nodes
-                    for i in 1..max_lsn+1 {
+                    for i in 1..max_lsn + 1 {
                         let node = graph.get_node(i as LsnType).unwrap();
                         println!("Node {}: {:?}", i, node);
                     }

@@ -1,33 +1,36 @@
+use crate::access_tracker::AccessTracker;
+use crate::dag::TaskDag;
+use crate::db::{parallel_db::ParallelDB, Database, DatabaseCommit, DatabaseRef};
+use crate::evm::Evm;
 use crate::graph_wrapper::GraphWrapper;
+use crate::inspector_handle_register;
 use crate::inspectors::NoOpInspector;
+use crate::journaled_state::AccessType;
 /// OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
-/// 
+///
 /// This module implements parallel execution of EVM transactions using optimistic concurrency control.
 /// The main idea is to:
 /// 1. Execute transactions in parallel assuming no conflicts
 /// 2. Track read/write sets during execution
 /// 3. Validate and commit transactions in order
 /// 4. Retry conflicting transactions
-/// 
+///
 /// Design goals:
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{ResultAndState, HashMap, HashSet, Address};
-use crate::access_tracker::AccessTracker;
-use crate::journaled_state::AccessType;
-use crate::task::{Task, TaskResultItem};
-use crate::dag::TaskDag;
-use crate::evm::Evm;
-use crate::db::{Database, DatabaseCommit, DatabaseRef, parallel_db::ParallelDB};
-use crate::inspector_handle_register;
+use crate::primitives::{Address, HashMap, HashSet, ResultAndState};
 use crate::profiler;
+use crate::task::{Task, TaskResultItem};
 use std::sync::Arc;
 // use metrics::histogram;
 use parking_lot::RwLock;
-use rayon::ThreadPool;
 use rayon::prelude::*;
-use revm_primitives::{Account, AccountStatus, HaltReason, Bytes, EVMError, EvmStorageSlot, ExecutionResult, LatestSpec, Output, SuccessReason, U256};
+use rayon::ThreadPool;
+use revm_primitives::{
+    Account, AccountStatus, Bytes, EVMError, EvmStorageSlot, ExecutionResult, HaltReason,
+    LatestSpec, Output, SuccessReason, U256,
+};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -42,10 +45,10 @@ pub struct Occda {
     /// Dependency graph for tasks
     /// Used to determine execution order and detect conflicts
     dag: TaskDag,
-    
+
     /// Number of worker threads for parallel execution
     num_threads: usize,
-    
+
     /// Thread pool for managing parallel execution
     /// Pre-initialized to avoid creation overhead
     thread_pool: ThreadPool,
@@ -68,7 +71,7 @@ pub struct Occda {
 
 impl Occda {
     /// Creates a new OCCDA instance with specified number of threads
-    /// 
+    ///
     /// The thread pool is created upfront to:
     /// - Avoid runtime overhead of creating threads
     /// - Maintain consistent thread affinity
@@ -91,14 +94,19 @@ impl Occda {
     }
 
     /// Initialize tasks with their dependencies from the graph
-    /// 
+    ///
     /// This method:
     /// 1. Assigns sequence IDs based on dependencies
     /// 2. Ensures correct execution order
     /// 3. Prepares tasks for parallel execution
-    /// 
+    ///
     /// Returns a vector of tasks with updated sequence IDs (sid)
-    pub fn init(&mut self, tasks: Vec<Task>, graph: Option<&TaskDag>, enable_ssa: bool) -> Vec<Task> {
+    pub fn init(
+        &mut self,
+        tasks: Vec<Task>,
+        graph: Option<&TaskDag>,
+        enable_ssa: bool,
+    ) -> Vec<Task> {
         let len: usize = tasks.len();
         if enable_ssa {
             self.to_re_execution_store = Vec::<Vec<LsnType>>::with_capacity(len);
@@ -106,7 +114,8 @@ impl Occda {
             self.reads_store = Vec::<HashMap<StorageKey, LsnType>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new())));
+                self.dag_store
+                    .push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
             }
         }
@@ -114,7 +123,8 @@ impl Occda {
         for mut task in tasks {
             if let Some(g) = graph {
                 // Find the maximum sid among dependencies
-                let sid_max = g.get_dependencies(&task)
+                let sid_max = g
+                    .get_dependencies(&task)
                     .into_iter()
                     .map(|node| g.get_task_tid(node).unwrap_or(-1))
                     .max()
@@ -129,7 +139,7 @@ impl Occda {
     }
 
     /// Execute tasks in parallel using thread pool
-    /// 
+    ///
     /// Parameters:
     /// - ready_tasks: Tasks ready for parallel execution
     /// - h_tx: Reference to all transactions
@@ -137,7 +147,7 @@ impl Occda {
     /// - result_ptr: Raw pointer to result store
     /// - inspector_setup: Function to create inspector instances
     /// - is_prefetch: Boolean indicating whether the execution is for the prefetch phase
-    /// 
+    ///
     /// Returns:
     /// - Duration: Total time spent in parallel execution
     fn execute_parallel_tasks<DB, I>(
@@ -165,10 +175,10 @@ impl Occda {
         let first_create_input_ptr = self.first_create_input_store.as_mut_ptr() as usize;
         let opcode_counts_ptr = opcode_counts_store.as_mut_ptr() as usize;
         let parallel_start = std::time::Instant::now();
-        
+
         // Initialize thread task queues
         let mut chunks: Vec<Vec<usize>> = vec![Vec::new(); self.num_threads];
-        
+
         if is_prefetch || !enable_dep_graph {
             // Prefetch phase: evenly distribute tasks across threads
             let chunk_size = (ready_tasks.len() + self.num_threads - 1) / self.num_threads;
@@ -188,16 +198,19 @@ impl Occda {
 
                 let mut group = Vec::new();
                 let mut stack = vec![task_idx];
-                
+
                 // Depth-first search to find all related tasks
                 while let Some(idx) = stack.pop() {
                     if visited.insert(idx) {
                         group.push(idx);
-                        
+
                         // Get dependencies from DAG
-                        let task = Task { tid: idx as i32, ..Default::default() };
+                        let task = Task {
+                            tid: idx as i32,
+                            ..Default::default()
+                        };
                         let deps = self.dag.get_dependencies(&task);
-                        
+
                         // Add all unvisited dependencies to the stack
                         for dep_node in deps {
                             if let Some(dep_tid) = self.dag.get_task_tid(dep_node) {
@@ -222,8 +235,9 @@ impl Occda {
             task_groups.sort_by(|a, b| {
                 let min_tid_a = a.iter().map(|&idx| h_tx[idx].tid).min().unwrap_or(i32::MAX);
                 let min_tid_b = b.iter().map(|&idx| h_tx[idx].tid).min().unwrap_or(i32::MAX);
-                
-                min_tid_a.cmp(&min_tid_b)
+
+                min_tid_a
+                    .cmp(&min_tid_b)
                     .then_with(|| b.len().cmp(&a.len()))
             });
 
@@ -241,24 +255,31 @@ impl Occda {
         }
 
         // Execute tasks in parallel using thread pool
-        let thread_times = Arc::new(parking_lot::RwLock::new(vec![(
-            Duration::from_secs(0), Duration::from_secs(0),
-            Duration::from_secs(0), Duration::from_secs(0)); self.num_threads]));
+        let thread_times = Arc::new(parking_lot::RwLock::new(vec![
+            (
+                Duration::from_secs(0),
+                Duration::from_secs(0),
+                Duration::from_secs(0),
+                Duration::from_secs(0)
+            );
+            self.num_threads
+        ]));
 
         self.thread_pool.install(|| {
-            chunks.into_par_iter()
+            chunks
+                .into_par_iter()
                 .enumerate()
                 .for_each(|(thread_id, indexes)| {
                     // Clone the shared database instance for this thread
                     // Each thread gets its own view of the database with independent cache
-                    
+
                     // Measure database initialization time
                     // This includes time to set up the database reference
                     let db_read_start = std::time::Instant::now();
                     let db_read_end = std::time::Instant::now();
                     // let db_ref = &*db;
                     let db_read_time = db_read_end - db_read_start;
-                    
+
                     // Initialize timing metrics for this thread
                     // init_time: Time spent setting up EVM instances
                     // transact_time: Time spent in actual transaction execution
@@ -270,7 +291,7 @@ impl Occda {
                     let mut transact_times = Vec::with_capacity(indexes.len());
                     let mut gas_used = 0;
                     let mut re_execution_opcodes = 0;
-                    
+
                     let mut prefetch_time = 0;
 
                     // Process each transaction assigned to this thread
@@ -280,26 +301,27 @@ impl Occda {
                         // Each transaction needs its own inspector to track execution
                         let inspector = inspector_setup();
                         let db_ref = &*db;
-                        
+
                         // use ssa to re-execute the transaction
                         if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
                             // eprintln!("re-execute task: {} with ssa.", idx);
                             let to_re_execute = &self.to_re_execution_store[idx];
-                            
+
                             while !self.dag_store[idx].read().is_built() {
                                 std::hint::spin_loop();
                             }
                             let graph = self.dag_store[idx].read().get_graph();
-                            let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
-                                .map(|x| *x)
-                                .collect::<Vec<_>>()); 
+                            let execution_mode = ExecutionMode::Partial(
+                                to_re_execute.iter().map(|x| *x).collect::<Vec<_>>(),
+                            );
                             let mut executor = SSAExecutor::<_, LatestSpec>::new(
-                                graph, 
-                                db_ref, 
-                                &task.env, 
-                                None, 
-                                self.first_call_input_store[idx].clone(), 
-                                self.first_create_input_store[idx].clone())
+                                graph,
+                                db_ref,
+                                &task.env,
+                                None,
+                                self.first_call_input_store[idx].clone(),
+                                self.first_create_input_store[idx].clone(),
+                            )
                             .with_mode(execution_mode);
 
                             profiler::start("ssa-execution");
@@ -308,12 +330,15 @@ impl Occda {
 
                             match ssa_execution {
                                 Ok(nodes_to_execute_len) => {
-                                    let result_state = executor.graph.get_storage_write_outputs().unwrap();
-                                    let mut task_result: TaskResultItem<I> = TaskResultItem::default();
+                                    let result_state =
+                                        executor.graph.get_storage_write_outputs().unwrap();
+                                    let mut task_result: TaskResultItem<I> =
+                                        TaskResultItem::default();
                                     task_result.gas_limit = task.gas;
                                     task_result.inspector = Some(inspector);
                                     task_result.ssa_output = Some(result_state);
-                                    task_result.result = Some(executor.graph.generate_result(task.gas).unwrap());
+                                    task_result.result =
+                                        Some(executor.graph.generate_result(task.gas).unwrap());
                                     let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
                                     unsafe {
                                         *result_raw_ptr.add(idx) = task_result;
@@ -333,10 +358,9 @@ impl Occda {
                             }
                         }
 
-                        
                         let debug_index = 23;
                         // Initialize EVM instance with task-specific configuration
-                        // Measure setup time separately from execution time 
+                        // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
                         let mut evm = if is_prefetch && enable_ssa {
                             // enable ssa and prefetch, then we will pre-process the ssa graph
@@ -402,11 +426,14 @@ impl Occda {
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
-                            let first_call_input_raw_ptr = first_call_input_ptr as *mut Option<SSACallInput>;
-                            let first_create_input_raw_ptr = first_create_input_ptr as *mut Option<SSACreateInput>;
+                            let first_call_input_raw_ptr =
+                                first_call_input_ptr as *mut Option<SSACallInput>;
+                            let first_create_input_raw_ptr =
+                                first_create_input_ptr as *mut Option<SSACreateInput>;
                             unsafe {
                                 *first_call_input_raw_ptr.add(idx) = logger.take_first_call_input();
-                                *first_create_input_raw_ptr.add(idx) = logger.take_first_create_input();
+                                *first_create_input_raw_ptr.add(idx) =
+                                    logger.take_first_create_input();
                             }
                             let opcode_counts_raw_ptr = opcode_counts_ptr as *mut usize;
                             unsafe {
@@ -424,7 +451,7 @@ impl Occda {
                                 let ResultAndState { state, result } = result_and_state;
                                 profiler::note_str_unchecked(
                                     "gas-used",
-                                    &task.tx_hash.unwrap().to_string(), 
+                                    &task.tx_hash.unwrap().to_string(),
                                     &result.gas_used().to_string(),
                                 );
                                 gas_used += result.gas_used();
@@ -454,16 +481,17 @@ impl Occda {
                     }
 
                     // Store timing metrics for this thread
-                    thread_times.write()[thread_id] = (db_read_time, init_time, transact_time, write_result_time);
+                    thread_times.write()[thread_id] =
+                        (db_read_time, init_time, transact_time, write_result_time);
 
                     profiler::note_str_unchecked(
-                        "gas-used", 
-                        &thread_id.to_string(), 
+                        "gas-used",
+                        &thread_id.to_string(),
                         &gas_used.to_string(),
                     );
                     profiler::note_str_unchecked(
-                        "re-execution-opcodes", 
-                        &thread_id.to_string(), 
+                        "re-execution-opcodes",
+                        &thread_id.to_string(),
                         &re_execution_opcodes.to_string(),
                     );
 
@@ -476,7 +504,6 @@ impl Occda {
                     }
                     // Log detailed transaction timing statistics
                     // This helps identify performance patterns and outliers
-                    
                 });
         });
         // for (thread_id, (db_read, init, transact, write)) in thread_times.read().iter().enumerate() {
@@ -489,26 +516,26 @@ impl Occda {
     }
 
     /// Main execution function that processes transactions in parallel
-    /// 
+    ///
     /// This is the core of OCCDA implementation, featuring:
     /// - Dynamic task scheduling
     /// - Parallel execution with conflict detection
     /// - Ordered commit phase
     /// - Performance monitoring
-    /// 
+    ///
     /// The execution follows these phases:
     /// 1. Preparation: Find ready tasks
     /// 2. Execution: Run tasks in parallel
     /// 3. Validation: Check for conflicts
     /// 4. Commit/Retry: Commit successful tasks, retry conflicts
-    /// 
+    ///
     /// Performance tracking includes:
     /// - Preparation time
     /// - Parallel execution time
     /// - Sequential execution time
     /// - Commit time
     /// - Conflict rates
-    /// 
+    ///
     /// TODO: Consider implementing:
     /// - Adaptive batch sizing
     /// - More sophisticated conflict resolution
@@ -541,12 +568,12 @@ impl Occda {
         let mut exec_size = 0;
         let mut seq_exec_size = 0;
         let mut parallel_exec_size = 0;
-        
+
         // Task management queues:
         // h_ready: Holds tasks that are ready to execute (all dependencies satisfied)
         // h_exec: Priority queue of tasks ordered by sequence ID (sid)
         // h_commit: Tasks that have finished execution and await commit
-        let mut h_ready: Vec<usize> = Vec::new();          // Tasks ready for execution
+        let mut h_ready: Vec<usize> = Vec::new(); // Tasks ready for execution
         let mut h_exec: BinaryHeap<Reverse<(i32, usize)>> = BinaryHeap::new(); // Tasks executing
         let mut h_commit: BinaryHeap<Reverse<usize>> = BinaryHeap::new(); // Tasks ready for commit
         let mut next = 0;
@@ -561,7 +588,7 @@ impl Occda {
         // AccessTracker monitors read/write sets to detect conflicts between transactions
         // This is crucial for maintaining consistency in parallel execution
         let mut access_tracker = AccessTracker::new();
-        
+
         let mut opcode_counts_store = Vec::<usize>::with_capacity(len);
         // Initialize the store for ssa re-execution, we count the time in the prefetch phase.
         if enable_ssa {
@@ -572,7 +599,8 @@ impl Occda {
             self.first_create_input_store = Vec::<Option<SSACreateInput>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
-                self.dag_store.push(Arc::new(RwLock::new(GraphWrapper::new())));
+                self.dag_store
+                    .push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
                 self.first_call_input_store.push(None);
                 self.first_create_input_store.push(None);
@@ -583,7 +611,7 @@ impl Occda {
         if enable_prefetch {
             parallel_db.set_parallel_mode(true);
             self.execute_parallel_tasks(
-                &(0..=len-1).collect(),
+                &(0..=len - 1).collect(),
                 h_tx,
                 &mut parallel_db,
                 result_store,
@@ -593,14 +621,14 @@ impl Occda {
                 enable_dep_graph, //  we may enbale prefetch without constructing dependency graph
                 enable_ssa,
             );
-            
+
             if enable_dep_graph {
                 self.dag = self.build_dag_from_results(result_store);
                 self.update_task_sids(h_tx, &self.dag);
             }
             parallel_db.reset_stats();
         }
-        
+
         let mut redo_gas_used = 0;
         let mut re_execution_opcodes = 0;
         let mut total_opcodes = 0;
@@ -635,11 +663,11 @@ impl Occda {
             // Prepare batch of tasks for execution
             exec_size += h_ready.len();
             let ready_tasks = std::mem::take(&mut h_ready);
-            
+
             // Set mode based on execution path
             if ready_tasks.len() < self.num_threads {
                 parallel_db.set_parallel_mode(false);
-                
+
                 profiler::start("non-parallel");
                 let seq_start = std::time::Instant::now();
                 seq_exec_size += ready_tasks.len();
@@ -651,45 +679,47 @@ impl Occda {
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
                         // eprintln!("re-execute task: {} with ssa.", idx);
                         let to_re_execute = &self.to_re_execution_store[idx];
-                        
+
                         while !self.dag_store[idx].read().is_built() {
                             std::hint::spin_loop();
                         }
                         let graph = self.dag_store[idx].read().get_graph();
-                        let execution_mode = ExecutionMode::Partial(to_re_execute.iter()
-                            .map(|x| *x)
-                            .collect::<Vec<_>>());
+                        let execution_mode = ExecutionMode::Partial(
+                            to_re_execute.iter().map(|x| *x).collect::<Vec<_>>(),
+                        );
                         let mut executor = SSAExecutor::<_, LatestSpec>::new(
-                            graph, 
-                            &parallel_db, 
-                            &task.env, 
-                            None, 
-                            self.first_call_input_store[idx].clone(), 
-                            self.first_create_input_store[idx].clone())
-                            .with_mode(execution_mode);
-                        
+                            graph,
+                            &parallel_db,
+                            &task.env,
+                            None,
+                            self.first_call_input_store[idx].clone(),
+                            self.first_create_input_store[idx].clone(),
+                        )
+                        .with_mode(execution_mode);
+
                         profiler::start("ssa-execution");
                         let ssa_execution = executor.execute();
                         profiler::end("ssa-execution");
 
                         match ssa_execution {
                             Ok(nodes_to_execute_len) => {
-                                let result_state = executor.graph.get_storage_write_outputs().unwrap();
+                                let result_state =
+                                    executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);
                                 task_result.ssa_output = Some(result_state);
                                 // TODO: simplify the result generation now.
                                 task_result.result = if result_store[idx].result.is_none() {
-                                    Some(ExecutionResult::Success { 
+                                    Some(ExecutionResult::Success {
                                         reason: SuccessReason::Stop,
                                         gas_used: 0,
                                         gas_refunded: 0,
                                         logs: vec![],
-                                        output: Output::Call(Bytes::default())
-                                    }) 
-                                } else { 
-                                    result_store[idx].result.clone() 
+                                        output: Output::Call(Bytes::default()),
+                                    })
+                                } else {
+                                    result_store[idx].result.clone()
                                 };
                                 result_store[idx] = task_result;
                                 drop(executor);
@@ -706,20 +736,19 @@ impl Occda {
                     }
 
                     // Normal execution path
-                    let mut evm = 
-                    Evm::builder()
+                    let mut evm = Evm::builder()
                         .with_ref_db(&parallel_db)
                         .modify_env(|env| env.clone_from(&task.env))
                         .with_external_context(NoOpInspector)
                         .with_spec_id(task.spec_id)
                         .append_handler_register(inspector_handle_register)
                         .build();
-                    
+
                     profiler::start("evm-transact");
                     let result = evm.transact();
                     profiler::end("evm-transact");
-                    
-                    let mut task_result = TaskResultItem::default();    
+
+                    let mut task_result = TaskResultItem::default();
                     // Track read-write access for conflict detection
                     // This information is crucial for maintaining consistency
                     let read_write_set = evm.get_read_write_set();
@@ -727,7 +756,7 @@ impl Occda {
 
                     drop(evm);
                     task_result.inspector = Some(inspector);
-                    
+
                     match result {
                         Ok(result_and_state) => {
                             let ResultAndState { state, result } = result_and_state;
@@ -740,15 +769,14 @@ impl Occda {
                             task_result.result = None;
                         }
                     }
-                    
+
                     result_store[idx] = task_result;
                 }
-                
+
                 let seq_end = std::time::Instant::now();
                 seq_time += seq_end - seq_start;
                 profiler::end("non-parallel");
                 h_commit.extend(ready_tasks.iter().map(|&idx| Reverse(idx)));
-                
             } else {
                 profiler::start("parallel");
                 parallel_exec_size += ready_tasks.len();
@@ -770,9 +798,12 @@ impl Occda {
                     h_tx[*task_idx].sid = h_tx[*task_idx].tid - 1;
                     h_exec.push(Reverse((h_tx[*task_idx].sid, h_tx[*task_idx].tid as usize)));
                 }
-                h_commit.extend(ready_tasks.iter()
-                    .filter(|&&idx| !failed_tasks.contains(&idx))
-                    .map(|&idx| Reverse(idx)));
+                h_commit.extend(
+                    ready_tasks
+                        .iter()
+                        .filter(|&&idx| !failed_tasks.contains(&idx))
+                        .map(|&idx| Reverse(idx)),
+                );
                 profiler::end("parallel");
             }
 
@@ -783,7 +814,7 @@ impl Occda {
             let commit_start = std::time::Instant::now();
             profiler::start("commit-all");
             profiler::note_str("commit-all", "type", "commit");
-            
+
             // Commit phase: process transactions in sequential order
             // This ensures consistency and handles conflicts
             loop {
@@ -798,7 +829,7 @@ impl Occda {
 
                 let task_result = &mut result_store[task_idx as usize];
 
-                let is_conflict = if h_tx[task_idx].sid ==  h_tx[task_idx].tid - 1 {
+                let is_conflict = if h_tx[task_idx].sid == h_tx[task_idx].tid - 1 {
                     false
                 } else {
                     let read_write_set = task_result.read_write_set.as_ref().unwrap();
@@ -810,7 +841,8 @@ impl Occda {
                     );
                     if !conflict.is_empty() && enable_ssa {
                         let first_reads = &self.reads_store[task_idx];
-                        self.to_re_execution_store[task_idx] = Self::get_storage_first_reads(first_reads, &conflict);
+                        self.to_re_execution_store[task_idx] =
+                            Self::get_storage_first_reads(first_reads, &conflict);
                         // if self.to_re_execution_store[task_idx].is_empty() {
                         //     println!("\n[debug] to_re_execution_store is empty, detail:");
                         //     println!("block_number: {}", h_tx[task_idx].env.block.number);
@@ -838,18 +870,21 @@ impl Occda {
                         total_opcodes += opcode_counts_store[task_idx];
                     }
                 } else {
-                    let state: HashMap<Address, Account> = 
-                    if let Some(ssa_state) = &task_result.ssa_output {
-                        // Convert SSA state to normal state
-                        let state = self.convert_ssa_to_state(&mut parallel_db, ssa_state).map_err(|_|()).unwrap_or_default();
-                        // Clone a state to task_result, for the reth usage.
-                        task_result.state = Some(state.clone());
-                        state
-                    } else if let Some(state) = task_result.state.clone() {
-                        state
-                    } else {
-                        continue;
-                    };
+                    let state: HashMap<Address, Account> =
+                        if let Some(ssa_state) = &task_result.ssa_output {
+                            // Convert SSA state to normal state
+                            let state = self
+                                .convert_ssa_to_state(&mut parallel_db, ssa_state)
+                                .map_err(|_| ())
+                                .unwrap_or_default();
+                            // Clone a state to task_result, for the reth usage.
+                            task_result.state = Some(state.clone());
+                            state
+                        } else if let Some(state) = task_result.state.clone() {
+                            state
+                        } else {
+                            continue;
+                        };
                     // println!("idx:{}, state: {:?}", task_idx, state);
 
                     parallel_db.commit(state.clone());
@@ -858,10 +893,7 @@ impl Occda {
                     }
 
                     let rw_set = task_result.get_read_write_set();
-                    access_tracker.record_write_set(
-                        h_tx[task_idx].tid,
-                        &rw_set.write_set,
-                    );
+                    access_tracker.record_write_set(h_tx[task_idx].tid, &rw_set.write_set);
                     next += 1;
                 }
             }
@@ -878,19 +910,23 @@ impl Occda {
         profiler::note_str_unchecked("metrics", "redo-gas-used", &redo_gas_used.to_string());
         profiler::note_str_unchecked("metrics", "block-tx-num", &tx_size.to_string());
         profiler::note_str_unchecked("metrics", "total-opcodes", &total_opcodes.to_string());
-        profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
+        profiler::note_str_unchecked(
+            "re-execution-opcodes",
+            "main",
+            &re_execution_opcodes.to_string(),
+        );
 
         println!(
             "finished execute tasks size: {} with conflict rate: {:.2}%",
             result_store.len(),
             conflict_rate
         );
-        
+
         // Log detailed timing breakdown for performance analysis
         println!("perpare_time: {:?}", perpare_time);
         println!("parallel_time: {:?}", parallel_time);
         println!("seq_time: {:?}", seq_time);
-        println!("commit_time: {:?}", commit_time); 
+        println!("commit_time: {:?}", commit_time);
         // Clean up resources in background to avoid blocking
         // This includes access tracker and task management queues
         self.thread_pool.spawn(move || {
@@ -905,7 +941,10 @@ impl Occda {
             parallel_db.set_parallel_mode(true);
             parallel_db.get_stats()
         };
-        println!("  hit_rate: {:.2}%, hits: {}, misses: {}", hit_rate, hits, misses);
+        println!(
+            "  hit_rate: {:.2}%, hits: {}, misses: {}",
+            hit_rate, hits, misses
+        );
         println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
         println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
 
@@ -914,11 +953,17 @@ impl Occda {
             parallel_db.set_parallel_mode(false);
             parallel_db.get_stats()
         };
-        println!("  hit_rate: {:.2}%, hits: {}, misses: {}", hit_rate, hits, misses);
+        println!(
+            "  hit_rate: {:.2}%, hits: {}, misses: {}",
+            hit_rate, hits, misses
+        );
         println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
         println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
-        println!("  seq_exec_size: {}, parallel_exec_size: {}", seq_exec_size, parallel_exec_size);
-        
+        println!(
+            "  seq_exec_size: {}, parallel_exec_size: {}",
+            seq_exec_size, parallel_exec_size
+        );
+
         // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
         // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
         // let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
@@ -938,7 +983,7 @@ impl Occda {
         // eprintln!("\n------------- Normal Accounts -------------");
         // eprintln!("Account 1: {:?}", account1);
         // eprintln!("Account 2: {:?}", account2);
-        // eprintln!("Account 3: {:?}", account3); 
+        // eprintln!("Account 3: {:?}", account3);
         // eprintln!("Account 4: {:?}", account4);
         // eprintln!("Account 5: {:?}", account5);
 
@@ -950,16 +995,16 @@ impl Occda {
     }
 
     /// Convert SSA state to normal state by applying storage updates
-    /// 
+    ///
     /// This function takes SSA execution results and converts them to normal state updates by:
     /// 1. Using result cache as primary source for account data
     /// 2. Falling back to DB lookup if account not in cache
     /// 3. Applying storage updates to accounts in order
-    /// 
+    ///
     /// # Parameters
-    /// * `db` - Database to read accounts from 
+    /// * `db` - Database to read accounts from
     /// * `ssa_state` - SSA execution results containing storage updates
-    /// 
+    ///
     /// # Returns
     /// * Result containing updated account states or error
     pub fn convert_ssa_to_state<DB>(
@@ -968,7 +1013,7 @@ impl Occda {
         ssa_state: &[SSAOutput],
     ) -> Result<HashMap<Address, Account>, EVMError<DB::Error>>
     where
-        DB: DatabaseRef
+        DB: DatabaseRef,
     {
         let mut result = HashMap::default();
 
@@ -981,81 +1026,81 @@ impl Occda {
                                 .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
                                 .unwrap_or_else(|_| Account::new_not_existing())
                         });
-                        
+
                         account.status |= AccountStatus::Touched;
 
-                        
                         if let Some(info) = value.as_account_info() {
                             account.info = info.clone();
                         }
-                        
+
                         if let Some(status) = value.as_account_status() {
                             account.status |= *status;
                         }
-                        
-                    },
+                    }
                     StorageKey::Slot(address, index) => {
                         let account = result.entry(address).or_insert_with(|| {
                             db.basic_ref(address)
                                 .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
                                 .unwrap_or_else(|_| Account::new_not_existing())
                         });
-                        
+
                         account.status |= AccountStatus::Touched;
-                        
+
                         if let StorageValue::Slot(new_value) = **value {
                             let slot = account.storage.entry(index).or_insert_with(|| {
                                 let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
                                 EvmStorageSlot::new(value)
                             });
-                            
+
                             slot.present_value = new_value;
                         }
-                    },
+                    }
                 }
             }
         }
-        
+
         Ok(result)
     }
 
     /// Returns an array of first read LSNs from the SSA logger
     /// Input is a HashMap<Address, HashSet<AccessType>> representing the read set
-    fn get_storage_first_reads(first_reads: &HashMap<StorageKey, LsnType>, read_set: &Vec<(Address, AccessType)>) -> Vec<LsnType> {
+    fn get_storage_first_reads(
+        first_reads: &HashMap<StorageKey, LsnType>,
+        read_set: &Vec<(Address, AccessType)>,
+    ) -> Vec<LsnType> {
         let mut result = Vec::new();
-            
-            // Iterate through the read set
-            for (addr, access_type) in read_set {
-                let lsn = match access_type {
-                    AccessType::AccountInfo => first_reads.get(&StorageKey::AccountInfo(*addr)),
-                    AccessType::AccountStatus => first_reads.get(&StorageKey::AccountStatus(*addr)),
-                    AccessType::StorageSlot(slot) => first_reads.get(&StorageKey::Slot(*addr, *slot)),
-                    _ => continue,
-                };
-                if lsn.is_none() {
-                    // eprintln!("Cannot find lsn for {:?}: {:?}, fall back to EVM re-execution.", addr, access_type);
-                    return vec![];
-                }
-                result.push(*lsn.unwrap());
+
+        // Iterate through the read set
+        for (addr, access_type) in read_set {
+            let lsn = match access_type {
+                AccessType::AccountInfo => first_reads.get(&StorageKey::AccountInfo(*addr)),
+                AccessType::AccountStatus => first_reads.get(&StorageKey::AccountStatus(*addr)),
+                AccessType::StorageSlot(slot) => first_reads.get(&StorageKey::Slot(*addr, *slot)),
+                _ => continue,
+            };
+            if lsn.is_none() {
+                // eprintln!("Cannot find lsn for {:?}: {:?}, fall back to EVM re-execution.", addr, access_type);
+                return vec![];
             }
+            result.push(*lsn.unwrap());
+        }
         result
     }
 
-
     /// Checks if two access sets have any overlapping addresses with matching access types
-    /// 
+    ///
     /// This function determines if there are any conflicts between two access sets by checking:
     /// 1. If they share any common addresses
     /// 2. If the AccessType sets for those addresses have any elements in common
-    /// 
+    ///
     /// # Parameters
     /// * `set1`, `set2` - HashMaps mapping addresses to their AccessType sets
-    /// 
+    ///
     /// # Returns
     /// * `bool` - true if there exists at least one address where both sets have a common AccessType
     fn has_intersection(
         set1: &HashMap<Address, HashSet<AccessType>>,
-        set2: &HashMap<Address, HashSet<AccessType>>
+        set2: &HashMap<Address, HashSet<AccessType>>,
     ) -> bool {
         set1.iter().any(|(addr, types1)| {
             if let Some(types2) = set2.get(addr) {
@@ -1068,25 +1113,28 @@ impl Occda {
     }
 
     /// Builds a dependency graph (DAG) from transaction execution results
-    /// 
+    ///
     /// Analyzes read/write sets of executed transactions to construct a directed
     /// acyclic graph representing dependencies between transactions. An edge is added
     /// when a task's write set conflicts with any previous task's read set.
-    /// 
+    ///
     /// # Parameters
     /// * `result_store` - Vector of transaction execution results containing access patterns
-    /// 
+    ///
     /// # Returns
     /// * `TaskDag` - Constructed dependency graph
     fn build_dag_from_results<I>(&self, result_store: &[TaskResultItem<I>]) -> TaskDag {
         let dag_start = std::time::Instant::now();
         let mut dag = TaskDag::new();
-        
+
         // Create nodes for all transactions
         for i in 0..result_store.len() {
-            dag.add_task(&Task { tid: i as i32, ..Default::default() });
+            dag.add_task(&Task {
+                tid: i as i32,
+                ..Default::default()
+            });
         }
-        
+
         // For each task i, check conflicts with all previous tasks
         for i in 0..result_store.len() {
             let tx_i = &result_store[i];
@@ -1099,26 +1147,32 @@ impl Occda {
                         if Self::has_intersection(&rw_set_i.write_set, &rw_set_j.read_set) {
                             // Add dependency: j must complete before i
                             dag.add_dependency(
-                                &Task { tid: i as i32, ..Default::default() },
-                                &Task { tid: j as i32, ..Default::default() }
+                                &Task {
+                                    tid: i as i32,
+                                    ..Default::default()
+                                },
+                                &Task {
+                                    tid: j as i32,
+                                    ..Default::default()
+                                },
                             );
                         }
                     }
                 }
             }
         }
-        
+
         let dag_end = std::time::Instant::now();
         println!("dag_time: {:?}", dag_end - dag_start);
         dag
     }
 
     /// Updates sequence IDs (sid) of tasks based on their dependencies in the DAG
-    /// 
+    ///
     /// For each task, sets its sequence ID to the maximum transaction ID (tid) among
     /// its dependencies. This ensures that a task won't execute until all its
     /// dependencies have completed.
-    /// 
+    ///
     /// # Parameters
     /// * `h_tx` - Mutable slice of tasks to update
     /// * `dag` - Reference to the dependency graph

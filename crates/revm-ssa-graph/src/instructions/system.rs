@@ -1,18 +1,18 @@
 use std::cmp::min;
 
-use revm_primitives::{B256, U256};
-use revm_ssa::{SSALogEntry, SSAOutput, SSAInput};
-use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
-use super::{get_contract_env, get_memory, get_return_data_buffer};
 use super::utils::as_usize_saturated;
+use super::{get_contract_env, get_memory, get_return_data_buffer};
+use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::Spec;
+use revm_primitives::{B256, U256};
+use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute GAS operation
     /// ! For a formal implementation, we should consider all front-loaded dynamic gas commands
     #[inline(always)]
-    pub fn execute_gas(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_gas(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let gas = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         node.outputs[0] = SSAOutput::Stack(gas);
         Ok(())
@@ -20,7 +20,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute ADDRESS operation
     #[inline(always)]
-    pub fn execute_address(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_address(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let address = get_contract_env!(graph, node.inputs[0]);
         node.outputs[0] = SSAOutput::Stack(address.target_address.into_word().into());
         Ok(())
@@ -28,7 +28,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLER operation
     #[inline(always)]
-    pub fn execute_caller(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_caller(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let caller = get_contract_env!(graph, node.inputs[0]);
         node.outputs[0] = SSAOutput::Stack(caller.caller.into_word().into());
         Ok(())
@@ -36,7 +36,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CODESIZE operation
     #[inline(always)]
-    pub fn execute_codesize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_codesize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let code_length = get_contract_env!(graph, node.inputs[0]).bytecode.len();
         node.outputs[0] = SSAOutput::Stack(U256::from(code_length));
         Ok(())
@@ -44,12 +44,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CODECOPY operation
     #[inline(always)]
-    pub fn execute_codecopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_codecopy(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let memory_offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        let code = get_contract_env!(graph, node.inputs[3]).bytecode.original_byte_slice();
+        let code = get_contract_env!(graph, node.inputs[3])
+            .bytecode
+            .original_byte_slice();
         let memory_offset = as_usize_saturated!(memory_offset);
         let code_offset = as_usize_saturated!(code_offset);
         let len = as_usize_saturated!(len);
@@ -67,7 +68,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             padded_slice[..code_slice.len()].copy_from_slice(&code_slice);
             padded_slice
         };
-        
+
         node.outputs[0] = SSAOutput::Memory(padded_code_slice.into());
         if new_size > self.memory_size() {
             if node.outputs.len() < 2 {
@@ -82,14 +83,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLDATALOAD operation
     #[inline(always)]
-    pub fn execute_calldataload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_calldataload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let call_data = get_contract_env!(graph, node.inputs[1]).input.clone();
         let offset = as_usize_saturated!(offset);
         let mut word = [0u8; 32];
         if offset < call_data.len() {
             let length = 32.min(call_data.len() - offset);
-            word[..length].copy_from_slice(&call_data[offset..offset+length]);
+            word[..length].copy_from_slice(&call_data[offset..offset + length]);
         }
         node.outputs[0] = SSAOutput::Stack(B256::from_slice(&word).into());
         Ok(())
@@ -97,7 +98,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLDATASIZE operation
     #[inline(always)]
-    pub fn execute_calldatasize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_calldatasize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let input = get_contract_env!(graph, node.inputs[0]).input.clone();
         node.outputs[0] = SSAOutput::Stack(U256::from(input.len()));
         Ok(())
@@ -105,7 +106,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLVALUE operation
     #[inline(always)]
-    pub fn execute_callvalue(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_callvalue(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let call_value = get_contract_env!(graph, node.inputs[0]).call_value;
         node.outputs[0] = SSAOutput::Stack(call_value);
         Ok(())
@@ -113,7 +114,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute CALLDATACOPY operation
     #[inline(always)]
-    pub fn execute_calldatacopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_calldatacopy(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let memory_offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let data_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -129,13 +130,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         } else {
             // Prevent data from being too short
             let data_end = min(data_offset + len, call_data.len());
-            let data_slice = call_data.slice(data_offset..data_end); 
+            let data_slice = call_data.slice(data_offset..data_end);
             // Pad data to len length
             let mut padded_data = vec![0u8; len];
             padded_data[..data_slice.len()].copy_from_slice(&data_slice);
             padded_data
         };
-        
+
         node.outputs[0] = SSAOutput::Memory(padded_data_slice.into());
         if new_size > self.memory_size() {
             if node.outputs.len() < 2 {
@@ -150,7 +151,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURNDATASIZE operation
     #[inline(always)]
-    pub fn execute_returndatasize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_returndatasize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let return_data = get_return_data_buffer!(graph, node.inputs[0]);
         node.outputs[0] = SSAOutput::Stack(U256::from(return_data.len()));
         Ok(())
@@ -158,7 +159,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURNDATACOPY operation
     #[inline(always)]
-    pub fn execute_returndatacopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_returndatacopy(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let memory_offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let data_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -181,7 +186,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             padded_data[..data_slice.len()].copy_from_slice(&data_slice);
             padded_data
         };
-        
+
         node.outputs[0] = SSAOutput::Memory(padded_data_slice.into());
         if new_size > self.memory_size() {
             if node.outputs.len() < 2 {
@@ -196,14 +201,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURNDATALOAD operation
     #[inline(always)]
-    pub fn execute_returndataload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_returndataload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let return_data = get_return_data_buffer!(graph, node.inputs[1]);
         let offset = as_usize_saturated!(offset);
         let mut word = [0u8; 32];
         if offset < return_data.len() {
             let length = 32.min(return_data.len() - offset);
-            word[..length].copy_from_slice(&return_data[offset..offset+length]);
+            word[..length].copy_from_slice(&return_data[offset..offset + length]);
         }
         node.outputs[0] = SSAOutput::Stack(B256::from(word).into());
         Ok(())
@@ -211,7 +216,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute KECCAK256 operation
     #[inline(always)]
-    pub fn execute_keccak256(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_keccak256(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let data = get_memory!(graph, &node.inputs[2]);

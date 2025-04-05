@@ -1,33 +1,29 @@
+use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode};
-use revm_primitives::{
-    Address, Bytes, B256, Spec, U256,
-};
+use revm_primitives::{Address, Bytes, Spec, B256, U256};
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
-    output_account_info, output_account_status, ContractEnv, SSAInput, 
-    SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, 
-    SSACreateOutcome, SSACreateScheme, SSAInstructionResult, 
-    SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
-};
-use crate::{
-    get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, 
-    Result, SsaGraph
+    output_account_info, output_account_status, ContractEnv, SSACallInput, SSACallOutcome,
+    SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInput,
+    SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue,
 };
 
 use crate::{
-    as_u64_saturated, as_usize_saturated, get_call_input, 
-    get_contract_env, get_interpreter_result, get_memory, 
-    get_storage_value, u256_to_bool
+    as_u64_saturated, as_usize_saturated, get_call_input, get_contract_env, get_interpreter_result,
+    get_memory, get_storage_value, u256_to_bool,
 };
 
 use super::{get_constant_i64, get_gas_cost, get_gas_refund};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
-
     /// Execute deduct caller operation
     #[inline(always)]
-    pub fn execute_deduct_caller(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_deduct_caller(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let caller = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let is_create = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let gas_cost = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -36,10 +32,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let caller_info = caller_info.as_account_info().unwrap();
         let is_create = u256_to_bool!(is_create)?;
         let caller = Address::from_word(B256::from(caller));
-        
+
         let new_caller_info = AccountInfo {
             balance: caller_info.balance - gas_cost,
-            nonce: if is_create { caller_info.nonce } else { caller_info.nonce + 1 },
+            nonce: if is_create {
+                caller_info.nonce
+            } else {
+                caller_info.nonce + 1
+            },
             code: caller_info.code.clone(),
             code_hash: caller_info.code_hash,
         };
@@ -53,8 +53,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     #[inline(always)]
-    pub fn execute_refund_gas(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_refund_gas(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let gas_length = (node.inputs.len() - 5) / 2;
 
         let mut dynamic_gas_cost: u64 = 0;
@@ -63,21 +62,23 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         }
 
         let mut dynamic_gas_refund: i64 = 0;
-        for input in node.inputs[gas_length..2*gas_length].iter() {
+        for input in node.inputs[gas_length..2 * gas_length].iter() {
             dynamic_gas_refund += get_gas_refund!(graph, *input);
         }
-        
-        let offset = 2*gas_length;
-        let caller = get_ssa_output_stack_or_const!(graph, node.inputs[offset]);
-        let effective_gas_price = get_ssa_output_stack_or_const!(graph, node.inputs[offset+1]);
-        let base_gas_remaining = get_ssa_output_stack_or_const!(graph, node.inputs[offset+2]);
-        let base_gas_remaining = as_u64_saturated!(base_gas_remaining);
-        let base_gas_refunded = get_constant_i64!(graph, node.inputs[offset+3]);
-        let caller_info = get_storage_value!(graph, node.inputs[offset+4], |key| self.get_state(key));
 
-        let refund_gas = base_gas_remaining - dynamic_gas_cost + (base_gas_refunded + dynamic_gas_refund) as u64;
+        let offset = 2 * gas_length;
+        let caller = get_ssa_output_stack_or_const!(graph, node.inputs[offset]);
+        let effective_gas_price = get_ssa_output_stack_or_const!(graph, node.inputs[offset + 1]);
+        let base_gas_remaining = get_ssa_output_stack_or_const!(graph, node.inputs[offset + 2]);
+        let base_gas_remaining = as_u64_saturated!(base_gas_remaining);
+        let base_gas_refunded = get_constant_i64!(graph, node.inputs[offset + 3]);
+        let caller_info =
+            get_storage_value!(graph, node.inputs[offset + 4], |key| self.get_state(key));
+
+        let refund_gas =
+            base_gas_remaining - dynamic_gas_cost + (base_gas_refunded + dynamic_gas_refund) as u64;
         let reimbursed_value = effective_gas_price * U256::from(refund_gas);
-        
+
         let caller = Address::from_word(B256::from(caller));
         let caller_info = caller_info.as_account_info().unwrap();
         let new_caller_info = AccountInfo {
@@ -86,7 +87,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             code: caller_info.code.clone(),
             code_hash: caller_info.code_hash,
         };
-        
+
         node.outputs[0] = SSAOutput::Storage {
             key: Box::new(StorageKey::AccountInfo(caller)),
             value: Box::new(StorageValue::AccountInfo(new_caller_info)),
@@ -97,10 +98,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     #[inline(always)]
-    pub fn execute_reward_beneficiary(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_reward_beneficiary(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let beneficiary = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
-        let beneficiary_account_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let beneficiary_account_info =
+            get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let reward = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
 
         let beneficiary = Address::from_word(B256::from(beneficiary));
@@ -121,7 +126,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute call operation
     #[inline(always)]
-    pub fn execute_call(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
+    pub fn execute_call(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+        opcode: u8,
+    ) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -146,14 +156,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             transfer_value: value,
             scheme: match opcode {
                 0xF1 => SSACallScheme::Call,
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Invalid opcode".to_string()
-                )),
+                _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
-            ret_range: out_offset..out_offset+out_len,
+            ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
-        
+
         node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
         let new_size_1 = if in_len == 0 {
             0
@@ -176,7 +184,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute callcode operation
     #[inline(always)]
-    pub fn execute_callcode(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
+    pub fn execute_callcode(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+        opcode: u8,
+    ) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -200,14 +213,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             transfer_value: value,
             scheme: match opcode {
                 0xF2 => SSACallScheme::CallCode,
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Invalid opcode".to_string()
-                )),
+                _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
-            ret_range: out_offset..out_offset+out_len,
+            ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
-        
+
         node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
@@ -226,7 +237,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute delegatecall operation
     #[inline(always)]
-    pub fn execute_delegatecall(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
+    pub fn execute_delegatecall(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+        opcode: u8,
+    ) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let in_offset = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -251,14 +267,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             transfer_value: U256::ZERO,
             scheme: match opcode {
                 0xF4 => SSACallScheme::DelegateCall,
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Invalid opcode".to_string()
-                )),
+                _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
-            ret_range: out_offset..out_offset+out_len,
+            ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
-        
+
         node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
@@ -277,7 +291,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute staticcall operation
     #[inline(always)]
-    pub fn execute_staticcall(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, opcode: u8) -> Result<()> {
+    pub fn execute_staticcall(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+        opcode: u8,
+    ) -> Result<()> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let to = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let in_offset = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -302,14 +321,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             transfer_value: U256::ZERO,
             scheme: match opcode {
                 0xFA => SSACallScheme::StaticCall,
-                _ => return Err(ExecutionError::ExecutionError(
-                    "Invalid opcode".to_string()
-                )),
+                _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
-            ret_range: out_offset..out_offset+out_len,
+            ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
-        
+
         node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
@@ -329,12 +346,17 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     /// Execute make call frame operation
     /// The initial call frame is created by the evm, we should take from the ssa_logger
     #[inline(always)]
-    pub fn execute_make_call_frame(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-        let call_input = get_call_input!(graph, node.inputs[0], self.get_first_call_input().unwrap());
+    pub fn execute_make_call_frame(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
+        let call_input =
+            get_call_input!(graph, node.inputs[0], self.get_first_call_input().unwrap());
         let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let bytecode_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
-        
+
         let caller_info = caller_info.as_account_info().unwrap();
         let target_info = target_info.as_account_info().unwrap();
         let bytecode_info = bytecode_info.as_account_info().unwrap();
@@ -368,7 +390,8 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         if self.is_precompile(&bytecode_address) {
             // if is precompile ..
-            let precompile = self.call_precompile(&bytecode_address, &call_input.input, call_input.gas_limit);
+            let precompile =
+                self.call_precompile(&bytecode_address, &call_input.input, call_input.gas_limit);
             outputs.push(SSAOutput::InterpreterResult(precompile));
         } else if bytecode.is_empty() {
             // if is simple transfer ..
@@ -390,18 +413,19 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             };
             outputs.push(SSAOutput::ContractEnv(Box::new(contract)));
         }
-        
+
         Ok(())
     }
 
     /// Execute call return operation
     #[inline(always)]
-    pub fn execute_call_return(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_call_return(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
-        let call_input = get_call_input!(graph, node.inputs[1], self.get_first_call_input().unwrap());
+        let call_input =
+            get_call_input!(graph, node.inputs[1], self.get_first_call_input().unwrap());
 
         let ret_range = call_input.ret_range.clone();
-        
+
         node.outputs[0] = SSAOutput::CallOutcome(Box::new(SSACallOutcome {
             result: interpreter_result.clone(),
             ret_range: ret_range,
@@ -412,17 +436,28 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute insert call outcome operation
     #[inline(always)]
-    pub fn execute_insert_call_outcome(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_insert_call_outcome(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let call_outcome = match node.inputs[0] {
             SSAInput::CallOutcome((lsn, index)) => {
                 let dep_node = graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::CallOutcome(outcome) => outcome,
-                    _ => return Err(ExecutionError::ExecutionError("Expected CallOutcome output value".to_string()))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            "Expected CallOutcome output value".to_string(),
+                        ))
+                    }
                 }
             }
-            _ => return Err(ExecutionError::ExecutionError("Expected CallOutcome input value".to_string()))
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    "Expected CallOutcome input value".to_string(),
+                ))
+            }
         };
 
         let out_len = call_outcome.ret_range.len();
@@ -440,14 +475,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             SSAInstructionResult::Ok => {
                 node.outputs[1] = SSAOutput::Memory(data_slice.to_vec().into());
                 node.outputs[2] = SSAOutput::Stack(U256::from(1));
-            },
+            }
             SSAInstructionResult::Revert => {
                 node.outputs[1] = SSAOutput::Memory(data_slice.to_vec().into());
                 node.outputs[2] = SSAOutput::Stack(U256::ZERO);
-            },
+            }
             SSAInstructionResult::Error => {
                 return Err(ExecutionError::ExecutionError(
-                    "Error in insert_call_outcome".to_string()
+                    "Error in insert_call_outcome".to_string(),
                 ));
             }
         }
@@ -456,8 +491,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute create operation
     #[inline(always)]
-    pub fn execute_create(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_create(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -473,13 +507,14 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let mut padded_code_slice = vec![0u8; len];
         padded_code_slice[..code.len()].copy_from_slice(&code);
 
-
         let ssa_create_input = SSACreateInput {
             init_code: padded_code_slice.into(),
             value: value,
             caller: contract_address,
             scheme: if salt.is_some() {
-                SSACreateScheme::Create2 { salt: salt.unwrap() }
+                SSACreateScheme::Create2 {
+                    salt: salt.unwrap(),
+                }
             } else {
                 SSACreateScheme::Create
             },
@@ -503,26 +538,37 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute make create frame operation
     #[inline(always)]
-    pub fn execute_make_create_frame(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-        
+    pub fn execute_make_create_frame(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let create_input = match node.inputs[0] {
             SSAInput::CreateInput((lsn, index)) => {
-                if lsn == 0 {   
+                if lsn == 0 {
                     &Box::new(self.get_first_create_input().unwrap())
                 } else {
                     let dep_node = graph.get_node(lsn)?;
                     match &dep_node.outputs[index as usize] {
                         SSAOutput::CreateInput(input) => input,
-                        _ => return Err(ExecutionError::ExecutionError("Expected CreateInput output value".to_string()))
+                        _ => {
+                            return Err(ExecutionError::ExecutionError(
+                                "Expected CreateInput output value".to_string(),
+                            ))
+                        }
                     }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError("Expected CreateInput input value".to_string()))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    "Expected CreateInput input value".to_string(),
+                ))
+            }
         };
-        
+
         let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let created_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
-        
+
         let caller_info = caller_info.as_account_info().unwrap();
         let created_info = created_info.as_account_info().unwrap();
 
@@ -535,7 +581,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 caller.create2(salt.to_be_bytes(), init_code_hash)
             }
         };
-        
+
         let new_caller_info = AccountInfo {
             balance: caller_info.balance - create_input.value,
             nonce: caller_info.nonce + 1,
@@ -573,8 +619,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute create return operation
     #[inline(always)]
-    pub fn execute_create_return(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_create_return(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         if node.inputs.len() == 1 {
             let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
             node.outputs[0] = SSAOutput::CreateOutcome(Box::new(SSACreateOutcome {
@@ -583,7 +632,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             }));
             return Ok(());
         }
-        
+
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
         let address = get_contract_env!(graph, node.inputs[1]).target_address;
         let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
@@ -620,16 +669,28 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute insert create outcome operation
     #[inline(always)]
-    pub fn execute_insert_create_outcome(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_insert_create_outcome(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let create_outcome = match node.inputs[0] {
             SSAInput::CreateOutcome((lsn, index)) => {
                 let dep_node = graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::CreateOutcome(outcome) => outcome,
-                    _ => return Err(ExecutionError::ExecutionError("Expected CreateOutcome output value".to_string()))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            "Expected CreateOutcome output value".to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError("Expected CreateOutcome input value".to_string()))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    "Expected CreateOutcome input value".to_string(),
+                ))
+            }
         };
         let address = create_outcome.address;
         let instruction_result = create_outcome.result.result;
@@ -651,13 +712,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             }
             SSAInstructionResult::Error => {
                 return Err(ExecutionError::ExecutionError(
-                    "Error in insert_create_outcome".to_string()
+                    "Error in insert_create_outcome".to_string(),
                 ));
             }
         }
 
         Ok(())
     }
-
 }
-

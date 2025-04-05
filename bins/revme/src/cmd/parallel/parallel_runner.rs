@@ -1,9 +1,5 @@
-
-use serde_json::{Map, Value};
 use crate::cmd::statetest::{
-    merkle_trie::state_merkle_trie_root,
-    utils::recover_address,
-    models::MultiTestSuite,
+    merkle_trie::state_merkle_trie_root, models::MultiTestSuite, utils::recover_address,
 };
 use revm::{
     db::{CacheState, DatabaseCommit, State},
@@ -11,13 +7,13 @@ use revm::{
     inspectors::NoOpInspector,
     occda::Occda,
     primitives::{
-        keccak256, AccountInfo, Bytecode, Bytes, Env,
-        ResultAndState, SpecId, TxKind, B256
+        keccak256, AccountInfo, Bytecode, Bytes, Env, ResultAndState, SpecId, TxKind, B256,
     },
     profiler,
     task::{Task, TaskResultItem},
     Evm,
 };
+use serde_json::{Map, Value};
 
 use std::{
     fmt::Debug,
@@ -58,9 +54,7 @@ pub enum TestErrorKind {
     Panic,
 }
 
-pub fn run_sequential(
-    path: &PathBuf
-) -> Result<(), TestError> {
+pub fn run_sequential(path: &PathBuf) -> Result<(), TestError> {
     let s = std::fs::read_to_string(path).unwrap();
     // println!("s: {:#?}", s);
     let suite: MultiTestSuite = serde_json::from_str(&s).map_err(|e| TestError {
@@ -100,12 +94,12 @@ pub fn run_sequential(
     env.block.prevrandao = unit.env.current_random;
 
     let mut cache = cache_state.clone();
-        cache.set_state_clear_flag(SpecId::enabled(SpecId::CANCUN, SpecId::SPURIOUS_DRAGON));
+    cache.set_state_clear_flag(SpecId::enabled(SpecId::CANCUN, SpecId::SPURIOUS_DRAGON));
 
     let mut state = State::builder()
-            .with_cached_prestate(cache)
-            .with_bundle_update()
-            .build();
+        .with_cached_prestate(cache)
+        .with_bundle_update()
+        .build();
     let timer = Instant::now();
     let mut execute_time = Duration::from_secs(0);
     let mut commit_time = Duration::from_secs(0);
@@ -113,9 +107,7 @@ pub fn run_sequential(
         profiler::start(&format!("{}", idx));
 
         let genesis = profiler::get_genesis();
-        let duration_u64 = || (
-            Instant::now().duration_since(genesis).as_nanos() as u64
-        ).into();
+        let duration_u64 = || (Instant::now().duration_since(genesis).as_nanos() as u64).into();
         let mut description = Map::new();
         description.insert("type".to_string(), Value::String("transaction".to_string()));
         description.insert("transaction_clone::start".to_string(), duration_u64());
@@ -127,10 +119,7 @@ pub fn run_sequential(
                 kind: TestErrorKind::UnknownPrivateKey(tx.secret_key),
             })?
         };
-        env.tx.gas_price = tx
-            .gas_price
-            .or(tx.max_fee_per_gas)
-            .unwrap_or_default();
+        env.tx.gas_price = tx.gas_price.or(tx.max_fee_per_gas).unwrap_or_default();
         env.tx.gas_priority_fee = tx.max_priority_fee_per_gas;
         // EIP-4844
         env.tx.blob_hashes = tx.blob_versioned_hashes.clone();
@@ -139,13 +128,13 @@ pub fn run_sequential(
         env.tx.data = tx.data.clone();
 
         env.tx.value = tx.value;
-        
+
         env.tx.access_list = tx
-                .access_lists
-                .get(0)
-                .and_then(Option::as_deref)
-                .cloned()
-                .unwrap_or_default();
+            .access_lists
+            .get(0)
+            .and_then(Option::as_deref)
+            .cloned()
+            .unwrap_or_default();
         let to = match tx.to {
             Some(add) => TxKind::Call(add),
             None => TxKind::Create,
@@ -156,30 +145,33 @@ pub fn run_sequential(
         description.insert("evm_build::start".to_string(), duration_u64());
         let execute_start = std::time::Instant::now();
         let mut evm = Evm::builder()
-        .with_db(&mut state)
-        .modify_env(|e| e.clone_from(&env))
-        .with_spec_id(SpecId::CANCUN)
-        .with_external_context(NoOpInspector)
-        .append_handler_register(inspector_handle_register)
-        .build();
+            .with_db(&mut state)
+            .modify_env(|e| e.clone_from(&env))
+            .with_spec_id(SpecId::CANCUN)
+            .with_external_context(NoOpInspector)
+            .append_handler_register(inspector_handle_register)
+            .build();
         description.insert("evm_build::end".to_string(), duration_u64());
 
         description.insert("evm_transact_commit::start".to_string(), duration_u64());
-        let ResultAndState { result:_, state } = match evm.transact() {
+        let ResultAndState { result: _, state } = match evm.transact() {
             Ok(result) => result,
             Err(e) => {
                 let kind = TestErrorKind::UnexpectedException {
                     expected_exception: None,
                     got_exception: Some(e.to_string()),
                 };
-                return Err(TestError { name: name.clone(), kind });
-            },
+                return Err(TestError {
+                    name: name.clone(),
+                    kind,
+                });
+            }
         };
         let execute_end = std::time::Instant::now();
         execute_time += execute_end - execute_start;
 
         let commit_start = std::time::Instant::now();
-        evm.context.evm.db.commit(state); 
+        evm.context.evm.db.commit(state);
         let commit_end = std::time::Instant::now();
         commit_time += commit_end - commit_start;
 
@@ -188,7 +180,7 @@ pub fn run_sequential(
         profiler::notes(&format!("{}", idx), &mut description);
         profiler::end(&format!("{}", idx));
         // println!("run_sequential_idx: {:?}", idx);
-    };
+    }
     let elapsed = timer.elapsed();
 
     println!("Total time: {:?}", elapsed);
@@ -214,7 +206,7 @@ pub fn run_sequential(
     // eprintln!("\n------------- Normal Accounts -------------");
     // eprintln!("Account 1: {:?}", account1);
     // eprintln!("Account 2: {:?}", account2);
-    // eprintln!("Account 3: {:?}", account3); 
+    // eprintln!("Account 3: {:?}", account3);
     // eprintln!("Account 4: {:?}", account4);
     // eprintln!("Account 5: {:?}", account5);
 
@@ -222,8 +214,10 @@ pub fn run_sequential(
     // eprintln!("Storage Content: {:?}", storage);
     // eprintln!("===========================================\n");
 
-
-    println!("\nState root: {:#?}", state_merkle_trie_root(state.cache.trie_account()));
+    println!(
+        "\nState root: {:#?}",
+        state_merkle_trie_root(state.cache.trie_account())
+    );
     profiler::dump_json("./profiler_output.json");
 
     Ok(())
@@ -234,7 +228,7 @@ pub fn run_parallel(
     enable_ssa: bool,
     enable_dep_graph: bool,
     enable_prefetch: bool,
-    path: &PathBuf
+    path: &PathBuf,
 ) -> Result<(), TestError> {
     // println!("path: {:?}", path);
     let s = std::fs::read_to_string(path).unwrap();
@@ -246,7 +240,7 @@ pub fn run_parallel(
 
     let name = suite.0.keys().next().unwrap();
     let unit = suite.0.get(name).unwrap();
-    
+
     let mut cache_state = CacheState::new(false);
     for (address, info) in unit.pre.clone() {
         let code_hash = keccak256(&info.code);
@@ -260,13 +254,12 @@ pub fn run_parallel(
         cache_state.insert_account_with_storage(address, acc_info, info.storage);
     }
     let mut cache = cache_state.clone();
-        cache.set_state_clear_flag(SpecId::enabled(SpecId::CANCUN, SpecId::SPURIOUS_DRAGON));
+    cache.set_state_clear_flag(SpecId::enabled(SpecId::CANCUN, SpecId::SPURIOUS_DRAGON));
 
     let mut state = State::builder()
-            .with_cached_prestate(cache)
-            .with_bundle_update()
-            .build();
-
+        .with_cached_prestate(cache)
+        .with_bundle_update()
+        .build();
 
     let mut env = Box::<Env>::default();
     // for mainnet
@@ -288,7 +281,6 @@ pub fn run_parallel(
     // post and execution
 
     for tx in unit.transaction.iter() {
-
         env.tx.caller = if let Some(address) = tx.sender {
             address
         } else {
@@ -297,11 +289,8 @@ pub fn run_parallel(
                 kind: TestErrorKind::UnknownPrivateKey(tx.secret_key),
             })?
         };
-        
-        env.tx.gas_price = tx
-            .gas_price
-            .or(tx.max_fee_per_gas)
-            .unwrap_or_default();
+
+        env.tx.gas_price = tx.gas_price.or(tx.max_fee_per_gas).unwrap_or_default();
         env.tx.gas_priority_fee = tx.max_priority_fee_per_gas;
         // EIP-4844
         env.tx.blob_hashes = tx.blob_versioned_hashes.clone();
@@ -310,13 +299,13 @@ pub fn run_parallel(
         env.tx.data = tx.data.clone();
 
         env.tx.value = tx.value;
-        
+
         env.tx.access_list = tx
-                .access_lists
-                .get(0)
-                .and_then(Option::as_deref)
-                .cloned()
-                .unwrap_or_default();
+            .access_lists
+            .get(0)
+            .and_then(Option::as_deref)
+            .cloned()
+            .unwrap_or_default();
         let to = match tx.to {
             Some(add) => TxKind::Call(add),
             None => TxKind::Create,
@@ -325,7 +314,7 @@ pub fn run_parallel(
 
         tasks.push(Task::new(env.clone(), idx, -1, SpecId::CANCUN, None));
         idx += 1;
-    }   
+    }
 
     // let thread_pool = rayon::ThreadPoolBuilder::new()
     //     .num_threads(num_of_threads)
@@ -336,7 +325,7 @@ pub fn run_parallel(
 
     let len = tasks.len();
     let mut h_tx = occda.init(tasks, None, enable_ssa);
-        
+
     let total_start = std::time::Instant::now();
 
     let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
@@ -350,13 +339,14 @@ pub fn run_parallel(
     }
 
     let _ = occda.main_with_db(
-        &mut h_tx, 
+        &mut h_tx,
         &mut state,
-         &mut result_store, 
-         || NoOpInspector,
-         enable_prefetch,
-         enable_dep_graph, 
-         enable_ssa);
+        &mut result_store,
+        || NoOpInspector,
+        enable_prefetch,
+        enable_dep_graph,
+        enable_ssa,
+    );
     let after_main = std::time::Instant::now();
     println!("Time after main: {:?}", after_main - total_start);
 
@@ -379,7 +369,7 @@ pub fn run_parallel(
     // eprintln!("\n------------- Normal Accounts -------------");
     // eprintln!("Account 1: {:?}", account1);
     // eprintln!("Account 2: {:?}", account2);
-    // eprintln!("Account 3: {:?}", account3); 
+    // eprintln!("Account 3: {:?}", account3);
     // eprintln!("Account 4: {:?}", account4);
     // eprintln!("Account 5: {:?}", account5);
 
@@ -389,7 +379,10 @@ pub fn run_parallel(
 
     profiler::dump_json("./profiler_output.json");
 
-    println!("\nState root: {:#?}", state_merkle_trie_root(state.cache.trie_account()));
+    println!(
+        "\nState root: {:#?}",
+        state_merkle_trie_root(state.cache.trie_account())
+    );
     println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
     println!("You can use curl http://127.0.0.1:9090/metrics to view them");
     println!("The metrics will be in standard Prometheus format");

@@ -67,7 +67,6 @@ impl<DB: Database> InnerEvmContext<DB> {
         }
     }
 
-
     /// Creates a new context with the given environment and database.
     #[inline]
     pub fn new_with_env(db: DB, env: Box<Env>) -> Self {
@@ -120,7 +119,6 @@ impl<DB: Database> InnerEvmContext<DB> {
             ..self
         }
     }
-
 
     /// Returns the configured EVM spec ID.
 
@@ -397,7 +395,10 @@ impl<DB: Database> InnerEvmContext<DB> {
     ) {
         // Log the call return, if SSA logger is present.
         if self.ssa_logger.is_some() {
-            self.ssa_logger.as_mut().unwrap().log_call_return(convert_interpreter_result(interpreter_result));
+            self.ssa_logger
+                .as_mut()
+                .unwrap()
+                .log_call_return(convert_interpreter_result(interpreter_result));
         }
         // revert changes or not.
         if matches!(interpreter_result.result, return_ok!()) {
@@ -415,7 +416,6 @@ impl<DB: Database> InnerEvmContext<DB> {
         address: Address,
         journal_checkpoint: JournalCheckpoint,
     ) {
-
         // if return is not ok revert and return.
         if !matches!(interpreter_result.result, return_ok!()) {
             self.journaled_state.checkpoint_revert(journal_checkpoint);
@@ -459,7 +459,8 @@ impl<DB: Database> InnerEvmContext<DB> {
                 self.journaled_state.checkpoint_revert(journal_checkpoint);
                 interpreter_result.result = InstructionResult::OutOfGas;
                 if let Some(logger) = self.ssa_logger.as_mut() {
-                    logger.log_create_return_failed(&convert_interpreter_result(interpreter_result));
+                    logger
+                        .log_create_return_failed(&convert_interpreter_result(interpreter_result));
                 }
                 return;
             } else {
@@ -490,12 +491,12 @@ impl<DB: Database> InnerEvmContext<DB> {
                 analysis_kind,
             );
         }
-        
+
         interpreter_result.result = InstructionResult::Return;
     }
 
     /// Get mutable reference to ssa_logger
-    pub fn ssa_logger_mut(&mut self) -> Option<& mut SSALogger> {
+    pub fn ssa_logger_mut(&mut self) -> Option<&mut SSALogger> {
         self.ssa_logger.as_mut()
     }
 
@@ -510,5 +511,4 @@ impl<DB: Database> InnerEvmContext<DB> {
     pub fn recover_ssa_logger_from_interpreter(&mut self, interpreter: &mut Interpreter) {
         self.ssa_logger = interpreter.ssa_logger.take();
     }
-
 }

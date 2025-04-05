@@ -1,5 +1,5 @@
-use crate::primitives::{Address, HashMap, HashSet};
 use crate::journaled_state::AccessType;
+use crate::primitives::{Address, HashMap, HashSet};
 
 /// Track write access records for addresses
 #[derive(Default)]
@@ -15,7 +15,11 @@ impl AccessTracker {
     }
 
     /// Record the write set of a task
-    pub fn record_write_set(&mut self, tid: i32, write_set: &HashMap<Address, HashSet<AccessType>>) {
+    pub fn record_write_set(
+        &mut self,
+        tid: i32,
+        write_set: &HashMap<Address, HashSet<AccessType>>,
+    ) {
         for (addr, access_types) in write_set {
             let addr_writes = self.writes.entry(*addr).or_default();
             for access_type in access_types {
@@ -30,10 +34,10 @@ impl AccessTracker {
     /// Return all conflicting keys found
     /// !! Potential overhead
     pub fn check_conflict_in_range(
-        &self, 
+        &self,
         read_set: &HashMap<Address, HashSet<AccessType>>,
-        start_tid: i32,  // sid + 1
-        end_tid: i32,    // tid
+        start_tid: i32, // sid + 1
+        end_tid: i32,   // tid
         enable_ssa: bool,
     ) -> Vec<(Address, AccessType)> {
         let mut conflicts = Vec::new();
@@ -46,7 +50,7 @@ impl AccessTracker {
                             // Found exact match at start_tid
                             Ok(_) => true,
                             // Check first position after start_tid
-                            Err(idx) => idx < tid_vec.len() && tid_vec[idx] < end_tid
+                            Err(idx) => idx < tid_vec.len() && tid_vec[idx] < end_tid,
                         };
 
                         if has_conflict {

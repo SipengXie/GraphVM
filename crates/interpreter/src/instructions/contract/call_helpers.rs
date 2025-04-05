@@ -29,14 +29,16 @@ pub fn get_memory_input_and_out_ranges_whether_new_allocation(
     interpreter: &mut Interpreter,
 ) -> Option<(Bytes, Range<usize>, Range<usize>, bool)> {
     pop_ret!(interpreter, in_offset, in_len, out_offset, out_len, None);
-    let (in_range, in_resized) = resize_memory_whether_new_allocation(interpreter, in_offset, in_len)?;
+    let (in_range, in_resized) =
+        resize_memory_whether_new_allocation(interpreter, in_offset, in_len)?;
 
     let mut input = Bytes::new();
     if !in_range.is_empty() {
         input = Bytes::copy_from_slice(interpreter.shared_memory.slice_range(in_range.clone()));
     }
 
-    let (out_range, out_resized) = resize_memory_whether_new_allocation(interpreter, out_offset, out_len)?;
+    let (out_range, out_resized) =
+        resize_memory_whether_new_allocation(interpreter, out_offset, out_len)?;
 
     Some((input, in_range, out_range, in_resized || out_resized))
 }
