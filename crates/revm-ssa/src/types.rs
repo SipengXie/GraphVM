@@ -1,5 +1,9 @@
+use crate::{
+    call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome},
+    logger::{LsnType, LsnWithIndex},
+    SSAInterpreterResult,
+};
 use revm_primitives::{AccountInfo, AccountStatus, Address, Bytecode, Bytes, Log, B256, U256};
-use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, logger::{LsnType, LsnWithIndex}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +16,7 @@ pub enum InternalOp {
     MAKE_CREATE_FRAME = 0xD4,
     CREATE_RETURN = 0xD5,
     INSERT_CREATE_OUTCOME = 0xD6,
-    
+
     // CALL operations
     MAKE_CALL_FRAME = 0xD7,
     CALL_RETURN = 0xD8,
@@ -27,7 +31,6 @@ pub enum InternalOp {
 }
 
 impl From<u8> for InternalOp {
-
     fn from(value: u8) -> Self {
         match value {
             0xD4 => Self::MAKE_CREATE_FRAME,
@@ -41,7 +44,6 @@ impl From<u8> for InternalOp {
             _ => panic!("Invalid internal opcode: {value:02x}"),
         }
     }
-
 }
 
 impl From<InternalOp> for u8 {
@@ -102,15 +104,15 @@ impl StorageValue {
     pub fn as_account_info(&self) -> Option<&AccountInfo> {
         match self {
             StorageValue::AccountInfo(info) => Some(info),
-            _ => None
+            _ => None,
         }
     }
 
-    /// Get account status, returns None if not AccountStatus type 
+    /// Get account status, returns None if not AccountStatus type
     pub fn as_account_status(&self) -> Option<&AccountStatus> {
         match self {
             StorageValue::AccountStatus(status) => Some(status),
-            _ => None
+            _ => None,
         }
     }
 
@@ -118,11 +120,10 @@ impl StorageValue {
     pub fn as_slot(&self) -> Option<&U256> {
         match self {
             StorageValue::Slot(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -131,15 +132,15 @@ impl StorageValue {
 pub enum SSAInput {
     Constant(U256),
     ConstantI64(i64), // for gas_refunded
-    Stack (LsnWithIndex),
+    Stack(LsnWithIndex),
     Memory(Vec<MemoryDep>),
-    Storage (StorageKey, LsnWithIndex),
-    Transient (LsnWithIndex),
-    ReturnDataBuffer (LsnWithIndex),
+    Storage(StorageKey, LsnWithIndex),
+    Transient(LsnWithIndex),
+    ReturnDataBuffer(LsnWithIndex),
     InterpreterResult(LsnWithIndex),
     CallOutcome(LsnWithIndex),
     CreateOutcome(LsnWithIndex),
-    MemorySizeChange (LsnWithIndex),
+    MemorySizeChange(LsnWithIndex),
     CreateInput(LsnWithIndex),
     CallInput(LsnWithIndex),
     ContractEnv(LsnWithIndex),
@@ -196,7 +197,7 @@ impl TryFrom<SSAOutput> for Bytes {
 pub struct SSALogEntry {
     // The LSN of the log entry
     pub lsn: LsnType,
-    // The opcode of the instruction 
+    // The opcode of the instruction
     pub opcode: u8,
     // The inputs of the instruction
     pub inputs: Vec<SSAInput>,

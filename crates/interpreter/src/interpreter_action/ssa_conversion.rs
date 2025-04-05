@@ -1,8 +1,10 @@
+use super::{CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome};
+use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
 use revm_primitives::CreateScheme;
 use revm_ssa::{
-    ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
-use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
-use super::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, CallScheme};
+    ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome,
+    SSACreateScheme, SSAInstructionResult, SSAInterpreterResult,
+};
 
 /// Convert interpreter's Contract to SSA's ContractEnv
 pub fn convert_contract_env(env: &Contract) -> ContractEnv {
@@ -68,7 +70,7 @@ fn convert_call_scheme(scheme: CallScheme) -> SSACallScheme {
         CallScheme::ExtStaticCall => SSACallScheme::ExtStaticCall,
         CallScheme::ExtDelegateCall => SSACallScheme::ExtDelegateCall,
     }
-} 
+}
 
 /// Convert interpreter's CreateScheme to SSA's CreateScheme
 fn convert_create_scheme(scheme: CreateScheme) -> SSACreateScheme {
@@ -76,8 +78,7 @@ fn convert_create_scheme(scheme: CreateScheme) -> SSACreateScheme {
         CreateScheme::Create => SSACreateScheme::Create,
         CreateScheme::Create2 { salt } => SSACreateScheme::Create2 { salt },
     }
-} 
-
+}
 
 pub fn convert_interpreter_result(result: &InterpreterResult) -> SSAInterpreterResult {
     SSAInterpreterResult {

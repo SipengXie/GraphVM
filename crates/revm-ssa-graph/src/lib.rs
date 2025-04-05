@@ -48,18 +48,17 @@ pub use executor::*;
 pub use graph::*;
 pub use tracer::*;
 
-
 /// Errors that can occur during SSA graph execution
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutionError {
     /// Error indicating an invalid dependency in the graph
     #[error("Invalid dependency: {0}")]
     InvalidDependency(String),
-    
+
     /// Error in graph construction or manipulation
     #[error("Graph error: {0}")]
     GraphError(String),
-    
+
     /// Error during execution
     #[error("Execution error: {0}")]
     ExecutionError(String),
@@ -80,23 +79,32 @@ impl ExecutionError {
     pub const EXPECTED_MEMORY_VALUE: &'static str = "Expected Memory output value";
     pub const INPUT_MUST_BE_MEMORY_VALUE: &'static str = "Input must be Memory value";
     pub const EXPECTED_RETURN_DATA_BUFFER: &'static str = "Expected ReturnDataBuffer output value";
-    pub const INPUT_MUST_BE_RETURN_DATA_BUFFER: &'static str = "Input must be ReturnDataBuffer value";
+    pub const INPUT_MUST_BE_RETURN_DATA_BUFFER: &'static str =
+        "Input must be ReturnDataBuffer value";
     pub const INPUT_MUST_BE_CALL_INPUT: &'static str = "Input must be CallInput value";
     pub const EXPECTED_INTERPRETER_RESULT: &'static str = "Expected InterpreterResult output value";
-    pub const INPUT_MUST_BE_INTERPRETER_RESULT: &'static str = "Input must be InterpreterResult value";
+    pub const INPUT_MUST_BE_INTERPRETER_RESULT: &'static str =
+        "Input must be InterpreterResult value";
     pub const INVALID_BOOLEAN_VALUE: &'static str = "Invalid boolean value";
-    pub const INVALID_OPCODE_FOR_RESULT_CHANGE: &'static str = "Invalid opcode for instruction result change";
+    pub const INVALID_OPCODE_FOR_RESULT_CHANGE: &'static str =
+        "Invalid opcode for instruction result change";
     pub const EXPECTED_GAS_COST: &'static str = "Expected GasCost output value";
     pub const EXPECTED_GAS_REFUND: &'static str = "Expected GasRefund output value";
     pub const EXPECTED_CONSTANT_I64: &'static str = "Expected ConstantI64 output value";
     pub const EXPECTED_TRANSIENT_VALUE: &'static str = "Expected Transient output value";
 
     #[inline(always)]
-    pub fn control_flow_not_deterministic(node: &impl std::fmt::Debug, old_jump: isize, new_jump: isize) -> String {
-        format!("Control flow is not deterministic. Node: {:?}, Old jump: {}, New jump: {}", 
-                node, old_jump, new_jump)
+    pub fn control_flow_not_deterministic(
+        node: &impl std::fmt::Debug,
+        old_jump: isize,
+        new_jump: isize,
+    ) -> String {
+        format!(
+            "Control flow is not deterministic. Node: {:?}, Old jump: {}, New jump: {}",
+            node, old_jump, new_jump
+        )
     }
 }
 
 /// Result type for operations that can fail with an ExecutionError
-pub type Result<T> = std::result::Result<T, ExecutionError>; 
+pub type Result<T> = std::result::Result<T, ExecutionError>;

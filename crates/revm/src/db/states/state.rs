@@ -4,7 +4,7 @@ use super::{
 };
 use crate::db::EmptyDB;
 use revm_interpreter::primitives::{
-    db::{Database, DatabaseRef, DatabaseCommit},
+    db::{Database, DatabaseCommit, DatabaseRef},
     hash_map, Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
 };
 use std::{
@@ -227,7 +227,7 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
     }
 
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let res = match self.cache.contracts.get(&code_hash ) {
+        let res = match self.cache.contracts.get(&code_hash) {
             Some(entry) => Ok(entry.clone()),
             None => self.database.code_by_hash_ref(code_hash),
         };
@@ -235,27 +235,38 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        let is_debug = index
+            == U256::from_str_radix(
+                "7989fcd291e985aecca209a5c9644a2014120feb5003e533bad50a8b65f875c1",
+                16,
+            )
+            .unwrap();
 
-        let is_debug = index == U256::from_str_radix("7989fcd291e985aecca209a5c9644a2014120feb5003e533bad50a8b65f875c1", 16).unwrap();
-        
         let value = if let Some(account) = self.cache.accounts.get(&address) {
             let is_storage_known = account.status.is_storage_known();
             if is_debug {
                 println!("cache: {:?}", self.cache.accounts);
-                println!("storage_ref: address {:?} index {:?} is_storage_known {:?}", address, index, is_storage_known);
+                println!(
+                    "storage_ref: address {:?} index {:?} is_storage_known {:?}",
+                    address, index, is_storage_known
+                );
             }
-            Ok(account.account.as_ref().map(|a| match a.storage.get(&index) {
-                Some(entry) => Ok(*entry),
-                None => {
-                    let value = if is_storage_known {
-                        U256::ZERO
-                    } else {
-                        self.database.storage_ref(address, index)?
-                    };
-                    Ok(value)
-                },
-            }).transpose()?
-            .unwrap_or_default())
+            Ok(account
+                .account
+                .as_ref()
+                .map(|a| match a.storage.get(&index) {
+                    Some(entry) => Ok(*entry),
+                    None => {
+                        let value = if is_storage_known {
+                            U256::ZERO
+                        } else {
+                            self.database.storage_ref(address, index)?
+                        };
+                        Ok(value)
+                    }
+                })
+                .transpose()?
+                .unwrap_or_default())
         } else {
             self.database.storage_ref(address, index)
             // We should find a better way to handle this.
@@ -264,7 +275,10 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
 
         if is_debug {
             if let Ok(v) = &value {
-                println!("storage_ref: address {:?} index {:?} value {:?}", address, index, v);
+                println!(
+                    "storage_ref: address {:?} index {:?} value {:?}",
+                    address, index, v
+                );
             } else {
                 println!("error reading");
             }

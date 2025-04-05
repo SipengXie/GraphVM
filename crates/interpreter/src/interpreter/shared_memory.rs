@@ -1,5 +1,5 @@
-use core::{cmp::min, fmt, ops::Range};
 use crate::primitives::{hex, B256, U256};
+use core::{cmp::min, fmt, ops::Range};
 use revm_ssa::{logger::LsnWithIndex, MemoryDep};
 use std::vec::Vec;
 
@@ -13,7 +13,10 @@ pub struct MemoryDef {
     pub offset: usize,
 }
 
-const EMPTY_MEMORY_DEF: MemoryDef = MemoryDef { lsn: (0, 0), offset: 0 };
+const EMPTY_MEMORY_DEF: MemoryDef = MemoryDef {
+    lsn: (0, 0),
+    offset: 0,
+};
 
 /// A sequential memory shared between calls, which uses
 /// a `Vec` for internal representation.
@@ -124,10 +127,7 @@ impl SharedMemory {
             unsafe {
                 let shadow_ptr = shadow.as_mut_ptr().add(self.last_checkpoint + addr);
                 for i in 0..size {
-                    *shadow_ptr.add(i) = MemoryDef {
-                        lsn,
-                        offset: i ,
-                    };
+                    *shadow_ptr.add(i) = MemoryDef { lsn, offset: i };
                 }
             }
         }
@@ -186,7 +186,8 @@ impl SharedMemory {
         // Helper function to push current memory segment
         let mut push_segment = |start: usize, len: usize, lsn: LsnWithIndex, offset: usize| {
             if lsn.0 != 0 {
-                result.push(MemoryDep { // self_offset..self_offset+len is set by lsn's output[lsn_offset..lsn_offset+len]
+                result.push(MemoryDep {
+                    // self_offset..self_offset+len is set by lsn's output[lsn_offset..lsn_offset+len]
                     lsn,
                     self_offset: start,
                     lsn_offset: offset,
@@ -264,7 +265,7 @@ impl SharedMemory {
         if let Some(old_checkpoint) = self.checkpoints.pop() {
             self.buffer.truncate(old_checkpoint);
             self.last_checkpoint = self.checkpoints.last().copied().unwrap_or(0);
-            
+
             // Also handle shadow buffer if enabled
             if let Some(ref mut shadow) = self.shadow_buffer {
                 shadow.truncate(old_checkpoint);
@@ -278,7 +279,7 @@ impl SharedMemory {
         self.buffer.clear();
         self.checkpoints.clear();
         self.last_checkpoint = 0;
-        
+
         // Also clear shadow buffer if enabled
         if let Some(ref mut shadow) = self.shadow_buffer {
             shadow.clear();
@@ -461,13 +462,13 @@ impl SharedMemory {
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn copy(&mut self, dst: usize, src: usize, len: usize) {
         self.context_memory_mut().copy_within(src..src + len, dst);
-        
+
         // Also copy shadow memory if enabled
         if let Some(ref mut shadow) = self.shadow_buffer {
             let src = self.last_checkpoint + src;
             let dst = self.last_checkpoint + dst;
             let end = dst + len;
-            
+
             // Ensure capacity
             if end > shadow.len() {
                 shadow.resize(end, EMPTY_MEMORY_DEF);
@@ -475,11 +476,7 @@ impl SharedMemory {
 
             // SAFETY: We've ensured the capacity above
             unsafe {
-                std::ptr::copy(
-                    shadow.as_ptr().add(src),
-                    shadow.as_mut_ptr().add(dst),
-                    len,
-                );
+                std::ptr::copy(shadow.as_ptr().add(src), shadow.as_mut_ptr().add(dst), len);
             }
         }
     }
@@ -603,17 +600,17 @@ mod tests {
     #[test]
     fn test_shadow_memory_basic() {
         let mut memory = SharedMemory::new();
-        
+
         // Initially shadow memory should be disabled
         assert!(memory.shadow_buffer.is_none());
-        
+
         // Enable shadow memory
         memory.enable_shadow();
         assert!(memory.shadow_buffer.is_some());
-        
+
         // Record a write
         memory.record_shadow_write(0, 32, (1, 0));
-        
+
         // Check the write was recorded
         let defs = memory.get_shadow_defs(0..32);
         assert_eq!(defs.len(), 32);
@@ -621,7 +618,7 @@ mod tests {
             assert_eq!(def.lsn, (1, 0));
             assert_eq!(def.offset, i);
         }
-        
+
         // Disable shadow memory
         memory.disable_shadow();
         assert!(memory.shadow_buffer.is_none());
@@ -631,12 +628,12 @@ mod tests {
     fn test_shadow_memory_context() {
         let mut memory = SharedMemory::new();
         memory.enable_shadow();
-        
+
         // Write in parent context
-        memory.resize(32);  // First resize memory
-        memory.set_u256(0, U256::from(0x123));  // Write actual memory
-        memory.record_shadow_write(0, 32, (1, 0));    // Record in shadow memory
-        
+        memory.resize(32); // First resize memory
+        memory.set_u256(0, U256::from(0x123)); // Write actual memory
+        memory.record_shadow_write(0, 32, (1, 0)); // Record in shadow memory
+
         // Verify parent context state
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
@@ -644,15 +641,15 @@ mod tests {
         for def in defs.iter() {
             assert_eq!(def.lsn, (1, 0));
         }
-        
+
         // Create new context
         memory.new_context();
-        
+
         // Write in child context
-        memory.resize(32);  // Resize in child context
-        memory.set_u256(0, U256::from(0x456));  // Write actual memory
-        memory.record_shadow_write(0, 32, (2, 0));    // Record in shadow memory
-        
+        memory.resize(32); // Resize in child context
+        memory.set_u256(0, U256::from(0x456)); // Write actual memory
+        memory.record_shadow_write(0, 32, (2, 0)); // Record in shadow memory
+
         // Verify child context state
         assert_eq!(memory.get_u256(0), U256::from(0x456));
         let defs = memory.get_shadow_defs(0..32);
@@ -660,10 +657,10 @@ mod tests {
         for def in defs.iter() {
             assert_eq!(def.lsn, (2, 0));
         }
-        
+
         // Free child context
         memory.free_context();
-        
+
         // Verify parent context is preserved
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
@@ -677,37 +674,37 @@ mod tests {
     fn test_shadow_memory_copy() {
         let mut memory = SharedMemory::new();
         memory.enable_shadow();
-        
+
         // Write source data
-        memory.resize(64);  // Resize for both source and destination
-        memory.set_u256(0, U256::from(0x123));  // Write actual memory
-        memory.record_shadow_write(0, 32, (1, 0));    // Record in shadow memory
-        
+        memory.resize(64); // Resize for both source and destination
+        memory.set_u256(0, U256::from(0x123)); // Write actual memory
+        memory.record_shadow_write(0, 32, (1, 0)); // Record in shadow memory
+
         // Verify source data before copy
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let src_defs = memory.get_shadow_defs(0..32);
         for (i, def) in src_defs.iter().enumerate() {
             assert_eq!(def.lsn, (1, 0));
-            assert_eq!(def.offset, i );
+            assert_eq!(def.offset, i);
         }
-        
+
         // Copy memory
         memory.copy(32, 0, 32);
-        
+
         // Verify source data after copy
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let src_defs = memory.get_shadow_defs(0..32);
         for (i, def) in src_defs.iter().enumerate() {
             assert_eq!(def.lsn, (1, 0));
-            assert_eq!(def.offset, i );
+            assert_eq!(def.offset, i);
         }
-        
+
         // Verify copied data
         assert_eq!(memory.get_u256(32), U256::from(0x123));
         let dst_defs = memory.get_shadow_defs(32..64);
         for (i, def) in dst_defs.iter().enumerate() {
             assert_eq!(def.lsn, (1, 0));
-            assert_eq!(def.offset, i );
+            assert_eq!(def.offset, i);
         }
     }
 
@@ -715,41 +712,41 @@ mod tests {
     fn test_shadow_memory_resize() {
         let mut memory = SharedMemory::new();
         memory.enable_shadow();
-        
+
         // Write initial data
         memory.resize(32);
         memory.set_u256(0, U256::from(0x123));
         memory.record_shadow_write(0, 32, (1, 0));
-        
+
         // Verify initial data
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
         for (i, def) in defs.iter().enumerate() {
             assert_eq!(def.lsn, (1, 0));
-            assert_eq!(def.offset, i );
+            assert_eq!(def.offset, i);
         }
-        
+
         // Resize larger
         memory.resize(64);
-        
+
         // Check original data preserved
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
         for (i, def) in defs.iter().enumerate() {
             assert_eq!(def.lsn, (1, 0));
-            assert_eq!(def.offset, i );
+            assert_eq!(def.offset, i);
         }
-        
+
         // Check new space initialized to zero and None
         assert_eq!(memory.get_u256(32), U256::from(0));
         let defs = memory.get_shadow_defs(32..64);
         for def in defs.iter() {
             assert!(def == &EMPTY_MEMORY_DEF);
         }
-        
+
         // Resize smaller
         memory.resize(16);
-        
+
         // Check truncated data
         let data = memory.slice(0, 16);
         let expected_data = U256::from(0x123).to_be_bytes::<32>();
@@ -757,7 +754,7 @@ mod tests {
         let defs = memory.get_shadow_defs(0..16);
         for (i, def) in defs.iter().enumerate() {
             assert_eq!(def.lsn, (1, 0));
-            assert_eq!(def.offset, i );
+            assert_eq!(def.offset, i);
         }
     }
 
@@ -765,59 +762,115 @@ mod tests {
     fn test_convert_shadow_to_deps() {
         let mut memory = SharedMemory::new();
         memory.enable_shadow();
-        
+
         // Test case 1: Two continuous regions with different LSNs
-        memory.resize(32);  // Resize for first write
+        memory.resize(32); // Resize for first write
         memory.set_u256(0, U256::from(0x123));
         memory.record_shadow_write(0, 16, (1, 0)); // lsn 1 set 0..16
-        
-        memory.resize(48);  // Resize for second write
+
+        memory.resize(48); // Resize for second write
         memory.set_u256(16, U256::from(0x456));
-        memory.record_shadow_write(16, 16, (2, 0));// lsn 2 set 16..32
-        
+        memory.record_shadow_write(16, 16, (2, 0)); // lsn 2 set 16..32
+
         // Convert to deps for continuous regions
         let deps = memory.get_shadow_deps(0..32);
-        assert_eq!(deps.len(), 2, "Should have two segments for continuous regions");
-        
-        // Check first segment 
-        assert_eq!(deps[0], MemoryDep { lsn: (1, 0), self_offset: 0, lsn_offset: 0, length: 16 }); 
+        assert_eq!(
+            deps.len(),
+            2,
+            "Should have two segments for continuous regions"
+        );
+
+        // Check first segment
+        assert_eq!(
+            deps[0],
+            MemoryDep {
+                lsn: (1, 0),
+                self_offset: 0,
+                lsn_offset: 0,
+                length: 16
+            }
+        );
 
         // Check second segment
-        assert_eq!(deps[1], MemoryDep { lsn: (2, 0), self_offset: 16, lsn_offset: 0, length: 16 });
+        assert_eq!(
+            deps[1],
+            MemoryDep {
+                lsn: (2, 0),
+                self_offset: 16,
+                lsn_offset: 0,
+                length: 16
+            }
+        );
 
         // Test case 2: Non-continuous regions with a gap
-        memory.resize(96);  // Resize for third write
+        memory.resize(96); // Resize for third write
         memory.set_u256(64, U256::from(0x789));
         memory.record_shadow_write(64, 32, (3, 0)); // lsn 3 set 64..96
-        
+
         // Convert to deps including the gap
         let deps = memory.get_shadow_deps(16..96); // memory 16..96 is self 0..80, 0..16 is set by lsn 2, 48..80 is set by lsn 3
         assert_eq!(deps.len(), 2, "Should have two segments with gap");
-        
+
         // Check first segment (part of second write)
-        assert_eq!(deps[0], MemoryDep { lsn: (2, 0), self_offset: 0, lsn_offset: 0, length: 16 });
-        
+        assert_eq!(
+            deps[0],
+            MemoryDep {
+                lsn: (2, 0),
+                self_offset: 0,
+                lsn_offset: 0,
+                length: 16
+            }
+        );
+
         // Check second segment (third write)
-        assert_eq!(deps[1], MemoryDep { lsn: (3, 0), self_offset: 48, lsn_offset: 0, length: 32 });
+        assert_eq!(
+            deps[1],
+            MemoryDep {
+                lsn: (3, 0),
+                self_offset: 48,
+                lsn_offset: 0,
+                length: 32
+            }
+        );
 
         // Test case 3: Partial word with specific offset
-        memory.resize(128);  // Resize for fourth write
+        memory.resize(128); // Resize for fourth write
         memory.set_byte(96, 0x42);
         memory.record_shadow_write(96, 1, (4, 0));
-        
-        memory.resize(128);  // Resize for fifth write
+
+        memory.resize(128); // Resize for fifth write
         memory.set_byte(97, 0x43);
         memory.record_shadow_write(97, 1, (4, 0));
-        
+
         // Convert to deps for partial word
         let deps = memory.get_shadow_deps(96..98);
-        assert_eq!(deps.len(), 2, "Should have two segments for separate byte writes");
-        
+        assert_eq!(
+            deps.len(),
+            2,
+            "Should have two segments for separate byte writes"
+        );
+
         // Check first segment
-        assert_eq!(deps[0], MemoryDep { lsn: (4, 0), self_offset: 0, lsn_offset: 0, length: 1 });
-        
+        assert_eq!(
+            deps[0],
+            MemoryDep {
+                lsn: (4, 0),
+                self_offset: 0,
+                lsn_offset: 0,
+                length: 1
+            }
+        );
+
         // Check second segment
-        assert_eq!(deps[1], MemoryDep { lsn: (4, 0), self_offset: 1, lsn_offset: 0, length: 1 });
+        assert_eq!(
+            deps[1],
+            MemoryDep {
+                lsn: (4, 0),
+                self_offset: 1,
+                lsn_offset: 0,
+                length: 1
+            }
+        );
 
         // Test case 4: Empty range
         let deps = memory.get_shadow_deps(32..32);
@@ -825,40 +878,42 @@ mod tests {
 
         // Test case 5: Range with no definitions
         let deps = memory.get_shadow_deps(32..64);
-        assert!(deps.is_empty(), "Range with no definitions should return empty deps");
+        assert!(
+            deps.is_empty(),
+            "Range with no definitions should return empty deps"
+        );
     }
-
 
     #[test]
     fn test_shadow_memory_clear() {
         let mut memory = SharedMemory::new();
         memory.enable_shadow();
-        
+
         // Write some data
         memory.resize(32);
         memory.set_u256(0, U256::from(0x123));
         memory.record_shadow_write(0, 32, (1, 0));
-        
+
         // Verify initial data
         assert_eq!(memory.get_u256(0), U256::from(0x123));
         let defs = memory.get_shadow_defs(0..32);
         for def in defs.iter() {
             assert_eq!(def.lsn, (1, 0));
         }
-        
+
         // Clear memory
         memory.clear();
-        
+
         // Verify memory is cleared
         assert_eq!(memory.len(), 0);
         assert!(memory.shadow_buffer.is_some());
         assert!(memory.get_shadow_defs(0..32).is_empty());
-        
+
         // Write after clear should work
         memory.resize(32);
         memory.set_u256(0, U256::from(0x456));
         memory.record_shadow_write(0, 32, (2, 0));
-        
+
         // Verify new data
         assert_eq!(memory.get_u256(0), U256::from(0x456));
         let defs = memory.get_shadow_defs(0..32);

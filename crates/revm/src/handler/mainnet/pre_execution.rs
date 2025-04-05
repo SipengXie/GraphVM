@@ -3,12 +3,15 @@
 //! They handle initial setup of the EVM, call loop and the final return of the EVM
 
 use crate::{
-    journaled_state::AccessType, precompile::PrecompileSpecId, primitives::{
+    journaled_state::AccessType,
+    precompile::PrecompileSpecId,
+    primitives::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
         SpecId::{CANCUN, PRAGUE, SHANGHAI},
         TxKind, BLOCKHASH_STORAGE_ADDRESS, KECCAK_EMPTY, U256,
-    }, Context, ContextPrecompiles
+    },
+    Context, ContextPrecompiles,
 };
 
 /// Main precompile load
@@ -95,7 +98,9 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
     let journaled_state = &mut context.evm.inner.journaled_state;
     // ! newly added logic
     // mark write caller's balance and nonce
-    journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
+    journaled_state
+        .read_write_set
+        .add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
 
     Ok(())
 }

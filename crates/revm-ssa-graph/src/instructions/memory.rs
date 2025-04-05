@@ -1,10 +1,10 @@
-use revm_primitives::U256;
-use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
-use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use super::get_memory;
 use super::utils::as_usize_saturated;
+use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::Spec;
+use revm_primitives::U256;
+use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Check if memory size needs to be extended, return new memory size
@@ -22,7 +22,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MLOAD operation
     #[inline(always)]
-    pub fn execute_mload(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_mload(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let memory = get_memory!(graph, &node.inputs[1]);
         let offset = as_usize_saturated!(offset);
@@ -51,12 +51,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MSTORE operation
     #[inline(always)]
-    pub fn execute_mstore(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_mstore(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let offset = as_usize_saturated!(offset);
         let value_bytes = value.to_be_bytes::<32>();
-        
+
         // Calculate required memory size
         let new_size = self.check_memory_size(offset, 32);
 
@@ -75,7 +75,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MSTORE8 operation
     #[inline(always)]
-    pub fn execute_mstore8(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_mstore8(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let offset = as_usize_saturated!(offset);
@@ -99,20 +99,24 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MSIZE operation
     #[inline(always)]
-    pub fn execute_msize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_msize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let size = match node.inputs[0] {
             SSAInput::MemorySizeChange((lsn, index)) => {
                 let dep_node = graph.get_node(lsn)?;
                 match dep_node.outputs[index as usize] {
                     SSAOutput::MemorySize(value) => value,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        "Expected MemorySize output value".to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            "Expected MemorySize output value".to_string(),
+                        ))
+                    }
                 }
             }
-            _ => return Err(ExecutionError::ExecutionError(
-                "MSIZE requires exactly 1 operand (memory size change)".to_string()
-            ))
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    "MSIZE requires exactly 1 operand (memory size change)".to_string(),
+                ))
+            }
         };
 
         node.outputs[0] = SSAOutput::Stack(U256::from(size));
@@ -122,8 +126,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute MCOPY operation
     #[inline(always)]
-    pub fn execute_mcopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_mcopy(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let dst = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let src = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -141,7 +144,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         // Calculate required memory size
         let new_size = self.check_memory_size(dst.max(src), len);
-        
+
         node.outputs[0] = SSAOutput::Memory(memory.into());
         if new_size > self.memory_size() {
             if node.outputs.len() < 2 {

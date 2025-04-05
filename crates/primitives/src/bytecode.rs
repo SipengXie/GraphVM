@@ -32,10 +32,10 @@ impl fmt::Debug for Bytecode {
         // Display first few and last few bytes of the bytecode
         const PREFIX_LEN: usize = 4;
         const SUFFIX_LEN: usize = 4;
-        
+
         let bytes = self.original_byte_slice();
         let len = bytes.len();
-        
+
         if len <= PREFIX_LEN + SUFFIX_LEN {
             // If bytecode is short enough, just display all of it
             write!(f, "Bytecode({:?})", bytes)

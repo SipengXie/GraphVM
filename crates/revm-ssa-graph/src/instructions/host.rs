@@ -1,31 +1,32 @@
-use std::cmp::min;
+use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_interpreter::{gas, SStoreResult};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
-    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
+    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256,
 };
 use revm_ssa::{
-    output_account_info, output_account_status, SSAInput, SSAInstructionResult, 
-    SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue
+    output_account_info, output_account_status, SSAInput, SSAInstructionResult,
+    SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue,
 };
-use crate::{
-    get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph
-};
+use std::cmp::min;
 
 use super::{
-    as_u64_saturated, as_usize_saturated, get_contract_env, 
-    get_memory, get_storage_value, u256_to_bool
+    as_u64_saturated, as_usize_saturated, get_contract_env, get_memory, get_storage_value,
+    u256_to_bool,
 };
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute SLOAD operation
     #[inline(always)]
-    pub fn execute_sload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_sload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let value = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let account_status = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
 
-        let value = if account_status.as_account_status().unwrap().contains(AccountStatus::Created) {
+        let value = if account_status
+            .as_account_status()
+            .unwrap()
+            .contains(AccountStatus::Created)
+        {
             U256::ZERO
         } else {
             *value.as_slot().unwrap()
@@ -37,7 +38,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute SSTORE operation
     #[inline(always)]
-    pub fn execute_sstore(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_sstore(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let address = get_contract_env!(graph, node.inputs[0]).target_address;
 
         let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
@@ -63,7 +64,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             _ => panic!("present value of sstore input is not a storage key"),
         } && !is_read; // not been read before
 
-        let gas_cost = gas::sstore_cost(SPEC::SPEC_ID, &sstore_result, 2301/* just to bypass the gas check */, is_cold).unwrap();
+        let gas_cost = gas::sstore_cost(
+            SPEC::SPEC_ID,
+            &sstore_result,
+            2301, /* just to bypass the gas check */
+            is_cold,
+        )
+        .unwrap();
         let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &sstore_result);
 
         node.outputs[0] = SSAOutput::Storage {
@@ -77,7 +84,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     #[inline(always)]
-    pub fn execute_tstore(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_tstore(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let _address = get_contract_env!(graph, node.inputs[0]).target_address;
         let _index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -88,7 +95,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     #[inline(always)]
-    pub fn execute_tload(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_tload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let _address = get_contract_env!(graph, node.inputs[0]).target_address;
         let _index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = match node.inputs[2] {
@@ -96,14 +103,18 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
                 let dep_node = graph.get_node(lsn)?;
                 match dep_node.outputs[index as usize] {
                     SSAOutput::Transient(value) => value,
-                    _ => return Err(ExecutionError::ExecutionError( 
-                        ExecutionError::EXPECTED_TRANSIENT_VALUE.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_TRANSIENT_VALUE.to_string(),
+                        ))
+                    }
                 }
             }
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::EXPECTED_TRANSIENT_VALUE.to_string()
-            ))
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::EXPECTED_TRANSIENT_VALUE.to_string(),
+                ))
+            }
         };
 
         node.outputs[0] = SSAOutput::Stack(value);
@@ -113,7 +124,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute BALANCE operation
     #[inline(always)]
-    pub fn execute_balance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_balance(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let balance = account.as_account_info().unwrap().balance;
         node.outputs[0] = SSAOutput::Stack(balance);
@@ -122,7 +133,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute SELFBALANCE operation
     #[inline(always)]
-    pub fn execute_selfbalance(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_selfbalance(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let balance = account.as_account_info().unwrap().balance;
         node.outputs[0] = SSAOutput::Stack(balance);
@@ -131,14 +142,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute EXTCODESIZE operation
     #[inline(always)]
-    pub fn execute_extcodesize(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()>  {
+    pub fn execute_extcodesize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         // we ignore EIP 7702 here
         let code = match &account.as_account_info().unwrap().code {
             Some(code) => code,
-            None => {
-                &Bytecode::default()
-            }
+            None => &Bytecode::default(),
         };
         node.outputs[0] = SSAOutput::Stack(U256::from(code.len()));
         Ok(())
@@ -146,7 +155,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute EXTCODEHASH operation
     #[inline(always)]
-    pub fn execute_extcodehash(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_extcodehash(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let code_hash = account.as_account_info().unwrap().code_hash;
         node.outputs[0] = SSAOutput::Stack(code_hash.into());
@@ -155,29 +164,35 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute EXTCODECOPY operation
     #[inline(always)]
-    pub fn execute_extcodecopy(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_extcodecopy(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let mem_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[3]);
         let account_info = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
-        
+
         let mem_offset = as_usize_saturated!(mem_offset);
         let code_offset = as_usize_saturated!(code_offset);
         let len = as_usize_saturated!(len);
-        let code = account_info.as_account_info().unwrap().code.as_ref().unwrap().original_bytes();
+        let code = account_info
+            .as_account_info()
+            .unwrap()
+            .code
+            .as_ref()
+            .unwrap()
+            .original_bytes();
 
         // When len is 0, return an empty vector
         let padded_code_slice = if len == 0 {
             Vec::new()
         } else {
-            let code_len = min(code.len(), code_offset+len);
+            let code_len = min(code.len(), code_offset + len);
             let code_slice = &code[code_offset..code_len];
             // Pad code_slice to len
             let mut padded_data = vec![0u8; len];
             padded_data[..code_slice.len()].copy_from_slice(&code_slice);
             padded_data
         };
-        
+
         node.outputs[0] = SSAOutput::Memory(padded_code_slice.into());
 
         let new_size = self.check_memory_size(mem_offset, len);
@@ -196,7 +211,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute BLOCKHASH operation
     #[inline(always)]
-    pub fn execute_blockhash(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_blockhash(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let number = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let number = as_u64_saturated!(number);
         let blockhash = self.get_blockhash(number)?;
@@ -206,8 +221,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute LOG operation
     #[inline(always)]
-    pub fn execute_log(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_log(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let address = get_contract_env!(graph, node.inputs[0]).target_address;
         let memory = get_memory!(graph, &node.inputs[3]);
 
@@ -229,8 +243,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute SELFDESTRUCT operation
     #[inline(always)]
-    pub fn execute_selfdestruct(&mut self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
-
+    pub fn execute_selfdestruct(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let contract_address = get_contract_env!(graph, node.inputs[0]).target_address;
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let address_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
@@ -251,12 +264,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
         // Calculate the required number of outputs
         let mut required_outputs = 1; // At least one InterpreterResult output is needed
-        
+
         // If contract address is not equal to target, we need one output to update target account info
         if contract_address != target {
             required_outputs += 1;
         }
-        
+
         // If it's a newly created contract or Cancun is not enabled, we need two outputs
         // to update contract address account info and status
         if is_created || !is_cancun_enabled {
@@ -266,7 +279,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             // we need one output to update contract address account info
             required_outputs += 1;
         }
-        
+
         // Ensure outputs has enough space
         if outputs.len() < required_outputs {
             outputs.resize(required_outputs, SSAOutput::Constant(U256::ZERO));
@@ -294,7 +307,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             index += 1;
         }
 
-        let result = SSAOutput::InterpreterResult(SSAInterpreterResult{
+        let result = SSAOutput::InterpreterResult(SSAInterpreterResult {
             result: SSAInstructionResult::Ok,
             output: Bytes::default(),
         });
@@ -303,4 +316,3 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         Ok(())
     }
 }
-

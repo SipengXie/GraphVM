@@ -2,7 +2,7 @@ use core::ops::Range;
 
 use revm_primitives::{Address, Bytes, U256};
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Simplified Call input structure
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,17 +71,15 @@ pub enum SSACallScheme {
     ExtCall,
     ExtStaticCall,
     ExtDelegateCall,
-} 
+}
 
 /// Simplified Create scheme enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SSACreateScheme {
     Create,
-    Create2 {
-        salt: U256,
-    },
-} 
+    Create2 { salt: U256 },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -118,4 +116,4 @@ impl SSAInstructionResult {
     pub fn is_error(&self) -> bool {
         matches!(self, SSAInstructionResult::Error)
     }
-} 
+}

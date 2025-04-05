@@ -1,12 +1,14 @@
-use revm_primitives::{db::DatabaseRef, Bytes, Spec};
-use revm_ssa::{SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, SSAInput
+use crate::{
+    as_usize_saturated, get_memory, get_ssa_output_stack_or_const, ExecutionContext,
+    ExecutionError, Result, SsaGraph,
 };
-use crate::{get_ssa_output_stack_or_const, get_memory, as_usize_saturated,ExecutionContext, ExecutionError, Result, SsaGraph};
+use revm_primitives::{db::DatabaseRef, Bytes, Spec};
+use revm_ssa::{SSAInput, SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput};
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute JUMP operation
     #[inline(always)]
-    pub fn execute_jump(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_jump(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let current_pc = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         // Calculate relative offset
@@ -17,7 +19,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         if let SSAOutput::Jump(old_jump) = node.outputs[0] {
             if old_jump != relative_offset {
                 return Err(ExecutionError::ExecutionError(
-                    ExecutionError::control_flow_not_deterministic(node, old_jump, relative_offset)
+                    ExecutionError::control_flow_not_deterministic(node, old_jump, relative_offset),
                 ));
             }
         }
@@ -29,7 +31,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute JUMPI operation
     #[inline(always)]
-    pub fn execute_jumpi(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_jumpi(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let condition = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let current_pc = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -48,7 +50,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         if let SSAOutput::Jump(old_jump) = node.outputs[0] {
             if old_jump != new_jump {
                 return Err(ExecutionError::ExecutionError(
-                    ExecutionError::control_flow_not_deterministic(node, old_jump, new_jump)
+                    ExecutionError::control_flow_not_deterministic(node, old_jump, new_jump),
                 ));
             }
         }
@@ -60,7 +62,12 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute RETURN/REVERT operation
     #[inline(always)]
-    pub fn execute_ret(&mut self, node: &mut SSALogEntry, graph: & SsaGraph, instruction_result: SSAInstructionResult) -> Result<()> {
+    pub fn execute_ret(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+        instruction_result: SSAInstructionResult,
+    ) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let length = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let output = get_memory!(graph, &node.inputs[2]);
@@ -70,13 +77,11 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         let length = as_usize_saturated!(length);
         let new_size = self.check_memory_size(offset, length);
 
-        node.outputs[0] = SSAOutput::InterpreterResult(
-            SSAInterpreterResult {
-                result,
-                output: output.into(),
-            }
-        );
-        
+        node.outputs[0] = SSAOutput::InterpreterResult(SSAInterpreterResult {
+            result,
+            output: output.into(),
+        });
+
         if new_size > self.memory_size() {
             if node.outputs.len() < 2 {
                 node.outputs.push(SSAOutput::MemorySize(new_size));
@@ -89,14 +94,21 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
     }
 
     #[inline(always)]
-    pub fn execute_change_instruction_result(&self, node: &mut SSALogEntry, _graph: & SsaGraph, opcode: u8) -> Result<()> {
+    pub fn execute_change_instruction_result(
+        &self,
+        node: &mut SSALogEntry,
+        _graph: &SsaGraph,
+        opcode: u8,
+    ) -> Result<()> {
         let result = match opcode {
-            0x00 => SSAInstructionResult::Ok,      // STOP
-            0xFE => SSAInstructionResult::Error,   // INVALID
-            0xFF => SSAInstructionResult::Error,   // UNKNOWN
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INVALID_OPCODE_FOR_RESULT_CHANGE.to_string()
-            )),
+            0x00 => SSAInstructionResult::Ok,    // STOP
+            0xFE => SSAInstructionResult::Error, // INVALID
+            0xFF => SSAInstructionResult::Error, // UNKNOWN
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INVALID_OPCODE_FOR_RESULT_CHANGE.to_string(),
+                ))
+            }
         };
 
         node.outputs[0] = SSAOutput::InterpreterResult(SSAInterpreterResult {

@@ -32,7 +32,7 @@ macro_rules! u256_to_bool {
             Ok(0) => Ok(false),
             Ok(1) => Ok(true),
             _ => Err(ExecutionError::ExecutionError(
-                ExecutionError::INVALID_BOOLEAN_VALUE.to_string()
+                ExecutionError::INVALID_BOOLEAN_VALUE.to_string(),
             )),
         }
     }};
@@ -49,14 +49,18 @@ macro_rules! get_ssa_output_stack_or_const {
                 let dep_node = $graph.get_node(lsn_with_index.0)?;
                 match dep_node.outputs[lsn_with_index.1 as usize] {
                     SSAOutput::Stack(value) => value,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        ExecutionError::EXPECTED_STACK_VALUE.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_STACK_VALUE.to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_STACK_OR_CONST.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_STACK_OR_CONST.to_string(),
+                ))
+            }
         }
     };
 }
@@ -67,7 +71,7 @@ macro_rules! get_ssa_output_stack_or_const {
 macro_rules! get_storage_value {
     ($graph:expr, $input:expr, $get_state:expr) => {
         match $input {
-            SSAInput::Storage (key, source) => {
+            SSAInput::Storage(key, source) => {
                 if source == (0, 0) {
                     // fetch from the database
                     $get_state(&key)?
@@ -75,15 +79,19 @@ macro_rules! get_storage_value {
                     let dep_node = $graph.get_node(source.0)?;
                     match &dep_node.outputs[source.1 as usize] {
                         SSAOutput::Storage { value, .. } => *value.clone(),
-                        _ => return Err(ExecutionError::ExecutionError(
-                            ExecutionError::EXPECTED_STORAGE_VALUE.to_string()
-                        ))
+                        _ => {
+                            return Err(ExecutionError::ExecutionError(
+                                ExecutionError::EXPECTED_STORAGE_VALUE.to_string(),
+                            ))
+                        }
                     }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_STORAGE_VALUE.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_STORAGE_VALUE.to_string(),
+                ))
+            }
         }
     };
 }
@@ -98,14 +106,18 @@ macro_rules! get_contract_env {
                 let dep_node = $graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::ContractEnv(value) => value,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        ExecutionError::EXPECTED_CONTRACT_ENV_VALUE.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_CONTRACT_ENV_VALUE.to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_CONTRACT_ENV.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_CONTRACT_ENV.to_string(),
+                ))
+            }
         }
     };
 }
@@ -119,7 +131,8 @@ macro_rules! get_memory {
         match $input {
             SSAInput::Memory(mem_deps) => {
                 // Calculate required memory size - find the maximum end position
-                let max_size = mem_deps.iter()
+                let max_size = mem_deps
+                    .iter()
                     .map(|dep| dep.self_offset + dep.length)
                     .max()
                     .unwrap_or(0);
@@ -137,25 +150,34 @@ macro_rules! get_memory {
                             let src_end = src_start + dep.length;
                             // Ensure range is valid
                             if src_end <= value.len() {
-                                memory[dst_start..dst_end].copy_from_slice(&value[src_start..src_end]);
+                                memory[dst_start..dst_end]
+                                    .copy_from_slice(&value[src_start..src_end]);
                             } else {
-                                return Err(ExecutionError::ExecutionError(
-                                    format!("Invalid memory range: dst [{},{}], src [{},{}], src len {}",
-                                        dst_start, dst_end, src_start, src_end, value.len())
-                                ));
+                                return Err(ExecutionError::ExecutionError(format!(
+                                    "Invalid memory range: dst [{},{}], src [{},{}], src len {}",
+                                    dst_start,
+                                    dst_end,
+                                    src_start,
+                                    src_end,
+                                    value.len()
+                                )));
                             }
-                        },
-                        _ => return Err(ExecutionError::ExecutionError(
-                            ExecutionError::EXPECTED_MEMORY_VALUE.to_string()
-                        ))
+                        }
+                        _ => {
+                            return Err(ExecutionError::ExecutionError(
+                                ExecutionError::EXPECTED_MEMORY_VALUE.to_string(),
+                            ))
+                        }
                     }
                 }
 
                 memory
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_MEMORY_VALUE.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_MEMORY_VALUE.to_string(),
+                ))
+            }
         }
     };
 }
@@ -170,14 +192,18 @@ macro_rules! get_return_data_buffer {
                 let dep_node = $graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::ReturnDataBuffer(value) => value,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        ExecutionError::EXPECTED_RETURN_DATA_BUFFER.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_RETURN_DATA_BUFFER.to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_RETURN_DATA_BUFFER.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_RETURN_DATA_BUFFER.to_string(),
+                ))
+            }
         }
     };
 }
@@ -195,15 +221,19 @@ macro_rules! get_call_input {
                     let dep_node = $graph.get_node(lsn)?;
                     match &dep_node.outputs[index as usize] {
                         SSAOutput::CallInput(input) => input,
-                        _ => return Err(ExecutionError::ExecutionError(
-                            ExecutionError::EXPECTED_CALL_INPUT.to_string()
-                        ))
+                        _ => {
+                            return Err(ExecutionError::ExecutionError(
+                                ExecutionError::EXPECTED_CALL_INPUT.to_string(),
+                            ))
+                        }
                     }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_CALL_INPUT.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_CALL_INPUT.to_string(),
+                ))
+            }
         }
     };
 }
@@ -218,14 +248,18 @@ macro_rules! get_interpreter_result {
                 let dep_node = $graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::InterpreterResult(result) => result,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        ExecutionError::EXPECTED_INTERPRETER_RESULT.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_INTERPRETER_RESULT.to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::INPUT_MUST_BE_INTERPRETER_RESULT.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::INPUT_MUST_BE_INTERPRETER_RESULT.to_string(),
+                ))
+            }
         }
     };
 }
@@ -240,14 +274,18 @@ macro_rules! get_gas_cost {
                 let dep_node = $graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::Gas(gas_cost) => gas_cost,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        ExecutionError::EXPECTED_GAS_COST.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_GAS_COST.to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::EXPECTED_GAS_COST.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::EXPECTED_GAS_COST.to_string(),
+                ))
+            }
         }
     };
 }
@@ -262,14 +300,18 @@ macro_rules! get_gas_refund {
                 let dep_node = $graph.get_node(lsn)?;
                 match &dep_node.outputs[index as usize] {
                     SSAOutput::GasRefund(gas_refund) => gas_refund,
-                    _ => return Err(ExecutionError::ExecutionError(
-                        ExecutionError::EXPECTED_GAS_REFUND.to_string()
-                    ))
+                    _ => {
+                        return Err(ExecutionError::ExecutionError(
+                            ExecutionError::EXPECTED_GAS_REFUND.to_string(),
+                        ))
+                    }
                 }
-            },
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::EXPECTED_GAS_REFUND.to_string()
-            ))
+            }
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::EXPECTED_GAS_REFUND.to_string(),
+                ))
+            }
         }
     };
 }
@@ -279,16 +321,18 @@ macro_rules! get_constant_i64 {
     ($graph:expr, $input:expr) => {
         match $input {
             SSAInput::ConstantI64(value) => value,
-            _ => return Err(ExecutionError::ExecutionError(
-                ExecutionError::EXPECTED_CONSTANT_I64.to_string()
-            ))
+            _ => {
+                return Err(ExecutionError::ExecutionError(
+                    ExecutionError::EXPECTED_CONSTANT_I64.to_string(),
+                ))
+            }
         }
     };
 }
 
 /// Re-export macros for convenience
 pub use {
-    as_u64_saturated, as_usize_saturated, u256_to_bool,
-    get_storage_value, get_contract_env, get_memory, get_return_data_buffer, 
-    get_call_input, get_interpreter_result, get_gas_cost, get_gas_refund, get_constant_i64
+    as_u64_saturated, as_usize_saturated, get_call_input, get_constant_i64, get_contract_env,
+    get_gas_cost, get_gas_refund, get_interpreter_result, get_memory, get_return_data_buffer,
+    get_storage_value, u256_to_bool,
 };
