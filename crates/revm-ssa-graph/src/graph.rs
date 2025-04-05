@@ -1,7 +1,7 @@
 use crate::{ExecutionError, Result};
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
-use revm_primitives::{ExecutionResult, HaltReason, HashMap, HashSet, Output, SuccessReason};
+use revm_primitives::{fixed_bytes, ExecutionResult, FixedBytes, HaltReason, HashMap, HashSet, Output, SuccessReason};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput};
 
@@ -411,7 +411,7 @@ impl SsaGraph {
         Ok(layers)
     }
 
-    pub fn generate_result(&self, gas_limit: u64) -> Result<ExecutionResult> {
+    pub fn generate_result(&self, gas_limit: u64, tx_hash: FixedBytes<32>) -> Result<ExecutionResult> {
         // 1. Get the result node, handle error cases early
         let result_node = self.get_node(self.last_return)?;
         let output = result_node.outputs.get(0).ok_or_else(|| {
@@ -435,7 +435,10 @@ impl SsaGraph {
                 ))
             }
         };
-        eprintln!("gas_limit:{}, gas_remaining:{}, gas_refunded:{}", gas_limit, gas_remaining, gas_refunded);
+
+        if tx_hash == fixed_bytes!("227744a342c3309af73d122b644c0698ff92dbf27ced2ce3b7d4fc54e022fc81") {
+            eprintln!("gas_limit:{}, gas_remaining:{}, gas_refunded:{}", gas_limit, gas_remaining, gas_refunded);
+        }
         let gas_used = gas_limit - gas_remaining - gas_refunded;
 
         // 2. Pre-allocate log capacity to avoid reallocation

@@ -338,7 +338,7 @@ impl Occda {
                                     task_result.inspector = Some(inspector);
                                     task_result.ssa_output = Some(result_state);
                                     task_result.result =
-                                        Some(executor.graph.generate_result(task.gas).unwrap());
+                                        Some(executor.graph.generate_result(task.gas, task.tx_hash.unwrap()).unwrap());
                                     let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
                                     unsafe {
                                         *result_raw_ptr.add(idx) = task_result;
@@ -704,7 +704,7 @@ impl Occda {
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);
                                 task_result.ssa_output = Some(result_state);
-                                task_result.result = Some(executor.graph.generate_result(task.gas).unwrap());
+                                task_result.result = Some(executor.graph.generate_result(task.gas, task.tx_hash.unwrap()).unwrap());
                                 result_store[idx] = task_result;
                                 drop(executor);
                                 re_execution_opcodes += nodes_to_execute_len.0;

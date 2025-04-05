@@ -93,10 +93,6 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
         };
         node.outputs[1] = SSAOutput::Gas(base_gas_remaining - dynamic_gas_cost);
         node.outputs[2] = SSAOutput::GasRefund(base_gas_refunded + dynamic_gas_refund);
-        if base_gas_refunded < 0 {
-            eprintln!("base_gas_refunded:{}, dynamic_gas_refund:{}", base_gas_refunded, dynamic_gas_refund);
-            eprintln!("Node:{:?}", node);
-        }
         Ok(())
     }
 
