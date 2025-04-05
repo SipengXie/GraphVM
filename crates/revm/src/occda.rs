@@ -382,6 +382,7 @@ impl Occda {
                                 .append_handler_register(inspector_handle_register)
                                 .build()
                         };
+                        evm.disable_beneficiary();
                         let init_end = std::time::Instant::now();
                         init_time += init_end - init_start;
 
@@ -725,6 +726,7 @@ impl Occda {
                         .with_spec_id(task.spec_id)
                         .append_handler_register(inspector_handle_register)
                         .build();
+                    evm.disable_beneficiary();
 
                     profiler::start("evm-transact");
                     let result = evm.transact();
