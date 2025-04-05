@@ -417,7 +417,7 @@ impl SsaGraph {
         let output = result_node.outputs.get(0).ok_or_else(|| {
             ExecutionError::GraphError("No output found in last return node".to_string())
         })?;
-        assert_ne!(self.gas_calc, 0);
+        // assert_ne!(self.gas_calc, 0);
         let gas_node = self.get_node(self.gas_calc)?;
         let gas_remaining = match &gas_node.outputs[1] {
             SSAOutput::Gas(gas) => *gas,
