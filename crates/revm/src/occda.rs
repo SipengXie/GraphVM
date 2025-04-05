@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256
+    fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256,
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -313,18 +313,19 @@ impl Occda {
                             let execution_mode = ExecutionMode::Partial(
                                 to_re_execute.iter().map(|x| *x).collect::<Vec<_>>(),
                             );
-                            let mut executor = SSAExecutor::<_, LatestSpec>::new(
-                                graph,
-                                db_ref,
-                                &task.env,
-                                None,
-                                self.first_call_input_store[idx].clone(),
-                                self.first_create_input_store[idx].clone(),
-                            )
+                            let mut executor =
+                                SSAExecutor::new_with_spec(
+                                    graph,
+                                    db_ref,
+                                    &task.env,
+                                    self.first_call_input_store[idx].clone(),
+                                    self.first_create_input_store[idx].clone(),
+                                    task.spec_id
+                                )
                             .with_mode(execution_mode);
 
                             profiler::start("ssa-execution");
-                            let ssa_execution = executor.execute();
+                            let ssa_execution = executor.execute_with_spec(task.spec_id);
                             profiler::end("ssa-execution");
 
                             match ssa_execution {
@@ -681,18 +682,19 @@ impl Occda {
                         let execution_mode = ExecutionMode::Partial(
                             to_re_execute.iter().map(|x| *x).collect::<Vec<_>>(),
                         );
-                        let mut executor = SSAExecutor::<_, LatestSpec>::new(
-                            graph,
-                            &parallel_db,
-                            &task.env,
-                            None,
-                            self.first_call_input_store[idx].clone(),
-                            self.first_create_input_store[idx].clone(),
-                        )
+                        let mut executor = 
+                            SSAExecutor::new_with_spec(
+                                graph,
+                                db_ref_for_parallel,
+                                &task.env,
+                                self.first_call_input_store[idx].clone(),
+                                self.first_create_input_store[idx].clone(),
+                                task.spec_id
+                            )
                         .with_mode(execution_mode);
 
                         profiler::start("ssa-execution");
-                        let ssa_execution = executor.execute();
+                        let ssa_execution = executor.execute_with_spec(task.spec_id);
                         profiler::end("ssa-execution");
 
                         match ssa_execution {

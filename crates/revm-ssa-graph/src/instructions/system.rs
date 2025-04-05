@@ -4,11 +4,10 @@ use super::utils::as_usize_saturated;
 use super::{get_contract_env, get_memory, get_return_data_buffer};
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
-use revm_primitives::Spec;
 use revm_primitives::{B256, U256};
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
     /// Execute GAS operation
     /// ! For a formal implementation, we should consider all front-loaded dynamic gas commands
     #[inline(always)]

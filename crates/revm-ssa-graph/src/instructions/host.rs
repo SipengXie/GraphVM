@@ -2,7 +2,7 @@ use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Res
 use revm_interpreter::{gas, SStoreResult};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
-    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256,
+    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
 };
 use revm_ssa::{
     output_account_info, output_account_status, SSAInput, SSAInstructionResult,
@@ -15,7 +15,7 @@ use super::{
     u256_to_bool,
 };
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute SLOAD operation
     #[inline(always)]
     pub fn execute_sload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
@@ -38,7 +38,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute SSTORE operation
     #[inline(always)]
-    pub fn execute_sstore(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
+    pub fn execute_sstore<SPEC: Spec>(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let address = get_contract_env!(graph, node.inputs[0]).target_address;
 
         let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);

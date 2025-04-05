@@ -2,11 +2,10 @@ use super::get_memory;
 use super::utils::as_usize_saturated;
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
-use revm_primitives::Spec;
 use revm_primitives::U256;
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Check if memory size needs to be extended, return new memory size
     #[inline(always)]
     pub fn check_memory_size(&self, offset: usize, size: usize) -> usize {

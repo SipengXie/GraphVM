@@ -1,10 +1,10 @@
-use std::{marker::PhantomData, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result,
 };
-use rayon::ThreadPool;
-use revm_primitives::{db::DatabaseRef, Env, Spec};
+
+use revm_primitives::{db::DatabaseRef, spec_to_generic, Env, Spec, SpecId};
 use revm_ssa::{logger::LsnType, SSACallInput, SSACreateInput, SSAInstructionResult, SSALogEntry};
 
 /// Execution mode
@@ -16,87 +16,36 @@ pub enum ExecutionMode {
     Partial(Vec<LsnType>),
 }
 
-// #[repr(align(64))] // Force cache line alignment
-// struct PaddedAtomicU64(AtomicU64);
-
-// struct AtomicBitMap {
-//     bits: Vec<PaddedAtomicU64> // Each AtomicU64 occupies a full cache line
-// }
-
-// impl AtomicBitMap {
-//     /// Create new bitmap with specified initialization state
-//     /// - max_lsn: Maximum LSN to support
-//     /// - initial_state: true = all bits set (mark as completed), false = all bits cleared
-//     fn new(max_lsn: LsnType, initial_state: bool) -> Self {
-//         let size = (max_lsn as usize + 63) / 64;
-//         let init_value = if initial_state { u64::MAX } else { 0 };
-
-//         let bits = (0..size)
-//             .map(|_| PaddedAtomicU64(AtomicU64::new(init_value)))
-//             .collect();
-
-//         Self { bits }
-//     }
-
-//     /// Atomically mark an LSN as completed
-//     #[inline(always)]
-//     fn mark(&self, lsn: LsnType) {
-//         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
-//         if let Some(atomic) = self.bits.get(idx) {
-//             // Modifying bits[idx] won't affect other elements in bits
-//             atomic.0.fetch_or(mask, Ordering::Release);
-//         }
-//     }
-
-//     /// Atomically clear a bit (set to 0)
-//     #[inline(always)]
-//     fn unmark(&self, lsn: LsnType) {
-//         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
-//         if let Some(atomic) = self.bits.get(idx) {
-//             atomic.0.fetch_and(!mask, std::sync::atomic::Ordering::Release);
-//         }
-//     }
-// }
-
 /// SSA Executor
-pub struct SSAExecutor<'a, DB, SPEC>
+pub struct SSAExecutor<'a, DB>
 where
     DB: DatabaseRef + Send + Sync + 'a,
     DB::Error: Send + Sync,
-    SPEC: Spec + Send + Sync,
 {
     /// Execution context
-    pub context: Arc<ExecutionContext<'a, DB, SPEC>>,
+    pub context: Arc<ExecutionContext<'a, DB>>,
     /// Dependency graph
     pub graph: Arc<SsaGraph>,
     /// Execution tracer (optional)
     pub tracer: Option<ExecutionTracer>,
     /// Execution mode
     pub mode: ExecutionMode,
-    /// Hardfork specification
-    pub spec: PhantomData<SPEC>,
-    // thread_pool: Option<ThreadPool>,
-
-    // completed_nodes: Arc<AtomicBitMap>,
 }
 
-impl<'a, DB, SPEC> SSAExecutor<'a, DB, SPEC>
+impl<'a, DB> SSAExecutor<'a, DB>
 where
     DB: DatabaseRef + Send + Sync + 'a,
     DB::Error: Send + Sync,
-    SPEC: Spec + Send + Sync,
 {
-    pub fn new(
+    pub fn new<SPEC: Spec>(
         graph: Arc<SsaGraph>,
         db: DB,
         env: &'a Env,
-        _thread_pool: Option<ThreadPool>,
         first_call_input: Option<SSACallInput>,
         first_create_input: Option<SSACreateInput>,
     ) -> Self {
-        // let max_lsn = graph.num_nodes();
         Self {
-            context: Arc::new(ExecutionContext::new(
+            context: Arc::new(ExecutionContext::new::<SPEC>(
                 env,
                 db,
                 first_call_input,
@@ -105,10 +54,18 @@ where
             graph,
             tracer: None,
             mode: ExecutionMode::Full,
-            spec: PhantomData,
-            // thread_pool,
-            // completed_nodes: Arc::new(AtomicBitMap::new(max_lsn as LsnType, false)),
         }
+    }
+
+    pub fn new_with_spec(
+        graph: Arc<SsaGraph>,
+        db: DB,
+        env: &'a Env,
+        first_call_input: Option<SSACallInput>,
+        first_create_input: Option<SSACreateInput>,
+        spec_id: SpecId,
+    ) -> Self {
+        spec_to_generic!(spec_id, Self::new::<SPEC>(graph, db, env, first_call_input, first_create_input))
     }
 
     /// Set execution mode
@@ -132,10 +89,15 @@ where
     pub fn into_tracer(self) -> Option<ExecutionTracer> {
         self.tracer
     }
+    
+    #[inline(always)]
+    pub fn execute_with_spec(&mut self, spec_id: SpecId) -> Result<(usize, std::time::Duration)> {
+        spec_to_generic!(spec_id, self.execute::<SPEC>())
+    }
 
     /// Execute the entire graph
     #[inline(always)]
-    pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {
+    pub fn execute<SPEC:Spec>(&mut self) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
         let nodes_to_execute = match &self.mode {
@@ -168,7 +130,7 @@ where
         let execute_start = Instant::now();
         for node_index in nodes_to_execute {
             let node = graph.get_node_by_index_mut(node_index);
-            Self::execute_node(node, &self.graph, &self.context)?;
+            Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
         }
         let execute_duration = execute_start.elapsed();
 
@@ -344,9 +306,9 @@ where
     /// Unsafely get mutable reference to context
     #[inline(always)]
     unsafe fn get_mut_context(
-        context: &Arc<ExecutionContext<'a, DB, SPEC>>,
-    ) -> &'a mut ExecutionContext<'a, DB, SPEC> {
-        &mut *(Arc::as_ptr(context) as *mut ExecutionContext<'a, DB, SPEC>)
+        context: &Arc<ExecutionContext<'a, DB>>,
+    ) -> &'a mut ExecutionContext<'a, DB> {
+        &mut *(Arc::as_ptr(context) as *mut ExecutionContext<'a, DB>)
     }
 
     /// Unsafely get mutable reference to graph
@@ -357,10 +319,10 @@ where
 
     /// Execute operation based on opcode
     #[inline(always)]
-    fn execute_node(
+    fn execute_node<SPEC:Spec>(
         node: &mut SSALogEntry,
         graph: &SsaGraph,
-        context: &Arc<ExecutionContext<'a, DB, SPEC>>,
+        context: &Arc<ExecutionContext<'a, DB>>,
     ) -> Result<()> {
         let context = unsafe { Self::get_mut_context(context) };
         match node.opcode {
@@ -427,7 +389,7 @@ where
             0x52 => context.execute_mstore(node, graph),  // MSTORE
             0x53 => context.execute_mstore8(node, graph), // MSTORE8
             0x54 => context.execute_sload(node, graph),   // SLOAD
-            0x55 => context.execute_sstore(node, graph),  // SSTORE
+            0x55 => context.execute_sstore::<SPEC>(node, graph),  // SSTORE
             0x56 => context.execute_jump(node, graph),    // JUMP
             0x57 => context.execute_jumpi(node, graph),   // JUMPI
             0x58 => Ok(()),                               // PC

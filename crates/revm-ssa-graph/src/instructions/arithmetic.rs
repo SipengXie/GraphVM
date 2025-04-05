@@ -1,10 +1,10 @@
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
-use revm_primitives::{db::DatabaseRef, Spec, U256};
+use revm_primitives::{db::DatabaseRef, U256};
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
 use super::i256::{i256_div, i256_mod};
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute addition operation
     #[inline(always)]
     pub fn execute_add(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {

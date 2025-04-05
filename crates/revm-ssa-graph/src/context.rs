@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -17,15 +16,13 @@ use revm_ssa::{
 use crate::{instructions::as_u64_saturated, ExecutionError, Result};
 
 /// Execution context
-pub struct ExecutionContext<'a, DB: DatabaseRef, SPEC: Spec> {
+pub struct ExecutionContext<'a, DB: DatabaseRef> {
     /// Environment
     env: Arc<&'a Env>,
     /// Database reference
     db: Arc<DB>,
     /// Virtual memory size
     memory_size: AtomicUsize,
-    /// Hardfork specification
-    spec: PhantomData<SPEC>,
     /// Precompiles
     precompiles: &'static Precompiles,
     /// First call input
@@ -34,8 +31,8 @@ pub struct ExecutionContext<'a, DB: DatabaseRef, SPEC: Spec> {
     first_create_input: Option<SSACreateInput>,
 }
 
-impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
-    pub fn new(
+impl<'a, DB: DatabaseRef> ExecutionContext<'a, DB> {
+    pub fn new<SPEC: Spec>(
         env: &'a Env,
         db: DB,
         first_call_input: Option<SSACallInput>,
@@ -45,7 +42,6 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
             env: Arc::new(env),
             db: Arc::new(db),
             memory_size: AtomicUsize::new(0),
-            spec: PhantomData,
             precompiles: Precompiles::new(PrecompileSpecId::from_spec_id(SPEC::SPEC_ID)),
             first_call_input,
             first_create_input,

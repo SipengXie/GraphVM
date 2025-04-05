@@ -1,7 +1,7 @@
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode};
-use revm_primitives::{Address, Bytes, Spec, B256, U256};
+use revm_primitives::{Address, Bytes, B256, U256};
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
     output_account_info, output_account_status, ContractEnv, SSACallInput, SSACallOutcome,
@@ -16,7 +16,7 @@ use crate::{
 
 use super::{get_constant_i64, get_gas_cost, get_gas_refund};
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute deduct caller operation
     #[inline(always)]
     pub fn execute_deduct_caller(
