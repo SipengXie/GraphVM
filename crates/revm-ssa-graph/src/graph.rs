@@ -48,13 +48,18 @@ impl SsaGraph {
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
-        match entry.opcode {
-            op if is_storage_write!(op) => self.storage_write.push(lsn),
-            0xA0..=0xA4 => self.logs.push(lsn),
-            0xD5 | 0xD8 => self.last_return = lsn,
-            0xDB => {self.gas_calc = lsn; eprintln!("gas_calc: {}", lsn)},
-            _ => {}
+        
+        if is_storage_write!(entry.opcode) {
+            self.storage_write.push(lsn);
         }
+
+        if lsn >= 0xA0 && lsn <= 0xA4 {
+            self.logs.push(lsn);
+        } else if lsn == 0xDB {
+            self.gas_calc = lsn; 
+            eprintln!("gas_calc: {}", lsn);
+        }
+
         let node_idx = self.graph.add_node(entry);
 
         //The vector has enough capacity for the current LSN
