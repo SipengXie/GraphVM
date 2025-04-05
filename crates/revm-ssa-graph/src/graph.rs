@@ -48,18 +48,18 @@ impl SsaGraph {
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
-        
         if is_storage_write!(entry.opcode) {
             self.storage_write.push(lsn);
-        }
-
+        } 
+        
         if lsn >= 0xA0 && lsn <= 0xA4 {
             self.logs.push(lsn);
         } else if lsn == 0xDB {
             self.gas_calc = lsn; 
-            eprintln!("gas_calc: {}", lsn);
+        } else if lsn == 0xD5 || lsn == 0xD8 {
+            self.last_return = lsn;
         }
-
+        
         let node_idx = self.graph.add_node(entry);
 
         //The vector has enough capacity for the current LSN
@@ -409,7 +409,7 @@ impl SsaGraph {
         let output = result_node.outputs.get(0).ok_or_else(|| {
             ExecutionError::GraphError("No output found in last return node".to_string())
         })?;
-
+        assert_ne!(self.gas_calc, 0);
         let gas_node = self.get_node(self.gas_calc)?;
         eprintln!("gas_calc: {}, gas_node: {:?}", self.gas_calc, gas_node);
         let gas_remaining = match &gas_node.outputs[1] {
