@@ -406,7 +406,11 @@ impl Interpreter {
                     let shadow_stack = ssa_logger.stack_pool.last().unwrap();
                     let stack = &self.stack;
                     if shadow_stack.len() != stack.len() {
-                        panic!("Stack length mismatch: result = {:?}, shadow_stack.len() = {}, stack.len() = {}, opcode = {}", result, shadow_stack.len(), stack.len(), opcode);
+                        panic!(
+                            "Stack length mismatch: result = {:?}, shadow_stack.len() = {}, \
+                            stack.len() = {}, opcode = {}", 
+                            result, shadow_stack.len(), stack.len(), opcode
+                        );
                     }
                 }
                 _ => {}

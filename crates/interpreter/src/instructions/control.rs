@@ -195,7 +195,7 @@ fn return_inner(interpreter: &mut Interpreter, instruction_result: InstructionRe
         let (opcode, result) = match instruction_result {
             InstructionResult::Return => (RETURN, SSAInstructionResult::Ok),
             InstructionResult::Revert => (REVERT, SSAInstructionResult::Revert),
-            _ => (0xFC, SSAInstructionResult::Error), // UNKNOWN
+            _ => (0xFC, SSAInstructionResult::Error), // Marker for unknown opcode
         };
         let offset = as_usize_or_fail!(interpreter, offset);
         let mem_deps = interpreter

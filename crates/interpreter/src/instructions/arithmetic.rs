@@ -157,6 +157,7 @@ pub fn signextend<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H
 
     let (orig_ext, orig_x) = (ext, *x);
 
+    // For 31 we also don't need to do anything.
     if ext < U256::from(31) {
         let ext = ext.as_limbs()[0];
         let bit_index = (8 * ext + 7) as usize;
