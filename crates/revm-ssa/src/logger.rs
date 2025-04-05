@@ -332,13 +332,13 @@ impl SSALogger {
         caller: Address,
         new_info: AccountInfo,
         effective_gas_price: U256,
-        gas_remaining: u64,
-        gas_refunded: i64,
+        origin_gas_remaining: u64,
+        origin_gas_refunded: i64,
     ) {
         let lsn = self.current_lsn;
         let mut ssa_inputs = Vec::with_capacity(5 + self.gas_cost.len() + self.gas_refund.len());
-        let mut gas_remaining = gas_remaining;
-        let mut gas_refunded = gas_refunded;
+        let mut gas_remaining = origin_gas_remaining;
+        let mut gas_refunded = origin_gas_refunded;
         for gas_cost in self.gas_cost.iter() {
             ssa_inputs.push(SSAInput::GasCost(gas_cost.0)); // dependency to the dynamic gas cost
             gas_remaining += gas_cost.1; // we ignore the sstore gas cost, and will re-calculate it in the execution phase
@@ -360,8 +360,8 @@ impl SSALogger {
         let mut ssa_outputs = Vec::with_capacity(3);
         ssa_outputs.push(output_account_info!(caller, new_info));
         self.log_storage_write(StorageKey::AccountInfo(caller), lsn, 0);
-        ssa_outputs.push(SSAOutput::Gas(gas_remaining));
-        ssa_outputs.push(SSAOutput::GasRefund(gas_refunded));
+        ssa_outputs.push(SSAOutput::Gas(origin_gas_remaining));
+        ssa_outputs.push(SSAOutput::GasRefund(origin_gas_refunded));
 
         self.log_operation(0xDB, ssa_inputs, ssa_outputs);
     }
