@@ -452,6 +452,11 @@ impl Occda {
                     thread_times.write()[thread_id] = (db_read_time, init_time, transact_time, write_result_time);
 
                     profiler::note_str_unchecked(
+                        "gas-used", 
+                        &thread_id.to_string(), 
+                        &gas_used.to_string(),
+                    );
+                    profiler::note_str_unchecked(
                         "re-execution-opcodes", 
                         &thread_id.to_string(), 
                         &re_execution_opcodes.to_string(),
@@ -854,6 +859,7 @@ impl Occda {
         let conflict_rate = ((exec_size - tx_size) as f64) / (tx_size as f64) * 100.0;
         profiler::note_str_unchecked("metrics", "type", "metrics");
         profiler::note_str_unchecked("metrics", "conflict-rate", &conflict_rate.to_string());
+        profiler::note_str_unchecked("metrics", "redo-gas-used", &redo_gas_used.to_string());
         profiler::note_str_unchecked("metrics", "block-tx-num", &tx_size.to_string());
         profiler::note_str_unchecked("metrics", "total-opcodes", &total_opcodes.to_string());
         profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
