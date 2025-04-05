@@ -19,7 +19,7 @@ use crate::journaled_state::AccessType;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{Address, HashMap, HashSet, ResultAndState, BlockEnv};
+use crate::primitives::{Address, HashMap, HashSet, ResultAndState};
 use crate::profiler;
 use crate::task::{Task, TaskResultItem};
 use std::sync::Arc;
@@ -536,7 +536,6 @@ impl Occda {
     pub fn main_with_db<DB, I>(
         &mut self,
         h_tx: &mut Vec<Task>,
-        block_env: &BlockEnv,
         db: &mut DB,
         result_store: &mut Vec<TaskResultItem<I>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
