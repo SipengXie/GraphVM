@@ -245,8 +245,10 @@ fn frontier_sstore_cost(vals: &SStoreResult) -> u64 {
     }
 }
 
-/// `SELFDESTRUCT` opcode cost calculation.
-/// !! we modify the pub const fn to pub fn
+/// Calculates the gas cost for the `SELFDESTRUCT` opcode.
+///
+/// Note: This was changed from `const fn` to regular function because `StateLoad<SelfDestructResult>`
+/// contains a destructor that cannot be evaluated at compile-time.
 #[inline]
 pub fn selfdestruct_cost(spec_id: SpecId, res: StateLoad<SelfDestructResult>) -> u64 {
     // EIP-161: State trie clearing (invariant-preserving alternative)

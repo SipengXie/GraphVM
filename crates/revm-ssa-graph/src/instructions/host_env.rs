@@ -1,13 +1,18 @@
+use crate::as_usize_saturated;
+use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{Spec, U256};
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
-use crate::{ExecutionContext, ExecutionError, Result, get_ssa_output_stack_or_const, SsaGraph};
-use crate::as_usize_saturated;
 
 impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     /// Execute host environment operation
     #[inline(always)]
-    pub fn execute_host_env(&self, node: &mut SSALogEntry, _graph: & SsaGraph, opcode: u8) -> Result<()> {
+    pub fn execute_host_env(
+        &self,
+        node: &mut SSALogEntry,
+        _graph: &SsaGraph,
+        opcode: u8,
+    ) -> Result<()> {
         let value = match opcode {
             // CHAINID
             0x46 => U256::from(self.env().cfg.chain_id),
@@ -34,12 +39,13 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
             // ORIGIN
             0x32 => U256::from_be_bytes(self.env().tx.caller.into_word().into()),
             // BLOBBASEFEE
-            0x4a => U256::from(
-                self.env().block.get_blob_gasprice().unwrap_or_default()
-            ),
-            _ => return Err(ExecutionError::ExecutionError(
-                format!("Unknown host environment opcode: 0x{:x}", opcode)
-            )),
+            0x4a => U256::from(self.env().block.get_blob_gasprice().unwrap_or_default()),
+            _ => {
+                return Err(ExecutionError::ExecutionError(format!(
+                    "Unknown host environment opcode: 0x{:x}",
+                    opcode
+                )))
+            }
         };
         node.outputs[0] = SSAOutput::Stack(value);
         Ok(())
@@ -47,7 +53,7 @@ impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPE
 
     /// Execute BLOBHASH operation
     #[inline(always)]
-    pub fn execute_blobhash(&self, node: &mut SSALogEntry, graph: & SsaGraph) -> Result<()> {
+    pub fn execute_blobhash(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let index = as_usize_saturated!(value);
         let tx = &self.env().tx;

@@ -1,5 +1,9 @@
 use crate::{
-    gas, interpreter_action::convert_contract_env, opcode::*, primitives::{Spec, B256, KECCAK_EMPTY, U256}, Host, InstructionResult, Interpreter
+    gas,
+    interpreter_action::convert_contract_env,
+    opcode::*,
+    primitives::{Spec, B256, KECCAK_EMPTY, U256},
+    Host, InstructionResult, Interpreter,
 };
 use core::ptr;
 
@@ -19,9 +23,13 @@ pub fn keccak256<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H)
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let from = as_usize_or_fail!(interpreter, offset);
         let data = interpreter.shared_memory.slice(from, len);
-        let mem_deps = interpreter.shared_memory.get_shadow_deps(from..from+len);
+        let mem_deps = interpreter.shared_memory.get_shadow_deps(from..from + len);
         // eprintln!("from: {}, len: {}, mem_deps: {:?}", from, len, mem_deps);
-        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
         let offset = as_usize_or_fail!(interpreter, offset);
         logger.log_keccak256(KECCAK256, offset, len, data, mem_deps, mem_length);
     }
@@ -31,8 +39,7 @@ pub fn address<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::BASE);
     push_b256!(interpreter, interpreter.contract.target_address.into_word());
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(ADDRESS, 
-        convert_contract_env(&interpreter.contract));
+        logger.log_system_operation(ADDRESS, convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -40,8 +47,7 @@ pub fn caller<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::BASE);
     push_b256!(interpreter, interpreter.contract.caller.into_word());
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CALLER, 
-        convert_contract_env(&interpreter.contract));
+        logger.log_system_operation(CALLER, convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -51,8 +57,7 @@ pub fn codesize<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     assume!(!interpreter.contract.bytecode.is_eof());
     push!(interpreter, U256::from(interpreter.contract.bytecode.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CODESIZE, 
-        convert_contract_env(&interpreter.contract));
+        logger.log_system_operation(CODESIZE, convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -62,22 +67,25 @@ pub fn codecopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     gas_or_fail!(interpreter, gas::verylowcopy_cost(len as u64));
     let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let code_offset = as_usize_saturated!(code_offset);
-    
+
     if len == 0 {
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
             let mem_length = None;
             let lsn = logger.log_codecopy(
-                CODECOPY, 
-                memory_offset, 
-                code_offset, 
-                len, 
-                interpreter.contract.bytecode.bytes(), 
-                mem_length);   
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+                CODECOPY,
+                memory_offset,
+                code_offset,
+                len,
+                interpreter.contract.bytecode.bytes(),
+                mem_length,
+            );
+            interpreter
+                .shared_memory
+                .record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
-    
+
     let resized = resize_memory!(interpreter, memory_offset, len);
 
     // Inform the optimizer that the bytecode cannot be EOF to remove a bounds check.
@@ -91,15 +99,22 @@ pub fn codecopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     );
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
         let lsn = logger.log_codecopy(
-            CODECOPY, 
-            memory_offset, 
-            code_offset, 
-            len, 
-            interpreter.contract.bytecode.bytes(), 
-            mem_length);   
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+            CODECOPY,
+            memory_offset,
+            code_offset,
+            len,
+            interpreter.contract.bytecode.bytes(),
+            mem_length,
+        );
+        interpreter
+            .shared_memory
+            .record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -126,10 +141,7 @@ pub fn calldataload<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     *offset_ptr = word.into();
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_call_data_load(CALLDATALOAD,
-            offset,
-            interpreter.contract.input.clone()
-        );
+        logger.log_call_data_load(CALLDATALOAD, offset, interpreter.contract.input.clone());
     }
 }
 
@@ -137,8 +149,7 @@ pub fn calldatasize<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     gas!(interpreter, gas::BASE);
     push!(interpreter, U256::from(interpreter.contract.input.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CALLDATASIZE, 
-        convert_contract_env(&interpreter.contract));
+        logger.log_system_operation(CALLDATASIZE, convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -146,8 +157,7 @@ pub fn callvalue<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H)
     gas!(interpreter, gas::BASE);
     push!(interpreter, interpreter.contract.call_value);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CALLVALUE, 
-        convert_contract_env(&interpreter.contract));
+        logger.log_system_operation(CALLVALUE, convert_contract_env(&interpreter.contract));
     }
 }
 
@@ -160,12 +170,21 @@ pub fn calldatacopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     if len == 0 {
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
             let mem_length = None;
-            let lsn = logger.log_call_data_copy(CALLDATACOPY, memory_offset, data_offset, len, interpreter.contract.input.clone(), mem_length);
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+            let lsn = logger.log_call_data_copy(
+                CALLDATACOPY,
+                memory_offset,
+                data_offset,
+                len,
+                interpreter.contract.input.clone(),
+                mem_length,
+            );
+            interpreter
+                .shared_memory
+                .record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
-    
+
     let resized = resize_memory!(interpreter, memory_offset, len);
 
     // Note: this can't panic because we resized memory to fit.
@@ -176,9 +195,22 @@ pub fn calldatacopy<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
         &interpreter.contract.input,
     );
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        let lsn = logger.log_call_data_copy(CALLDATACOPY, memory_offset, data_offset, len, interpreter.contract.input.clone(), mem_length);
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        let lsn = logger.log_call_data_copy(
+            CALLDATACOPY,
+            memory_offset,
+            data_offset,
+            len,
+            interpreter.contract.input.clone(),
+            mem_length,
+        );
+        interpreter
+            .shared_memory
+            .record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -217,9 +249,18 @@ pub fn returndatacopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interprete
     // if len is zero memory is not resized.
     if len == 0 {
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
-            let mem_length = None;    
-            let lsn =  logger.log_return_data_cpy_operation(RETURNDATACOPY, memory_offset, data_offset, len, interpreter.return_data_buffer.clone(), mem_length);
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+            let mem_length = None;
+            let lsn = logger.log_return_data_cpy_operation(
+                RETURNDATACOPY,
+                memory_offset,
+                data_offset,
+                len,
+                interpreter.return_data_buffer.clone(),
+                mem_length,
+            );
+            interpreter
+                .shared_memory
+                .record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -236,9 +277,22 @@ pub fn returndatacopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interprete
     );
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };    
-        let lsn =  logger.log_return_data_cpy_operation(RETURNDATACOPY, memory_offset, data_offset, len, interpreter.return_data_buffer.clone(), mem_length);
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        let lsn = logger.log_return_data_cpy_operation(
+            RETURNDATACOPY,
+            memory_offset,
+            data_offset,
+            len,
+            interpreter.return_data_buffer.clone(),
+            mem_length,
+        );
+        interpreter
+            .shared_memory
+            .record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -263,7 +317,11 @@ pub fn returndataload<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &m
 
     *offset = B256::from(output).into();
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_return_data_load(RETURNDATALOAD, offset_usize, interpreter.return_data_buffer.clone());
+        logger.log_return_data_load(
+            RETURNDATALOAD,
+            offset_usize,
+            interpreter.return_data_buffer.clone(),
+        );
     }
 }
 

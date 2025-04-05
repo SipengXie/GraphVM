@@ -1,7 +1,7 @@
 use core::default::Default;
 use revm_ssa::{SSAOutput, StorageKey};
 
-use crate::primitives::{ExecutionResult, EvmState, Env, SpecId, B256};
+use crate::primitives::{Env, EvmState, ExecutionResult, SpecId, B256};
 
 use crate::journaled_state::{AccessType, ReadWriteSet};
 use std::cmp::Ordering;
@@ -29,14 +29,15 @@ impl Task {
     }
 }
 
-
 pub struct SidOrderedTask(pub Task);
 pub struct TidOrderedTask(pub Task);
 pub struct GasOrderedTask(pub Task);
 
 impl Ord for SidOrderedTask {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.sid.cmp(&other.0.sid)
+        self.0
+            .sid
+            .cmp(&other.0.sid)
             .then_with(|| self.0.tid.cmp(&other.0.tid))
     }
 }
@@ -77,7 +78,9 @@ impl Eq for TidOrderedTask {}
 
 impl Ord for GasOrderedTask {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.gas.cmp(&other.0.gas)
+        self.0
+            .gas
+            .cmp(&other.0.gas)
             .then_with(|| self.0.tid.cmp(&other.0.tid))
     }
 }
@@ -120,15 +123,13 @@ impl<I> Default for TaskResultItem<I> {
 
 impl<I> TaskResultItem<I> {
     pub fn get_read_write_set(&self) -> ReadWriteSet {
-
         if let Some(rw_set) = &self.read_write_set {
             return rw_set.clone();
         }
 
-
         if let Some(ssa_state) = &self.ssa_output {
             let mut read_write_set = ReadWriteSet::new();
-            
+
             for output in ssa_state {
                 if let SSAOutput::Storage { key, .. } = output {
                     match &**key {
@@ -136,7 +137,7 @@ impl<I> TaskResultItem<I> {
                             read_write_set.add_write(*address, AccessType::AccountInfo);
                         }
                         StorageKey::AccountStatus(address) => {
-                            read_write_set.add_write(*address, AccessType::AccountStatus); 
+                            read_write_set.add_write(*address, AccessType::AccountStatus);
                         }
                         StorageKey::Slot(address, key) => {
                             read_write_set.add_write(*address, AccessType::StorageSlot(*key));
@@ -144,9 +145,8 @@ impl<I> TaskResultItem<I> {
                     }
                 }
             }
-            return read_write_set; 
+            return read_write_set;
         }
-
 
         ReadWriteSet::new()
     }

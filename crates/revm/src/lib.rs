@@ -13,21 +13,21 @@ mod context;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
+pub mod access_tracker;
+mod dag;
 pub mod db;
 mod evm;
-mod dag;
 mod frame;
+pub mod graph_wrapper;
 pub mod handler;
 mod inspector;
 mod journaled_state;
-pub mod task;
 #[cfg(feature = "serde-json")]
 pub mod occda;
-pub mod access_tracker;
-pub mod ssa_access_tracker;
-pub mod graph_wrapper;
 #[cfg(feature = "optimism")]
 pub mod optimism;
+pub mod ssa_access_tracker;
+pub mod task;
 
 // Export items.
 
@@ -47,9 +47,9 @@ pub use handler::Handler;
 pub use inspector::{inspector_handle_register, inspectors, GetInspector, Inspector};
 pub use journaled_state::{JournalCheckpoint, JournalEntry, JournaledState, ReadWriteSet};
 // export Optimism types, helpers, and constants
+pub use altius_benchtools::profiler;
 #[cfg(feature = "optimism")]
 pub use optimism::{L1BlockInfo, BASE_FEE_RECIPIENT, L1_BLOCK_CONTRACT, L1_FEE_RECIPIENT};
-pub use altius_benchtools::profiler;
 
 // Reexport libraries
 

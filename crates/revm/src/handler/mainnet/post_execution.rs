@@ -1,7 +1,12 @@
 use crate::{
-    interpreter::{Gas, SuccessOrHalt}, primitives::{
-        db::Database, EVMError, ExecutionResult, ResultAndState, Spec, SpecId::{self, LONDON}, U256,
-    }, Context, FrameResult
+    interpreter::{Gas, SuccessOrHalt},
+    primitives::{
+        db::Database,
+        EVMError, ExecutionResult, ResultAndState, Spec,
+        SpecId::{self, LONDON},
+        U256,
+    },
+    Context, FrameResult,
 };
 
 /// Mainnet end handle does not change the output.
@@ -85,11 +90,10 @@ pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
         .inner
         .journaled_state
         .load_account(caller, &mut context.evm.inner.db)?;
-    
+
     let gas_refund = effective_gas_price * U256::from(gas.remaining() + gas.refunded() as u64);
 
-    caller_account.data.info.balance =
-        caller_account.data.info.balance.saturating_add(gas_refund);
+    caller_account.data.info.balance = caller_account.data.info.balance.saturating_add(gas_refund);
 
     Ok(())
 }

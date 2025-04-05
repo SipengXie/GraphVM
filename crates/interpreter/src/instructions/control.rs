@@ -2,7 +2,10 @@ use revm_ssa::SSAInstructionResult;
 
 use super::utility::{read_i16, read_u16};
 use crate::{
-    gas, opcode::*, primitives::{Bytes, Spec, U256}, Host, InstructionResult, Interpreter, InterpreterResult
+    gas,
+    opcode::*,
+    primitives::{Bytes, Spec, U256},
+    Host, InstructionResult, Interpreter, InterpreterResult,
 };
 
 pub fn rjump<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
@@ -74,7 +77,7 @@ pub fn jumpi<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     }
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let target_usize = target.as_limbs()[0] as usize;
-        if !cond.is_zero() {        
+        if !cond.is_zero() {
             let relative_offset = target_usize as isize - current_pc as isize;
             logger.log_jumpi(JUMPI, target_usize, cond, current_pc, relative_offset);
         } else {
@@ -192,18 +195,25 @@ fn return_inner(interpreter: &mut Interpreter, instruction_result: InstructionRe
         let (opcode, result) = match instruction_result {
             InstructionResult::Return => (RETURN, SSAInstructionResult::Ok),
             InstructionResult::Revert => (REVERT, SSAInstructionResult::Revert),
-            _ => (0xFC, SSAInstructionResult::Error), // UNKNOWN
+            _ => (0xFC, SSAInstructionResult::Error), // Marker for unknown opcode
         };
         let offset = as_usize_or_fail!(interpreter, offset);
-        let mem_deps = interpreter.shared_memory.get_shadow_deps(offset..offset + len);
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        logger.log_return(opcode, 
-            offset, 
-            len, 
-            output.clone(), 
-            mem_deps, 
+        let mem_deps = interpreter
+            .shared_memory
+            .get_shadow_deps(offset..offset + len);
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_return(
+            opcode,
+            offset,
+            len,
+            output.clone(),
+            mem_deps,
             mem_length,
-            result
+            result,
         );
     }
     interpreter.instruction_result = instruction_result;
@@ -215,7 +225,6 @@ fn return_inner(interpreter: &mut Interpreter, instruction_result: InstructionRe
         },
     };
 }
-
 
 pub fn ret<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     return_inner(interpreter, InstructionResult::Return);

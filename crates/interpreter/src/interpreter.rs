@@ -99,7 +99,12 @@ impl Interpreter {
     }
 
     /// New with ssa_logger
-    pub fn new_with_ssa_logger(contract: Contract, gas_limit: u64, is_static: bool, ssa_logger: SSALogger) -> Self {
+    pub fn new_with_ssa_logger(
+        contract: Contract,
+        gas_limit: u64,
+        is_static: bool,
+        ssa_logger: SSALogger,
+    ) -> Self {
         Self {
             ssa_logger: Some(ssa_logger),
             ..Self::new(contract, gas_limit, is_static)
@@ -321,12 +326,15 @@ impl Interpreter {
                 );
             }
         }
-        
+
         // Log the call return operation if we have a logger
         if let Some(ssa_logger) = self.ssa_logger.as_mut() {
             let ssa_result = convert_call_outcome(&call_outcome);
             if ssa_result.result.result == SSAInstructionResult::Error {
-                panic!("Error in insert_call_outcome, original call_outcome: {:?}", call_outcome);
+                panic!(
+                    "Error in insert_call_outcome, original call_outcome: {:?}",
+                    call_outcome
+                );
             }
             let lsn = ssa_logger.log_insert_call_outcome(ssa_result);
             shared_memory.record_shadow_write(out_offset, target_len, (lsn, 1));
@@ -398,13 +406,16 @@ impl Interpreter {
                     let shadow_stack = ssa_logger.stack_pool.last().unwrap();
                     let stack = &self.stack;
                     if shadow_stack.len() != stack.len() {
-                        panic!("Stack length mismatch: result = {:?}, shadow_stack.len() = {}, stack.len() = {}, opcode = {}", result, shadow_stack.len(), stack.len(), opcode);
+                        panic!(
+                            "Stack length mismatch: result = {:?}, shadow_stack.len() = {}, \
+                            stack.len() = {}, opcode = {}", 
+                            result, shadow_stack.len(), stack.len(), opcode
+                        );
                     }
-                },
+                }
                 _ => {}
             }
         }
-
     }
 
     /// Take memory and replace it with empty memory.

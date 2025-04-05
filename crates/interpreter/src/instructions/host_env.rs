@@ -1,5 +1,8 @@
 use crate::{
-    gas, opcode::*, primitives::{Spec, SpecId::*, U256}, Host, Interpreter
+    gas,
+    opcode::*,
+    primitives::{Spec, SpecId::*, U256},
+    Host, Interpreter,
 };
 
 /// EIP-1344: ChainID opcode
@@ -54,7 +57,6 @@ pub fn gaslimit<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_host_env_operation(GASLIMIT, interpreter.stack.peek(0).unwrap());
     }
-    
 }
 
 pub fn gasprice<H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
