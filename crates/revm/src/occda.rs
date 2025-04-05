@@ -422,11 +422,6 @@ impl Occda {
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
-                                profiler::note_str_unchecked(
-                                    "gas-used",
-                                    &task.tx_hash.unwrap().to_string(), 
-                                    &result.gas_used().to_string(),
-                                );
                                 gas_used += result.gas_used();
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
@@ -456,11 +451,6 @@ impl Occda {
                     // Store timing metrics for this thread
                     thread_times.write()[thread_id] = (db_read_time, init_time, transact_time, write_result_time);
 
-                    profiler::note_str_unchecked(
-                        "gas-used", 
-                        &thread_id.to_string(), 
-                        &gas_used.to_string(),
-                    );
                     profiler::note_str_unchecked(
                         "re-execution-opcodes", 
                         &thread_id.to_string(), 
@@ -679,18 +669,7 @@ impl Occda {
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);
                                 task_result.ssa_output = Some(result_state);
-                                // TODO: simplify the result generation now.
-                                task_result.result = if result_store[idx].result.is_none() {
-                                    Some(ExecutionResult::Success { 
-                                        reason: SuccessReason::Stop,
-                                        gas_used: 0,
-                                        gas_refunded: 0,
-                                        logs: vec![],
-                                        output: Output::Call(Bytes::default())
-                                    }) 
-                                } else { 
-                                    result_store[idx].result.clone() 
-                                };
+                                task_result.result = Some(executor.graph.generate_result(task.gas).unwrap());
                                 result_store[idx] = task_result;
                                 drop(executor);
                                 re_execution_opcodes += nodes_to_execute_len.0;
@@ -875,7 +854,6 @@ impl Occda {
         let conflict_rate = ((exec_size - tx_size) as f64) / (tx_size as f64) * 100.0;
         profiler::note_str_unchecked("metrics", "type", "metrics");
         profiler::note_str_unchecked("metrics", "conflict-rate", &conflict_rate.to_string());
-        profiler::note_str_unchecked("metrics", "redo-gas-used", &redo_gas_used.to_string());
         profiler::note_str_unchecked("metrics", "block-tx-num", &tx_size.to_string());
         profiler::note_str_unchecked("metrics", "total-opcodes", &total_opcodes.to_string());
         profiler::note_str_unchecked("re-execution-opcodes", "main", &re_execution_opcodes.to_string());
