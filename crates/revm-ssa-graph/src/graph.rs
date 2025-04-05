@@ -406,6 +406,7 @@ impl SsaGraph {
         })?;
 
         let gas_node = self.get_node(self.gas_calc)?;
+        eprintln!("gas_node: {:?}", gas_node);
         let gas_remaining = match &gas_node.outputs[1] {
             SSAOutput::Gas(gas) => *gas,
             _ => {
