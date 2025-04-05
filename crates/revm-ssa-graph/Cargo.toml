@@ -27,6 +27,14 @@ auto_impl = { version = "1.2", default-features = false }
 [dev-dependencies]
 criterion = "0.5"   # Benchmarking
 
+[[bench]]
+name = "ssa_graph_bench"
+harness = false
+
+[[bench]]
+name = "simple_bench"
+harness = false
+
 [features]
 default = ["std", "serde"]
 std = ["revm-ssa/std", "revm-primitives/std", "serde?/std"]

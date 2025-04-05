@@ -2,6 +2,7 @@ use core::{cmp::min, fmt, ops::Range};
 use crate::primitives::{hex, B256, U256};
 use revm_ssa::{logger::LsnWithIndex, MemoryDep};
 use std::vec::Vec;
+use core::ptr;
 
 /// A tuple of (LSN, offset) representing where this byte was written from
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -147,7 +148,7 @@ impl SharedMemory {
             unsafe {
                 let mut result = Vec::with_capacity(end - start);
                 result.set_len(end - start);
-                std::ptr::copy_nonoverlapping(
+                ptr::copy_nonoverlapping(
                     shadow.as_ptr().add(start),
                     result.as_mut_ptr(),
                     end - start,
@@ -475,7 +476,7 @@ impl SharedMemory {
 
             // SAFETY: We've ensured the capacity above
             unsafe {
-                std::ptr::copy(
+                ptr::copy(
                     shadow.as_ptr().add(src),
                     shadow.as_mut_ptr().add(dst),
                     len,
