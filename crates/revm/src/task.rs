@@ -101,6 +101,7 @@ impl Eq for GasOrderedTask {}
 
 pub struct TaskResultItem<I> {
     pub gas_limit: u64,
+    pub effective_gas_price: u64,
     pub result: Option<ExecutionResult>,
     pub inspector: Option<I>,
     pub read_write_set: Option<ReadWriteSet>,
@@ -112,6 +113,7 @@ impl<I> Default for TaskResultItem<I> {
     fn default() -> Self {
         Self {
             gas_limit: 0,
+            effective_gas_price: 0,
             result: None,
             inspector: None,
             read_write_set: None,

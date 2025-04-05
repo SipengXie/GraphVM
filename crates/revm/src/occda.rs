@@ -19,7 +19,7 @@ use crate::journaled_state::AccessType;
 /// - Maximize throughput for non-conflicting transactions
 /// - Maintain sequential consistency
 /// - Provide detailed performance metrics
-use crate::primitives::{Address, HashMap, HashSet, ResultAndState};
+use crate::primitives::{Address, HashMap, HashSet, ResultAndState, BlockEnv};
 use crate::profiler;
 use crate::task::{Task, TaskResultItem};
 use std::sync::Arc;
@@ -28,8 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    Account, AccountStatus, Bytes, EVMError, EvmStorageSlot, ExecutionResult, HaltReason,
-    LatestSpec, Output, SuccessReason, U256,
+    Account, AccountStatus, EVMError, EvmStorageSlot, LatestSpec, U256, SpecId::LONDON, Spec,
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -358,7 +357,6 @@ impl Occda {
                             }
                         }
 
-                        let debug_index = 23;
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
@@ -538,6 +536,7 @@ impl Occda {
     pub fn main_with_db<DB, I>(
         &mut self,
         h_tx: &mut Vec<Task>,
+        block_env: &BlockEnv,
         db: &mut DB,
         result_store: &mut Vec<TaskResultItem<I>>,
         inspector_setup: impl Fn() -> I + Send + Sync,
@@ -886,6 +885,8 @@ impl Occda {
             profiler::end("commit-all");
         }
 
+        self.apply_beneficiary(db, h_tx, result_store);
+
         // Calculate final statistics and conflict rate
         // High conflict rates might indicate need for better task scheduling
         let conflict_rate = ((exec_size - tx_size) as f64) / (tx_size as f64) * 100.0;
@@ -976,6 +977,33 @@ impl Occda {
         // eprintln!("===========================================\n");
 
         Ok(())
+    }
+
+    fn apply_beneficiary<DB: DatabaseCommit + DatabaseRef, I>(&self, db: &mut DB, tasks: &[Task], result_store: &[TaskResultItem<I>]) {
+        let beneficiary = tasks[0].env.block.coinbase;
+        let mut coinbase_refund = U256::ZERO;
+        for task in tasks.iter() {
+            let env = &task.env;
+            let effective_gas_price = env.effective_gas_price();
+
+            let coinbase_gas_price = if task.spec_id.is_enabled_in(LONDON) {
+                effective_gas_price.saturating_sub(env.block.basefee)
+            } else {
+                effective_gas_price
+            };
+
+            let result = result_store[task.tid as usize].result.as_ref().unwrap();
+            let gas = result.gas_used();
+            coinbase_refund += coinbase_gas_price * U256::from(gas as u64);
+        }
+
+        let coinbase_account = db.basic_ref(beneficiary).map_err(|_| ());
+        if let Ok(Some(account)) = coinbase_account {
+            let new_balance = account.balance.saturating_add(coinbase_refund);
+            let mut updated_account = account;
+            updated_account.balance = new_balance;
+            db.commit(HashMap::from([(beneficiary, Account::from(updated_account))]));
+        }
     }
 
     /// Convert SSA state to normal state by applying storage updates
