@@ -358,6 +358,10 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         self.context.evm.db = db;
     }
 
+    pub fn disable_beneficiary(&mut self) {
+        self.handler.enable_beneficiary = false;
+    }
+
     /// Returns internal database and external struct.
     #[inline]
     pub fn into_context(self) -> Context<EXT, DB> {
@@ -526,7 +530,9 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         //     post_exec.reward_beneficiary(ctx, result.gas())?;
         // }
         // TODO: Fix the reward_beneficiary
-        post_exec.reward_beneficiary(ctx, result.gas())?;
+        if self.handler.enable_beneficiary {
+            post_exec.reward_beneficiary(ctx, result.gas())?;
+        }
         // Returns output of transaction.
 
         post_exec.output(ctx, result)

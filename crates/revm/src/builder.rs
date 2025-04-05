@@ -370,6 +370,8 @@ impl<'a, BuilderStage, EXT, DB: Database> EvmBuilder<'a, BuilderStage, EXT, DB> 
         }
     }
 
+    pub fn with_beneficiary_enable(mut self, enable_benefi: Address) -> Self {
+
     /// Allows modification of Evm Database.
     pub fn modify_db(mut self, f: impl FnOnce(&mut DB)) -> Self {
         f(&mut self.context.evm.db);
