@@ -39,6 +39,13 @@ impl CacheAccount {
         }
     }
 
+    pub fn new_loaded_empty() -> Self {
+        Self {
+            account: None,
+            status: AccountStatus::Loaded,
+        }
+    }
+
     /// Create new account that is loaded empty from database.
     pub fn new_loaded_empty_eip161(storage: PlainStorage) -> Self {
         Self {

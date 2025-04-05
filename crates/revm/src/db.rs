@@ -11,7 +11,7 @@ mod ethersdb;
 pub mod in_memory_db;
 pub mod parallel_db;
 pub mod states;
-
+pub mod unsafe_db;
 pub use crate::primitives::db::*;
 #[cfg(feature = "alloydb")]
 pub use alloydb::AlloyDB;
