@@ -449,11 +449,6 @@ impl Occda {
                         match result {
                             Ok(result_and_state) => {
                                 let ResultAndState { state, result } = result_and_state;
-                                profiler::note_str_unchecked(
-                                    "gas-used",
-                                    &task.tx_hash.unwrap().to_string(),
-                                    &result.gas_used().to_string(),
-                                );
                                 gas_used += result.gas_used();
                                 task_result.state = Some(state);
                                 task_result.result = Some(result);
@@ -709,18 +704,7 @@ impl Occda {
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);
                                 task_result.ssa_output = Some(result_state);
-                                // TODO: simplify the result generation now.
-                                task_result.result = if result_store[idx].result.is_none() {
-                                    Some(ExecutionResult::Success {
-                                        reason: SuccessReason::Stop,
-                                        gas_used: 0,
-                                        gas_refunded: 0,
-                                        logs: vec![],
-                                        output: Output::Call(Bytes::default()),
-                                    })
-                                } else {
-                                    result_store[idx].result.clone()
-                                };
+                                task_result.result = Some(executor.graph.generate_result(task.gas).unwrap());
                                 result_store[idx] = task_result;
                                 drop(executor);
                                 re_execution_opcodes += nodes_to_execute_len.0;
