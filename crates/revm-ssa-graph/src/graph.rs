@@ -42,6 +42,32 @@ impl SsaGraph {
     pub fn get_node_by_index(&self, index: NodeIndex) -> Result<&SSALogEntry> {
         Ok(&self.graph[index])
     }
+    /// Get all SSTORE nodes from the graph
+    ///
+    /// This function iterates through all storage write operations and
+    /// returns the nodes that correspond to SSTORE operations.
+    ///
+    /// # Returns
+    /// * `Result<Vec<&SSALogEntry>>` - A vector of all SSTORE nodes
+    #[inline(always)]
+    pub fn get_sstore_nodes(&self) -> Result<Vec<&SSALogEntry>> {
+        // Pre-allocate capacity to avoid reallocations
+        let mut sstore_nodes = Vec::with_capacity(self.storage_write.len());
+
+        // Iterate through all storage write operations
+        for lsn in &self.storage_write {
+            let node_idx = self.lsn_to_node[*lsn as usize];
+            let node = self.get_node_by_index(node_idx)?;
+            
+            // Check if the operation is SSTORE (opcode 0x55)
+            if node.opcode == 0x55 {
+                sstore_nodes.push(node);
+            }
+        }
+
+        Ok(sstore_nodes)
+    }
+
 
     /// Add a node
     #[inline(always)]
