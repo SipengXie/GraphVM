@@ -576,7 +576,7 @@ impl BundleState {
             // append revert if present.
             if let Some(revert) = revert.filter(|_| include_reverts) {
                 self.reverts_size += revert.size_hint();
-                println!("revert: {:?}", revert);
+                println!("revert: {:?} address {:?}", revert, address);
                 reverts.push((address, revert));
             }
         }
