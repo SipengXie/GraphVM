@@ -576,11 +576,12 @@ impl BundleState {
             // append revert if present.
             if let Some(revert) = revert.filter(|_| include_reverts) {
                 self.reverts_size += revert.size_hint();
+                println!("revert: {:?}", revert);
                 reverts.push((address, revert));
             }
         }
 
-        println!("reverts: {:?}", reverts);
+        std::fs::write("reverts_par.json", serde_json::to_string_pretty(&reverts).unwrap()).expect("Failed to write results to file");
 
         self.reverts.push(reverts);
     }
