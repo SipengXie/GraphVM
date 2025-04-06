@@ -4,6 +4,7 @@ pub use call_helpers::{
     calc_call_gas, get_memory_input_and_out_ranges,
     get_memory_input_and_out_ranges_whether_new_allocation, resize_memory,
 };
+use revm_primitives::address;
 
 use crate::{
     gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS},
@@ -500,6 +501,10 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
     if has_transfer {
         gas_limit = gas_limit.saturating_add(gas::CALL_STIPEND);
     }
+    
+    if interpreter.contract.caller == address!("ff1b9745f68f84f036e5e92c920038d895fb701a") {
+        eprintln!("gas_limit: {:?}", gas_limit);
+    }
 
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Call {
@@ -586,6 +591,10 @@ pub fn call_code<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
         gas_limit = gas_limit.saturating_add(gas::CALL_STIPEND);
     }
 
+    if interpreter.contract.caller == address!("ff1b9745f68f84f036e5e92c920038d895fb701a") {
+        eprintln!("gas_limit: {:?}", gas_limit);
+    }
+    
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Call {
         inputs: Box::new(CallInputs {
