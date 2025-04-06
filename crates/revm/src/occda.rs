@@ -825,23 +825,11 @@ impl Occda {
                         h_tx[task_idx].tid,
                         enable_ssa,
                     );
-                    if !conflict.is_empty() && enable_ssa {
+                    // for failed tx, we cannot apply ssa re-execution.
+                    if !conflict.is_empty() && enable_ssa && task_result.result.is_some() {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] =
                             Self::get_storage_first_reads(first_reads, &conflict);
-                        // if self.to_re_execution_store[task_idx].is_empty() {
-                        //     println!("\n[debug] to_re_execution_store is empty, detail:");
-                        //     println!("block_number: {}", h_tx[task_idx].env.block.number);
-                        //     println!("tx_hash: {}", h_tx[task_idx].tx_hash.unwrap());
-                        //     println!("first_reads: {:?}", first_reads);
-                        //     println!("conflict: {:?}", conflict);
-                        // } else {
-                        //     println!("\n[debug] to_re_execution_store is not empty, detail:");
-                        //     println!("tx_idx: {}", task_idx);
-                        //     println!("to_re_execution_store: {:?}", self.to_re_execution_store[task_idx]);
-                        //     println!("first_reads: {:?}", first_reads);
-                        //     println!("conflict: {:?}", conflict);
-                        // }
                     }
                     !conflict.is_empty()
                 };

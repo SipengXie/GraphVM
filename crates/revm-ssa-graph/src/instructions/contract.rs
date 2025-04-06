@@ -1,6 +1,6 @@
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
-use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode};
+use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode, Spec, SpecId};
 use revm_primitives::{Address, Bytes, B256, U256};
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
@@ -53,8 +53,8 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     }
 
     #[inline(always)]
-    pub fn execute_refund_gas(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let gas_length = (node.inputs.len() - 5) / 2;
+    pub fn execute_refund_gas<SPEC: Spec>(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
+        let gas_length = (node.inputs.len() - 7) / 2;
 
         let mut dynamic_gas_cost: u64 = 0;
         for input in node.inputs[0..gas_length].iter() {
@@ -72,11 +72,23 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let base_gas_remaining = get_ssa_output_stack_or_const!(graph, node.inputs[offset + 2]);
         let base_gas_remaining = as_u64_saturated!(base_gas_remaining);
         let base_gas_refunded = get_constant_i64!(graph, node.inputs[offset + 3]);
+        let eip7702_gas_refund = get_constant_i64!(graph, node.inputs[offset + 4]);
+        let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[offset + 5]);
+        let gas_limit = as_u64_saturated!(gas_limit);
+
         let caller_info =
-            get_storage_value!(graph, node.inputs[offset + 4], |key| self.get_state(key));
-        let refund_gas =
-            base_gas_remaining - dynamic_gas_cost + (base_gas_refunded + dynamic_gas_refund) as u64;
-        let reimbursed_value = effective_gas_price * U256::from(refund_gas);
+            get_storage_value!(graph, node.inputs[offset + 6], |key| self.get_state(key));
+     
+        let refund_gas = base_gas_refunded + dynamic_gas_refund + eip7702_gas_refund;
+        let remaining_gas = base_gas_remaining - dynamic_gas_cost;
+        let spent_gas = gas_limit - remaining_gas;
+
+        let is_london = SPEC::SPEC_ID.is_enabled_in(SpecId::LONDON);
+        let max_refund_quotient = if is_london { 5 } else { 2 };
+        let true_refund_gas = (refund_gas as u64).min(spent_gas / max_refund_quotient) as i64;
+
+        let gas_to_give_back = remaining_gas + true_refund_gas as u64;
+        let reimbursed_value = effective_gas_price * U256::from(gas_to_give_back);
 
         let caller = Address::from_word(B256::from(caller));
         let caller_info = caller_info.as_account_info().unwrap();

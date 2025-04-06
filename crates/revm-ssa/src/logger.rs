@@ -334,6 +334,8 @@ impl SSALogger {
         effective_gas_price: U256,
         origin_gas_remaining: u64,
         origin_gas_refunded: i64,
+        eip7702_gas_refund: i64,
+        gas_limit: u64,
     ) {
         let lsn = self.current_lsn;
         let mut ssa_inputs = Vec::with_capacity(5 + self.gas_cost.len() + self.gas_refund.len());
@@ -352,7 +354,8 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::Constant(effective_gas_price));
         ssa_inputs.push(SSAInput::Constant(U256::from(gas_remaining))); // base gas remaining
         ssa_inputs.push(SSAInput::ConstantI64(gas_refunded)); // base gas refunded
-        
+        ssa_inputs.push(SSAInput::ConstantI64(eip7702_gas_refund)); // eip7702 gas refund
+        ssa_inputs.push(SSAInput::Constant(U256::from(gas_limit))); // gas limit
         ssa_inputs.push(input_account_info!(self, caller));
 
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);

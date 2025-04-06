@@ -417,7 +417,7 @@ where
             0xD8 => context.execute_call_return(node, graph),       // CALL_RETURN
             0xD9 => context.execute_insert_call_outcome(node, graph), // INSERT_CALL_OUTCOME
             0xDA => context.execute_deduct_caller(node, graph),     // DEDUCT_CALLER
-            0xDB => context.execute_refund_gas(node, graph),        // REFUND_GAS
+            0xDB => context.execute_refund_gas::<SPEC>(node, graph),        // REFUND_GAS
             0xDC => context.execute_reward_beneficiary(node, graph), // REWARD_BENEFICIARY
 
             // System Operations (0xF0-0xFF)
