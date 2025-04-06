@@ -443,13 +443,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 }
             }
         };
-
         // Starts the main running loop.
         let mut result = match first_frame_or_result {
             FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
             FrameOrResult::Result(result) => result,
         };
-
         let ctx = &mut self.context;
 
         // handle output of call/create calls.

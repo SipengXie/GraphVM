@@ -90,7 +90,7 @@ impl SsaGraph {
         } 
         
         // Track return operations
-        if op == 0xD5 || op == 0xD8 {
+        if op == 0xD5 || op == 0xD8 || op == 0xD7 {
             self.last_return = lsn;
         }
         
@@ -440,8 +440,16 @@ impl SsaGraph {
     pub fn generate_result(&self, gas_limit: u64, _tx_hash: FixedBytes<32>) -> Result<ExecutionResult> {
         // 1. Get the result node, handle error cases early
         let result_node = self.get_node(self.last_return)?;
-        let output = result_node.outputs.get(0).ok_or_else(|| {
-            ExecutionError::GraphError("No output found in last return node".to_string())
+        // eprintln!("result_node: {:?}", result_node);
+        let output = result_node.outputs.iter().find_map(|output| {
+            match output {
+                SSAOutput::CallOutcome(outcome) => Some(SSAOutput::CallOutcome(outcome.clone())),
+                SSAOutput::CreateOutcome(outcome) => Some(SSAOutput::CreateOutcome(outcome.clone())),
+                SSAOutput::InterpreterResult(result) => Some(SSAOutput::InterpreterResult(result.clone())),
+                _ => None,
+            }
+        }).ok_or_else(|| {
+            ExecutionError::GraphError("No interpreter result found in last return node".to_string())
         })?;
         // assert_ne!(self.gas_calc, 0);
         let gas_node = self.get_node(self.gas_calc)?;
@@ -519,8 +527,27 @@ impl SsaGraph {
                     }),
                 }
             }
+            SSAOutput::InterpreterResult(result) => {
+                let output = result.output.clone();
+                match result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Call(output),
+                    }),
+                    SSAInstructionResult::Revert => {
+                        Ok(ExecutionResult::Revert { gas_used, output })
+                    }
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    }),
+                }
+            }
             _ => {
-                eprintln!("Graph size: {}, Last {} nodes: {:?}", self.graph.node_count(), 5, self.graph.raw_nodes().into_iter().rev().take(5).collect::<Vec<_>>());
+                // eprintln!("Graph size: {}, Last {} nodes: {:?}", self.graph.node_count(), 5, self.graph.raw_nodes().into_iter().rev().take(5).collect::<Vec<_>>());
                 Err(ExecutionError::GraphError(
                 "Last return node is not a call or create outcome".to_string(),
             ))},

@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use revm_primitives::{
-    keccak256, uint, AccountInfo, Address, Bytecode, Bytes, Env, SpecId, TxKind, U256,
+    fixed_bytes, keccak256, uint, AccountInfo, Address, Bytecode, Bytes, Env, SpecId, TxKind, U256
 };
 
 use revm::{
@@ -124,6 +124,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
                     if let Some(input) = config.input.clone() {
                         tx.data = input;
                     };
+                    tx.value = U256::from(1234);
                     tx.gas_limit = 0x0f424000;
                 })
                 .build();
@@ -239,6 +240,8 @@ fn graph_execute(
         .with_tracer(tracer);
     // Execute
     let res = executor.execute_with_spec(SpecId::LATEST).unwrap();
+    let result = executor.graph.generate_result(0x0f424000, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000"));
+    eprintln!("result: {:?}", result);
 
     (executor.into_tracer(), Some(res.1))
 }
@@ -246,6 +249,11 @@ fn graph_execute(
 mod arithmetic_tests {
     use super::*;
     use revm::primitives::Bytes;
+
+    #[test]
+    fn test_native_transfer() {
+        execute_case(Bytes::default(), "simple addition", ExecutionConfig::default());
+    }
 
     #[test]
     fn test_add() {
