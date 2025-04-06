@@ -581,6 +581,7 @@ impl BundleState {
             }
         }
 
+        println!("state size: {:?} revert size: {:?}", self.state_size, self.reverts_size);
         std::fs::write("reverts_par.json", serde_json::to_string_pretty(&reverts).unwrap()).expect("Failed to write results to file");
 
         self.reverts.push(reverts);
