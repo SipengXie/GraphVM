@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256,
+    Account, AccountStatus, EVMError, EvmStorageSlot, U256,
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -702,9 +702,6 @@ impl Occda {
                                 let tx_hash = task.tx_hash.unwrap();
                                 let result_state =
                                     executor.graph.get_storage_write_outputs().unwrap();
-                                if tx_hash == fixed_bytes!("227744a342c3309af73d122b644c0698ff92dbf27ced2ce3b7d4fc54e022fc81") {
-                                    eprintln!("{:?}", executor.graph.get_sstore_nodes());
-                                }
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);

@@ -159,22 +159,15 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
 
             let env = evm.context.evm.env().clone();
 
-            // Execute and get logs
-            let start_time = Instant::now();
             let _result = evm.transact().unwrap();
-            let execution_time = start_time.elapsed();
-            eprintln!("SSA transact time: {:?}", execution_time);
             let mut logger = evm.take_ssa_logger().unwrap();
-            // eprintln!("{:?}",logger.get_first_reads());
             let logs = logger.take_logs();
             let first_call = logger.take_first_call_input();
             let first_create = logger.take_first_create_input();
 
             // Choose execution method based on test mode
-            eprintln!("ready for graph_execute");
             let (tracer, execution_time) = match config.test_mode {
                 TestMode::SerialGraph => {
-                    eprintln!("Entering SerialGraph branch");
                     let result = graph_execute(
                         logs,
                         config.clone(),
@@ -183,7 +176,6 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
                         first_call,
                         first_create,
                     );
-                    eprintln!("After graph_execute call");
                     result
                 },
                 _ => unreachable!(),
@@ -214,10 +206,6 @@ fn graph_execute(
     first_call: Option<SSACallInput>,
     first_create: Option<SSACreateInput>,
 ) -> (Option<ExecutionTracer>, Option<std::time::Duration>) {
-    eprintln!("entries length: {}", entries.len());
-    eprintln!("first_call is some: {}", first_call.is_some());
-    eprintln!("first_create is some: {}", first_create.is_some());
-    eprintln!("graph_execute");
     // Create dependency graph
     let mut graph = SsaGraph::new(entries.len(), 2 * entries.len());
 
@@ -244,17 +232,13 @@ fn graph_execute(
     for lsn in lsns {
         graph.add_edges(lsn).unwrap();
     }
-    eprintln!("before new executor");
     // Create executor and tracer
     let mut executor = 
         SSAExecutor::new_with_spec(graph.into(), db, env, first_call, first_create, SpecId::LATEST)
         .with_mode(config.mode)
         .with_tracer(tracer);
-    eprintln!("after new executor");
     // Execute
-    eprintln!("before execute");
     let res = executor.execute_with_spec(SpecId::LATEST).unwrap();
-    eprintln!("after execute");
 
     (executor.into_tracer(), Some(res.1))
 }
