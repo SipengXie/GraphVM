@@ -547,7 +547,6 @@ impl SsaGraph {
                 }
             }
             _ => {
-                // eprintln!("Graph size: {}, Last {} nodes: {:?}", self.graph.node_count(), 5, self.graph.raw_nodes().into_iter().rev().take(5).collect::<Vec<_>>());
                 Err(ExecutionError::GraphError(
                 "Last return node is not a call or create outcome".to_string(),
             ))},
