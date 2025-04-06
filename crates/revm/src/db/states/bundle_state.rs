@@ -580,6 +580,8 @@ impl BundleState {
             }
         }
 
+        println!("reverts: {:?}", reverts);
+
         self.reverts.push(reverts);
     }
 

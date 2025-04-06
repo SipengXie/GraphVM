@@ -980,7 +980,7 @@ impl Occda {
         Ok(())
     }
 
-    fn apply_beneficiary<DB: DatabaseCommit + DatabaseRef, I>(&self, db: &mut DB, tasks: &[Task], result_store: &[TaskResultItem<I>]) {
+    fn apply_beneficiary<DB: DatabaseCommit + DatabaseRef, I>(&self, db: &mut DB, tasks: &[Task], result_store: &mut[TaskResultItem<I>]) {
         let beneficiary = tasks[0].env.block.coinbase;
         let mut coinbase_refund = U256::ZERO;
         for task in tasks.iter() {
