@@ -131,9 +131,12 @@ where
         for node_index in nodes_to_execute {
             let node = graph.get_node_by_index_mut(node_index);
             if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
-                eprintln!("node: {:?}", node);
+                eprintln!("before execute node: {:?}", node);
             }
             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
+            if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
+                eprintln!("after execute node: {:?}", node);
+            }
         }
         let execute_duration = execute_start.elapsed();
 
