@@ -239,8 +239,8 @@ fn graph_execute(
         .with_mode(config.mode)
         .with_tracer(tracer);
     // Execute
-    let res = executor.execute_with_spec(SpecId::LATEST).unwrap();
-    let result = executor.graph.generate_result(0x0f424000, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000"));
+    let res = executor.execute_with_spec(SpecId::LATEST, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000")).unwrap();
+    let result = executor.graph.generate_result(0x0f424000, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000")).unwrap();
     eprintln!("result: {:?}", result);
 
     (executor.into_tracer(), Some(res.1))

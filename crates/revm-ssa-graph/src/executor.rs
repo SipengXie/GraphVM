@@ -4,7 +4,7 @@ use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result,
 };
 
-use revm_primitives::{db::DatabaseRef, spec_to_generic, Env, Spec, SpecId};
+use revm_primitives::{db::DatabaseRef, fixed_bytes, spec_to_generic, Env, FixedBytes, Spec, SpecId};
 use revm_ssa::{logger::LsnType, SSACallInput, SSACreateInput, SSAInstructionResult, SSALogEntry};
 
 /// Execution mode
@@ -91,13 +91,13 @@ where
     }
     
     #[inline(always)]
-    pub fn execute_with_spec(&mut self, spec_id: SpecId) -> Result<(usize, std::time::Duration)> {
-        spec_to_generic!(spec_id, self.execute::<SPEC>())
+    pub fn execute_with_spec(&mut self, spec_id: SpecId, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
+        spec_to_generic!(spec_id, self.execute::<SPEC>(_tx_hash))
     }
 
     /// Execute the entire graph
     #[inline(always)]
-    pub fn execute<SPEC:Spec>(&mut self) -> Result<(usize, std::time::Duration)> {
+    pub fn execute<SPEC:Spec>(&mut self, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
         let nodes_to_execute = match &self.mode {
@@ -116,6 +116,10 @@ where
                 reachable_nodes
             }
         };
+
+        if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
+            eprintln!("nodes_to_execute: {:?}", nodes_to_execute);
+        }
 
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();

@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256
+    Account, AccountStatus, EVMError, EvmStorageSlot, U256
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -325,7 +325,7 @@ impl Occda {
                             .with_mode(execution_mode);
 
                             profiler::start("ssa-execution");
-                            let ssa_execution = executor.execute_with_spec(task.spec_id);
+                            let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap());
                             profiler::end("ssa-execution");
 
                             match ssa_execution {
@@ -694,7 +694,7 @@ impl Occda {
                         .with_mode(execution_mode);
 
                         profiler::start("ssa-execution");
-                        let ssa_execution = executor.execute_with_spec(task.spec_id);
+                        let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap());
                         profiler::end("ssa-execution");
 
                         match ssa_execution {
@@ -702,10 +702,6 @@ impl Occda {
                                 let tx_hash = task.tx_hash.unwrap();
                                 let result_state =
                                     executor.graph.get_storage_write_outputs().unwrap();
-                                if tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
-                                    let sstore_nodes = executor.graph.get_sstore_nodes().unwrap();
-                                    eprintln!("sstore_nodes: {:?}", sstore_nodes);
-                                }
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);
