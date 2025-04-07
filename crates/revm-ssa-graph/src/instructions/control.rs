@@ -35,10 +35,10 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let condition = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let current_pc = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        if current_pc == U256::from(2804) {
-            eprintln!("Node:{}", node);
-            eprintln!("target: {:?}, condition: {:?}, current_pc: {:?}", target, condition, current_pc);
-        }
+        // if current_pc == U256::from(2804) {
+        //     eprintln!("Node:{}", node);
+        //     eprintln!("target: {:?}, condition: {:?}, current_pc: {:?}", target, condition, current_pc);
+        // }
         // If condition is 0, no jump, relative offset is 0
         let new_jump = if condition.is_zero() {
             0
@@ -49,6 +49,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
             relative_offset
         };
 
+        // if current_pc == U256::from(2804) {
+        //     eprintln!("new_jump: {:?}", new_jump);
+        // }
         // Control flow verification
         if let SSAOutput::Jump(old_jump) = node.outputs[0] {
             if old_jump != new_jump {
