@@ -21,6 +21,15 @@ pub struct SsaGraph {
     pub gas_calc: LsnType,
 }
 
+impl std::fmt::Display for SsaGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for node in self.graph.raw_nodes() {
+            writeln!(f, "{:?}", node.weight)?;
+        }
+        Ok(())
+    }
+}
+
 impl SsaGraph {
     pub fn new(node_num: usize, edge_num: usize) -> Self {
         Self {
