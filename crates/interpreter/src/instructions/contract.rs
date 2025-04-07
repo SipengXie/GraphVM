@@ -502,9 +502,6 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
         gas_limit = gas_limit.saturating_add(gas::CALL_STIPEND);
     }
     
-    if interpreter.contract.caller == address!("ff1b9745f68f84f036e5e92c920038d895fb701a") {
-        eprintln!("call_gas_limit: {:?}", gas_limit);
-    }
 
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Call {
@@ -667,10 +664,6 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
     };
 
     gas!(interpreter, gas_limit);
-
-    if interpreter.contract.caller == address!("ff1b9745f68f84f036e5e92c920038d895fb701a") {
-        eprintln!("delegate_call_gas_limit: {:?}", gas_limit);
-    }
 
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Call {
