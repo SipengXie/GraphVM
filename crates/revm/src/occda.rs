@@ -4,7 +4,7 @@ use crate::db::{parallel_db::ParallelDB, Database, DatabaseCommit, DatabaseRef};
 use crate::evm::Evm;
 use crate::graph_wrapper::GraphWrapper;
 use crate::inspector_handle_register;
-use crate::inspectors::NoOpInspector;
+use crate::inspectors::{NoOpInspector, TracerEip3155};
 use crate::journaled_state::AccessType;
 /// OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
 ///
@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::{
-    Account, AccountStatus, EVMError, EvmStorageSlot, U256
+    fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
@@ -357,7 +357,17 @@ impl Occda {
                                 }
                             }
                         }
-
+                        // ! 只有特定的tx_hash才print
+                        let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
+                            TracerEip3155::new(
+                                Box::new(std::io::stdout()),
+                            ).without_summary()
+                        } else {
+                            TracerEip3155::new(
+                                Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
+                            )
+                        };
+                        
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
@@ -367,7 +377,7 @@ impl Occda {
                             let evm_inside = Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(NoOpInspector)
+                                .with_external_context(tracer_inspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .with_ssa_logger(SSALogger::new())
@@ -378,7 +388,7 @@ impl Occda {
                             Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(NoOpInspector)
+                                .with_external_context(tracer_inspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .build()
@@ -403,6 +413,7 @@ impl Occda {
                         transact_time += this_transact_time;
                         transact_times.push(this_transact_time);
 
+                        
                         // Process and store execution results
                         // This phase includes collecting execution data and storing results
                         let write_start = std::time::Instant::now();
