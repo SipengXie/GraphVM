@@ -134,6 +134,10 @@ where
             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
             if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
                 eprintln!("after execute node: {}", node);
+                if node.lsn == 137 {
+                    let node_138 = graph.get_node(138)?;
+                    eprintln!("node_138: {}", node_138);
+                }
             }
         }
         let execute_duration = execute_start.elapsed();
