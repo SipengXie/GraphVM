@@ -103,43 +103,42 @@ where
         let mut nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
-                let mut reachable_nodes = Vec::new();
+                let mut reachable_lsns = Vec::new();
                 let mut seen_lsns = std::collections::HashSet::new();
                 for &start_lsn in start_lsns {
                     for node_index in self.graph.get_reachable_nodes(start_lsn)? {
                         let node = self.graph.get_node_by_index(node_index)?;
                         if seen_lsns.insert(node.lsn) {
-                            reachable_nodes.push(node_index);
+                            reachable_lsns.push(node.lsn);
                         }
                     }
                 }
-                reachable_nodes
+                reachable_lsns
             }
         };
-
-        if let Some(tracer) = &mut self.tracer {
-            let graph = self.graph.clone();
-            for node_index in &nodes_to_execute {
-                let node = graph.get_node_by_index(*node_index)?;
-                let outputs = graph.get_original_outputs(node.lsn)?.unwrap();
-                tracer.record_graph(node.lsn, outputs.into(), node.opcode);
-            }
-        }
 
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
         nodes_to_execute.sort();
-        for node_index in nodes_to_execute {
-            let node = graph.get_node_by_index_mut(node_index);
-            Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
-            if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
-                eprintln!("after execute node: {}", node);
-                if node.lsn == 137 {
-                    let node_138 = graph.get_node(138)?;
-                    eprintln!("node_138: {}", node_138);
+        let first_lsn = nodes_to_execute[0];
+        let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
+        
+        for lsn in first_lsn..=last_lsn {
+            if let Ok(node) = graph.get_node(lsn) {
+                if nodes_to_execute.contains(&lsn) {
+                    let node = graph.get_node_mut(lsn)?;
+                    Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
+                    if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
+                        eprintln!("after execute node: {}", node);
+                    }
+                } else {
+                    if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
+                        eprintln!("after execute node: {}", node);
+                    }
                 }
             }
         }
+        
         let execute_duration = execute_start.elapsed();
 
         Ok((len, execute_duration))

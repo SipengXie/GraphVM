@@ -228,12 +228,17 @@ impl SsaGraph {
 
     /// Get topological sort
     #[inline(always)]
-    pub fn topological_sort(&self) -> Result<Vec<NodeIndex>> {
+    pub fn topological_sort(&self) -> Result<Vec<LsnType>> {
         let sorted_indices = toposort(&self.graph, None).map_err(|_| {
             ExecutionError::GraphError("Cycle detected in dependency graph".to_string())
         })?;
 
-        Ok(sorted_indices)
+        let mut sorted_lsns = Vec::with_capacity(sorted_indices.len());
+        for idx in sorted_indices {
+            sorted_lsns.push(self.graph[idx].lsn);
+        }
+
+        Ok(sorted_lsns)
     }
 
     /// Get mutable node
