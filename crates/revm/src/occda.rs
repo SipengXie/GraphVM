@@ -846,7 +846,6 @@ impl Occda {
 
                 // Handle conflicts or commit changes
                 if is_conflict {
-                    println!("conflict detected, task_idx: {}", task_idx);
                     // Conflict detected: update sid and retry
                     h_tx[task_idx].sid = h_tx[task_idx].tid - 1;
                     h_exec.push(Reverse((h_tx[task_idx].sid, h_tx[task_idx].tid as usize)));

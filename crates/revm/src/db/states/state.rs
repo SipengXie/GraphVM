@@ -25,7 +25,7 @@ pub type StateDBBox<'a, E> = State<DBBox<'a, E>>;
 ///
 /// State clear flag is set inside CacheState and by default it is enabled.
 /// If you want to disable it use `set_state_clear_flag` function.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct State<DB> {
     /// Cached state contains both changed from evm execution and cached/loaded account/storages
     /// from database. This allows us to have only one layer of cache where we can fetch data.
@@ -42,7 +42,7 @@ pub struct State<DB> {
     pub transition_state: Option<TransitionState>,
     /// After block is finishes we merge those changes inside bundle.
     /// Bundle is used to update database and create changesets.
-    /// Bundle state can be set on initialization if we want to use preloaded bundle.
+    /// Bundle state can be set on initialization if we wan t to use preloaded bundle.
     pub bundle_state: BundleState,
     /// Addition layer that is going to be used to fetched values before fetching values
     /// from database.
