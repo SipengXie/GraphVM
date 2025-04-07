@@ -459,12 +459,14 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         // calculate final refund and add EIP-7702 refund to gas.
         // Reimburse the caller
         if ctx.evm.inner.ssa_logger.is_some() {
-            let effecive_gas_prices = ctx.evm.env.effective_gas_price();
-            let gas_remaining = result.gas().remaining();
-            let gas_refunded = result.gas().refunded(); // original refund
+            let effective_gas_price = ctx.evm.env.effective_gas_price();
+            let origin_gas_remaining = result.gas().remaining();
+            let origin_gas_refunded = result.gas().refunded(); // original refund
             let gas_limit = ctx.evm.env.tx.gas_limit;
             post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
             post_exec.reimburse_caller(ctx, result.gas())?;
+            let computed_gas_remaining = result.gas().remaining();
+            let computed_gas_refunded = result.gas().refunded();
 
             let after_account = ctx
                 .evm
@@ -476,9 +478,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
             logger.log_refund_gas(
                 ctx.evm.inner.env.tx.caller,
                 after_account.info.clone(),
-                effecive_gas_prices,
-                gas_remaining,
-                gas_refunded, // original refund
+                effective_gas_price,
+                origin_gas_remaining,
+                origin_gas_refunded, // original refund
+                computed_gas_remaining,
+                computed_gas_refunded,
                 eip7702_gas_refund,
                 gas_limit,
             );
