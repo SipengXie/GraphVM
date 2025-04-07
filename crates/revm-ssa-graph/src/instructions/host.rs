@@ -39,7 +39,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute SSTORE operation
     #[inline(always)]
     pub fn execute_sstore<SPEC: Spec>(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
 
         let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
@@ -85,7 +85,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
 
     #[inline(always)]
     pub fn execute_tstore(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let _address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let _address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
         let _index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
 
@@ -96,7 +96,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
 
     #[inline(always)]
     pub fn execute_tload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let _address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let _address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
         let _index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let value = match node.inputs[2] {
             SSAInput::Transient((lsn, index)) => {
@@ -222,7 +222,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute LOG operation
     #[inline(always)]
     pub fn execute_log(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
         let memory = get_memory!(graph, &node.inputs[3]);
 
         let mut topics: Vec<FixedBytes<32>> = vec![];
@@ -244,7 +244,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute SELFDESTRUCT operation
     #[inline(always)]
     pub fn execute_selfdestruct(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let contract_address = get_contract_env!(graph, node.inputs[0]).target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let address_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let target_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));

@@ -4,7 +4,6 @@ pub use call_helpers::{
     calc_call_gas, get_memory_input_and_out_ranges,
     get_memory_input_and_out_ranges_whether_new_allocation, resize_memory,
 };
-use revm_primitives::address;
 
 use crate::{
     gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS},

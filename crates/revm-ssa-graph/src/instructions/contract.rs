@@ -4,17 +4,17 @@ use revm_primitives::{keccak256, AccountInfo, AccountStatus, Bytecode, Spec, Spe
 use revm_primitives::{Address, Bytes, B256, U256};
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
-    output_account_info, output_account_status, ContractEnv, SSACallInput, SSACallOutcome,
-    SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInput,
+    output_account_info, output_account_status, ContractEnv, FrameInput, SSACallOutcome,
+    TxScheme, SSACreateOutcome, SSAInput,
     SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue,
 };
 
 use crate::{
-    as_u64_saturated, as_usize_saturated, get_call_input, get_contract_env, get_interpreter_result,
+    as_u64_saturated, as_usize_saturated, get_contract_env, get_interpreter_result,
     get_memory, get_storage_value, u256_to_bool,
 };
 
-use super::{get_constant_i64, get_gas_cost, get_gas_refund};
+use super::{get_constant_i64, get_frame_input, get_gas_cost, get_gas_refund};
 
 impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute deduct caller operation
@@ -151,7 +151,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[6]);
         let input = get_memory!(graph, &node.inputs[7]);
-        let target_address = get_contract_env!(graph, node.inputs[8]).target_address;
+        let target_address = get_contract_env!(graph, node.inputs[8]).frame_input.target_address;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
@@ -159,21 +159,21 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let in_offset = as_usize_saturated!(in_offset);
         let in_len = as_usize_saturated!(in_len);
 
-        let ssa_call_input = SSACallInput {
+        let ssa_call_input = FrameInput {
             input: input.into(),
             target_address: Address::from_word(B256::from(to)),
             bytecode_address: Address::from_word(B256::from(to)),
             caller: target_address,
             transfer_value: value,
             scheme: match opcode {
-                0xF1 => SSACallScheme::Call,
+                0xF1 => TxScheme::Call,
                 _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
             ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
 
-        node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
+        node.outputs[0] = SSAOutput::FrameInput(Box::new(ssa_call_input));
         let new_size_1 = if in_len == 0 {
             0
         } else {
@@ -209,28 +209,28 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[6]);
         let input = get_memory!(graph, &node.inputs[7]);
-        let contract_address = get_contract_env!(graph, node.inputs[8]).target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[8]).frame_input.target_address;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
         let out_len = as_usize_saturated!(out_len);
         let in_offset = as_usize_saturated!(in_offset);
         let in_len = as_usize_saturated!(in_len);
-        let ssa_call_input = SSACallInput {
+        let ssa_call_input = FrameInput {
             input: input.into(),
             target_address: contract_address,
             bytecode_address: Address::from_word(B256::from(to)),
             caller: contract_address,
             transfer_value: value,
             scheme: match opcode {
-                0xF2 => SSACallScheme::CallCode,
+                0xF2 => TxScheme::CallCode,
                 _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
             ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
 
-        node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
+        node.outputs[0] = SSAOutput::FrameInput(Box::new(ssa_call_input));
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -261,8 +261,8 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[4]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let input = get_memory!(graph, &node.inputs[6]);
-        let contract_address = get_contract_env!(graph, node.inputs[7]).target_address;
-        let caller = get_contract_env!(graph, node.inputs[8]).caller;
+        let contract_address = get_contract_env!(graph, node.inputs[7]).frame_input.target_address;
+        let caller = get_contract_env!(graph, node.inputs[8]).frame_input.caller;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
@@ -270,21 +270,21 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let in_offset = as_usize_saturated!(in_offset);
         let in_len = as_usize_saturated!(in_len);
 
-        let ssa_call_input = SSACallInput {
+        let ssa_call_input = FrameInput {
             input: input.into(),
             target_address: contract_address,
             bytecode_address: Address::from_word(B256::from(to)),
             caller,
             transfer_value: U256::ZERO,
             scheme: match opcode {
-                0xF4 => SSACallScheme::DelegateCall,
+                0xF4 => TxScheme::DelegateCall,
                 _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
             ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
 
-        node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
+        node.outputs[0] = SSAOutput::FrameInput(Box::new(ssa_call_input));
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -315,7 +315,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[4]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let input = get_memory!(graph, &node.inputs[6]);
-        let contract_address = get_contract_env!(graph, node.inputs[7]).target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[7]).frame_input.target_address;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
@@ -324,21 +324,21 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let in_len = as_usize_saturated!(in_len);
         let to_addr = Address::from_word(B256::from(to));
 
-        let ssa_call_input = SSACallInput {
+        let ssa_call_input = FrameInput {
             input: input.into(),
             target_address: to_addr,
             bytecode_address: to_addr,
             caller: contract_address,
             transfer_value: U256::ZERO,
             scheme: match opcode {
-                0xFA => SSACallScheme::StaticCall,
+                0xFA => TxScheme::StaticCall,
                 _ => return Err(ExecutionError::ExecutionError("Invalid opcode".to_string())),
             },
             ret_range: out_offset..out_offset + out_len,
             gas_limit: gas_limit,
         };
 
-        node.outputs[0] = SSAOutput::CallInput(Box::new(ssa_call_input));
+        node.outputs[0] = SSAOutput::FrameInput(Box::new(ssa_call_input));
         let new_size_1 = self.check_memory_size(in_offset, in_len);
         let new_size_2 = self.check_memory_size(out_offset, out_len);
         let new_size = std::cmp::max(new_size_1, new_size_2);
@@ -363,7 +363,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         graph: &SsaGraph,
     ) -> Result<()> {
         let call_input =
-            get_call_input!(graph, node.inputs[0], self.get_first_call_input().unwrap());
+            get_frame_input!(graph, node.inputs[0], self.get_first_frame_input().unwrap());
         let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
         let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let bytecode_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
@@ -414,13 +414,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         } else {
             // if is contract call
             let contract = ContractEnv {
-                input: call_input.input.clone(),
+                frame_input: *call_input.clone(),
                 bytecode: bytecode_info.code.clone().unwrap_or_default(),
                 hash: Some(bytecode_info.code_hash()),
-                target_address: target_address,
-                bytecode_address: Some(bytecode_address),
-                caller: caller,
-                call_value: value,
             };
             outputs.push(SSAOutput::ContractEnv(Box::new(contract)));
         }
@@ -432,10 +428,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     #[inline(always)]
     pub fn execute_call_return(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
-        let call_input =
-            get_call_input!(graph, node.inputs[1], self.get_first_call_input().unwrap());
+        let contract_env = get_contract_env!(graph, node.inputs[1]);
 
-        let ret_range = call_input.ret_range.clone();
+        let ret_range = contract_env.frame_input.ret_range.clone();
 
         node.outputs[0] = SSAOutput::CallOutcome(Box::new(SSACallOutcome {
             result: interpreter_result.clone(),
@@ -507,7 +502,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
         let code = get_memory!(graph, &node.inputs[3]);
-        let contract_address = get_contract_env!(graph, node.inputs[4]).target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[4]).frame_input.target_address;
         let salt = if node.inputs.len() == 6 {
             Some(get_ssa_output_stack_or_const!(graph, node.inputs[5]))
         } else {
@@ -518,20 +513,21 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let mut padded_code_slice = vec![0u8; len];
         padded_code_slice[..code.len()].copy_from_slice(&code);
 
-        let ssa_create_input = SSACreateInput {
-            init_code: padded_code_slice.into(),
-            value: value,
+        let ssa_create_input = FrameInput {
+            input: padded_code_slice.into(),
+            transfer_value: value,
             caller: contract_address,
             scheme: if salt.is_some() {
-                SSACreateScheme::Create2 {
+                TxScheme::Create2 {
                     salt: salt.unwrap(),
                 }
             } else {
-                SSACreateScheme::Create
+                TxScheme::Create
             },
+            ..Default::default()
         };
 
-        node.outputs[0] = SSAOutput::CreateInput(Box::new(ssa_create_input));
+        node.outputs[0] = SSAOutput::FrameInput(Box::new(ssa_create_input));
 
         let new_size = self.check_memory_size(as_usize_saturated!(code_offset), len);
 
@@ -555,13 +551,13 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         graph: &SsaGraph,
     ) -> Result<()> {
         let create_input = match node.inputs[0] {
-            SSAInput::CreateInput((lsn, index)) => {
+            SSAInput::FrameInput((lsn, index)) => {
                 if lsn == 0 {
-                    &Box::new(self.get_first_create_input().unwrap())
+                    &Box::new(self.get_first_frame_input().unwrap())
                 } else {
                     let dep_node = graph.get_node(lsn)?;
                     match &dep_node.outputs[index as usize] {
-                        SSAOutput::CreateInput(input) => input,
+                        SSAOutput::FrameInput(input) => input,
                         _ => {
                             return Err(ExecutionError::ExecutionError(
                                 "Expected CreateInput output value".to_string(),
@@ -586,22 +582,23 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let caller = create_input.caller;
         let mut init_code_hash = B256::ZERO;
         let target = match create_input.scheme {
-            SSACreateScheme::Create => caller.create(caller_info.nonce),
-            SSACreateScheme::Create2 { salt } => {
-                init_code_hash = keccak256(&create_input.init_code);
+            TxScheme::Create => caller.create(caller_info.nonce),
+            TxScheme::Create2 { salt } => {
+                init_code_hash = keccak256(&create_input.input);
                 caller.create2(salt.to_be_bytes(), init_code_hash)
-            }
+            },
+            _ => unreachable!()
         };
 
         let new_caller_info = AccountInfo {
-            balance: caller_info.balance - create_input.value,
+            balance: caller_info.balance - create_input.transfer_value,
             nonce: caller_info.nonce + 1,
             code_hash: caller_info.code_hash,
             code: caller_info.code.clone(),
         };
 
         let new_created_info = AccountInfo {
-            balance: created_info.balance + create_input.value,
+            balance: created_info.balance + create_input.transfer_value,
             nonce: 1,
             code_hash: created_info.code_hash,
             code: created_info.code.clone(),
@@ -609,15 +606,11 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
 
         let new_created_status = AccountStatus::Created;
 
-        let bytecode = Bytecode::new_legacy(create_input.init_code.clone());
+        let bytecode = Bytecode::new_legacy(create_input.input.clone());
         let contract_env = ContractEnv {
-            input: Bytes::new(),
             bytecode,
-            caller,
             hash: Some(init_code_hash),
-            target_address: target,
-            bytecode_address: None,
-            call_value: create_input.value,
+            frame_input: *create_input.clone(),
         };
 
         node.outputs[0] = output_account_info!(caller, new_caller_info);
@@ -645,7 +638,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         }
 
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
-        let address = get_contract_env!(graph, node.inputs[1]).target_address;
+        let address = get_contract_env!(graph, node.inputs[1]).frame_input.target_address;
         let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let analysis_kind = get_ssa_output_stack_or_const!(graph, node.inputs[3]);
         let analysis_kind = u256_to_bool!(analysis_kind)?;

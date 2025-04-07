@@ -136,8 +136,7 @@ impl SsaGraph {
                 }
             }
             SSAInput::MemorySizeChange(last_memory) => lsn_vec.push(last_memory.0),
-            SSAInput::CreateInput(source) => lsn_vec.push(source.0),
-            SSAInput::CallInput(source) => lsn_vec.push(source.0),
+            SSAInput::FrameInput(source) => lsn_vec.push(source.0),
             SSAInput::InterpreterResult(source) => lsn_vec.push(source.0),
             SSAInput::CallOutcome(source) => lsn_vec.push(source.0),
             SSAInput::CreateOutcome(source) => lsn_vec.push(source.0),

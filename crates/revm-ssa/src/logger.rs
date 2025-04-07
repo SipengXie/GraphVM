@@ -4,7 +4,7 @@ use crate::types::{
     ContractEnv, InternalOp, MemoryDep, SSAInput, SSALogEntry, SSAOutput, StorageKey, StorageValue,
 };
 use crate::{
-    SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme,
+    FrameInput, SSACallOutcome, TxScheme, SSACreateOutcome,
     SSAInstructionResult, SSAInterpreterResult,
 };
 use revm_primitives::bitvec::bitvec;
@@ -16,6 +16,7 @@ use revm_primitives::{
     HashSet, JumpTable, LegacyAnalyzedBytecode, Log, B256, U256,
 };
 use std::cmp::min;
+use core::ops::Range;
 use std::sync::Arc;
 // Update macro pop_stack_or_const to take two parameters: self and value
 #[macro_export]
@@ -144,10 +145,8 @@ pub struct SSALogger {
     // Initial LSN
     // Use stack to track contract_env at different levels
     pub contract_env: Vec<LsnWithIndex>,
-    // we need call_inputs to get return range
-    pub call_inputs: Vec<SSACallInput>,
-    pub first_call_input: Option<SSACallInput>,
-    pub first_create_input: Option<SSACreateInput>,
+    // First frame's input
+    pub first_frame_input: Option<FrameInput>,
 
     // memory buffer for storing inputs and outputs
     input_buf: Vec<SSAInput>,
@@ -203,9 +202,7 @@ impl SSALogger {
             last_sub_create: vec![],
             last_call_return: vec![],
             last_create_return: vec![],
-            call_inputs: vec![],
-            first_call_input: None,
-            first_create_input: None,
+            first_frame_input: None,
 
             input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
             output_buf: vec![SSAOutput::Stack(U256::ZERO); 1],
@@ -231,9 +228,7 @@ impl SSALogger {
             last_sub_create: vec![],
             last_call_return: vec![],
             last_create_return: vec![],
-            call_inputs: vec![],
-            first_call_input: None,
-            first_create_input: None,
+            first_frame_input: None,
 
             input_buf: vec![SSAInput::Constant(U256::ZERO); 3],
             output_buf: vec![SSAOutput::Stack(U256::ZERO); 1],
@@ -700,11 +695,11 @@ impl SSALogger {
         let mut ssa_output = Vec::with_capacity(1);
         match opcode {
             0x30 => ssa_output.push(SSAOutput::Stack(
-                contract_env.target_address.into_word().into(),
+                contract_env.frame_input.target_address.into_word().into(),
             )), // ADDRESS
-            0x33 => ssa_output.push(SSAOutput::Stack(contract_env.caller.into_word().into())), // CALLER
-            0x34 => ssa_output.push(SSAOutput::Stack(contract_env.call_value)), // CALLVALUE
-            0x36 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.input.len()))), // CALLDATASIZE
+            0x33 => ssa_output.push(SSAOutput::Stack(contract_env.frame_input.caller.into_word().into())), // CALLER
+            0x34 => ssa_output.push(SSAOutput::Stack(contract_env.frame_input.transfer_value)), // CALLVALUE
+            0x36 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.frame_input.input.len()))), // CALLDATASIZE
             0x38 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.bytecode.len()))), // CODESIZE
             _ => unreachable!("Unsupported system operation: {}", opcode),
         }
@@ -959,21 +954,22 @@ impl SSALogger {
         padded_code_slice[..code.len()].copy_from_slice(&code);
 
         // outputs
-        let ssa_create_input = SSACreateInput {
-            init_code: padded_code_slice.into(),
-            value,
+        let ssa_create_input = FrameInput {
+            input: padded_code_slice.into(),
+            transfer_value: value,
             caller: target,
             scheme: if opcode == 0xF0 {
-                SSACreateScheme::Create
+                TxScheme::Create
             } else {
-                SSACreateScheme::Create2 {
+                TxScheme::Create2 {
                     salt: salt.unwrap(),
                 }
             },
+            ..Default::default()
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
-        ssa_outputs.push(SSAOutput::CreateInput(Box::new(ssa_create_input)));
+        ssa_outputs.push(SSAOutput::FrameInput(Box::new(ssa_create_input)));
         self.last_sub_create.push((lsn, 0));
 
         if let Some(mem_length) = mem_length {
@@ -987,19 +983,18 @@ impl SSALogger {
     #[inline(always)]
     pub fn log_make_create_frame(
         &mut self,
-        create_input: SSACreateInput,
         new_caller_info: AccountInfo,
         new_target_info: AccountInfo,
         new_target_status: AccountStatus, // needed as it is marked created
-        contract_env: ContractEnv,
+        contract_env: ContractEnv, // which contains create_input
     ) {
         let opcode = InternalOp::MAKE_CREATE_FRAME;
         let lsn = self.current_lsn;
-        let caller = create_input.caller;
-        let created_address = contract_env.target_address;
+        let caller = contract_env.frame_input.caller;
+        let created_address = contract_env.frame_input.target_address;
 
         let mut ssa_inputs = Vec::with_capacity(3);
-        ssa_inputs.push(SSAInput::CreateInput(
+        ssa_inputs.push(SSAInput::FrameInput(
             self.last_sub_create.pop().unwrap_or_default(),
         ));
         ssa_inputs.push(input_account_info!(self, caller));
@@ -1007,6 +1002,10 @@ impl SSALogger {
 
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);
         self.log_storage_read(StorageKey::AccountInfo(created_address), lsn);
+
+        if self.first_frame_input.is_none() {
+            self.first_frame_input = Some(contract_env.frame_input.clone());
+        }
 
         let mut ssa_outputs = Vec::with_capacity(4);
         ssa_outputs.push(output_account_info!(caller, new_caller_info));
@@ -1019,10 +1018,7 @@ impl SSALogger {
         self.contract_env.push((lsn, 3));
         self.generate_new_stack();
 
-        if self.first_create_input.is_none() {
-            self.first_create_input = Some(create_input);
-        }
-
+        
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
@@ -1149,14 +1145,14 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn())); // target_address
 
         // Create SSACallInput
-        let ssa_call_input = SSACallInput {
-            input: input,
+        let ssa_call_input = FrameInput {
+            input,
             target_address: to,
             bytecode_address: to,
             caller: target_address,
             transfer_value: value,
             scheme: match opcode {
-                0xF1 => SSACallScheme::Call,
+                0xF1 => TxScheme::Call,
                 _ => panic!("Invalid opcode"),
             },
             ret_range: out_offset..out_offset + out_len,
@@ -1164,8 +1160,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
-        self.call_inputs.push(ssa_call_input.clone());
-        ssa_outputs.push(SSAOutput::CallInput(Box::new(ssa_call_input)));
+        ssa_outputs.push(SSAOutput::FrameInput(Box::new(ssa_call_input)));
         self.last_sub_call.push((lsn, 0));
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -1202,14 +1197,14 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn())); // target_address
 
         // Create SSACallInput
-        let ssa_call_input = SSACallInput {
-            input: input,
-            target_address: target_address,
+        let ssa_call_input = FrameInput {
+            input,
+            target_address,
             bytecode_address: to,
             caller: target_address,
             transfer_value: value,
             scheme: match opcode {
-                0xF2 => SSACallScheme::CallCode,
+                0xF2 => TxScheme::CallCode,
                 _ => panic!("Invalid opcode"),
             },
             ret_range: out_offset..out_offset + out_len,
@@ -1217,8 +1212,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
-        self.call_inputs.push(ssa_call_input.clone());
-        ssa_outputs.push(SSAOutput::CallInput(Box::new(ssa_call_input)));
+        ssa_outputs.push(SSAOutput::FrameInput(Box::new(ssa_call_input)));
         self.last_sub_call.push((lsn, 0));
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -1256,14 +1250,14 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn())); // contract_target
 
         // Create SSACallInput
-        let ssa_call_input = SSACallInput {
-            input: input,
+        let ssa_call_input = FrameInput {
+            input,
             target_address: contract_target,
             bytecode_address: to,
             caller: contract_caller,
             transfer_value: U256::ZERO,
             scheme: match opcode {
-                0xF4 => SSACallScheme::DelegateCall,
+                0xF4 => TxScheme::DelegateCall,
                 _ => panic!("Invalid opcode"),
             },
             ret_range: out_offset..out_offset + out_len,
@@ -1271,8 +1265,8 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
-        self.call_inputs.push(ssa_call_input.clone());
-        ssa_outputs.push(SSAOutput::CallInput(Box::new(ssa_call_input)));
+
+        ssa_outputs.push(SSAOutput::FrameInput(Box::new(ssa_call_input)));
         self.last_sub_call.push((lsn, 0));
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -1308,14 +1302,14 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn())); // contract_target
 
         // Create SSACallInput
-        let ssa_call_input = SSACallInput {
-            input: input,
+        let ssa_call_input = FrameInput {
+            input,
             target_address: to,
             bytecode_address: to,
             caller: contract_target,
             transfer_value: U256::ZERO,
             scheme: match opcode {
-                0xFA => SSACallScheme::StaticCall,
+                0xFA => TxScheme::StaticCall,
                 _ => panic!("Invalid opcode"),
             },
             ret_range: out_offset..out_offset + out_len,
@@ -1323,8 +1317,7 @@ impl SSALogger {
         };
 
         let mut ssa_outputs = Vec::with_capacity(1);
-        self.call_inputs.push(ssa_call_input.clone());
-        ssa_outputs.push(SSAOutput::CallInput(Box::new(ssa_call_input)));
+        ssa_outputs.push(SSAOutput::FrameInput(Box::new(ssa_call_input)));
         self.last_sub_call.push((lsn, 0));
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
@@ -1337,7 +1330,7 @@ impl SSALogger {
     #[inline(always)]
     pub fn log_make_call_frame(
         &mut self,
-        call_input: SSACallInput,
+        call_input: FrameInput,
         new_caller_info: AccountInfo,
         new_target_info: AccountInfo,
         contract_env: Option<ContractEnv>,
@@ -1353,7 +1346,7 @@ impl SSALogger {
 
         let mut ssa_inputs = Vec::with_capacity(6);
         ssa_inputs.push(
-            SSAInput::CallInput(*self.last_sub_call.last().unwrap_or(&(0, 0))), // 0 if it is the first call
+            SSAInput::FrameInput(self.last_sub_call.pop().unwrap_or_default()), // 0 if it is the first call
         );
         ssa_inputs.push(input_account_info!(self, caller));
         ssa_inputs.push(input_account_info!(self, target_address));
@@ -1393,34 +1386,29 @@ impl SSALogger {
             self.generate_new_stack();
         }
 
-        if self.first_call_input.is_none() {
-            self.call_inputs.push(call_input.clone());
-            self.first_call_input = Some(call_input);
+        if self.first_frame_input.is_none() {
+            self.first_frame_input = Some(call_input);
         }
 
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
     #[inline(always)]
-    pub fn log_call_return(&mut self, interpreter_result: SSAInterpreterResult) {
+    pub fn log_call_return(&mut self, interpreter_result: SSAInterpreterResult, ret_range: Range<usize>) {
         let lsn = self.current_lsn;
         let opcode = InternalOp::CALL_RETURN;
-        let call_input = self.call_inputs.pop().unwrap();
-        let ret_range = call_input.ret_range.clone();
 
         let mut ssa_inputs = Vec::with_capacity(2);
         ssa_inputs.push(SSAInput::InterpreterResult(self.last_interpreter_return)); // interpreter_result
-        ssa_inputs.push(SSAInput::CallInput(
-            self.last_sub_call.pop().unwrap_or_default(),
-        )); // call_input
+        ssa_inputs.push(SSAInput::ContractEnv(self.contract_env.pop().unwrap_or_default()));
 
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::CallOutcome(Box::new(SSACallOutcome {
             result: interpreter_result,
-            ret_range: ret_range,
+            ret_range,
         })));
         self.last_call_return.push((lsn, 0));
-        self.contract_env.pop();
+        
         self.remove_last_stack();
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
@@ -1859,12 +1847,8 @@ impl SSALogger {
         std::mem::take(&mut self.first_reads)
     }
 
-    pub fn take_first_call_input(&mut self) -> Option<SSACallInput> {
-        std::mem::take(&mut self.first_call_input)
-    }
-
-    pub fn take_first_create_input(&mut self) -> Option<SSACreateInput> {
-        std::mem::take(&mut self.first_create_input)
+    pub fn take_first_frame_input(&mut self) -> Option<FrameInput> {
+        std::mem::take(&mut self.first_frame_input)
     }
 
     pub fn clear(&mut self) {

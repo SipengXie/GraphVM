@@ -12,7 +12,7 @@ pub use create_outcome::CreateOutcome;
 pub use eof_create_inputs::{EOFCreateInputs, EOFCreateKind};
 pub use ssa_conversion::{
     convert_call_input, convert_call_outcome, convert_contract_env, convert_create_input,
-    convert_create_outcome, convert_interpreter_result,
+    convert_create_outcome, convert_interpreter_result, convert_contract_env_for_system,
 };
 
 use crate::InterpreterResult;

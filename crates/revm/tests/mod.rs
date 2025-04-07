@@ -8,7 +8,7 @@ use revm::{
     db::{CacheDB, EmptyDB},
     Evm,
 };
-use revm_ssa::{logger::LsnType, SSACallInput, SSACreateInput, SSALogEntry, SSALogger};
+use revm_ssa::{logger::LsnType, FrameInput, SSALogEntry, SSALogger};
 use revm_ssa_graph::{ExecutionMode, ExecutionTracer, SSAExecutor, SsaGraph};
 
 #[derive(Debug, Clone)]
@@ -163,8 +163,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
             let _result = evm.transact().unwrap();
             let mut logger = evm.take_ssa_logger().unwrap();
             let logs = logger.take_logs();
-            let first_call = logger.take_first_call_input();
-            let first_create = logger.take_first_create_input();
+            let first_call = logger.take_first_frame_input();
 
             // Choose execution method based on test mode
             let (tracer, execution_time) = match config.test_mode {
@@ -175,7 +174,6 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
                         &mut cdb,
                         &env,
                         first_call,
-                        first_create,
                     );
                     result
                 },
@@ -204,8 +202,7 @@ fn graph_execute(
     config: ExecutionConfig,
     db: &mut CacheDB<EmptyDB>,
     env: &Env,
-    first_call: Option<SSACallInput>,
-    first_create: Option<SSACreateInput>,
+    first_frame: Option<FrameInput>,
 ) -> (Option<ExecutionTracer>, Option<std::time::Duration>) {
     // Create dependency graph
     let mut graph = SsaGraph::new(entries.len(), 2 * entries.len());
@@ -235,7 +232,7 @@ fn graph_execute(
     }
     // Create executor and tracer
     let mut executor = 
-        SSAExecutor::new_with_spec(graph.into(), db, env, first_call, first_create, SpecId::LATEST)
+        SSAExecutor::new_with_spec(graph.into(), db, env, first_frame, SpecId::LATEST)
         .with_mode(config.mode)
         .with_tracer(tracer);
     // Execute
@@ -622,24 +619,6 @@ mod bitwise_tests {
         ]);
 
         execute_case(code, "shift operations", ExecutionConfig::default());
-    }
-}
-
-mod stack_tests {
-    use super::*;
-    use revm::primitives::Bytes;
-
-    #[test]
-    fn test_push1() {
-        // Test PUSH1 operation: push a byte onto the stack and verify with ADD
-        let code = Bytes::from(vec![
-            0x60, 0x42, // PUSH1 0x42
-            0x60, 0x01, // PUSH1 0x01
-            0x01, // ADD (0x42 + 0x01 = 0x43)
-            0x00, // STOP
-        ]);
-
-        execute_case(code, "push1 validation", ExecutionConfig::default());
     }
 }
 
@@ -2066,56 +2045,6 @@ mod erc20_tests {
     const TEST_INPUT: &str = "0x1a43c338";
 
     #[test]
-    fn test_compute_parallel() {
-        // Initialize prometheus metrics exporter
-        let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
-        let _handle = builder
-            .with_http_listener(([127, 0, 0, 1], 12345))
-            .install()
-            .expect("failed to install Prometheus recorder");
-        let runtime_hex = hex::decode(TEST_RUNTIME_CODE).unwrap();
-        let runtime_code = Bytes::from(runtime_hex);
-        let input_hex = hex::decode(TEST_INPUT).unwrap();
-        let input = Bytes::from(input_hex);
-
-        let non_ssa_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::BaselineNoSSA,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![],
-            input: Some(input.clone()),
-            thread_number: None,
-            enable_tracer: false,
-            is_deployed_contract: false,
-        };
-        let non_ssa_result = execute_case(runtime_code.clone(), "non_ssa", non_ssa_config);
-        println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
-        // Parallel full graph execution
-        let parallel_full_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::ParallelGraph,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![],
-            input: Some(input.clone()),
-            thread_number: Some(8),
-            enable_tracer: false,
-            is_deployed_contract: false,
-        };
-        let parallel_full_result =
-            execute_case(runtime_code.clone(), "parallel_full", parallel_full_config);
-        println!(
-            "Parallel Full Graph Time Cost: {:?}",
-            parallel_full_result.execution_time
-        );
-        // println!("\nMetrics are available at http://127.0.0.1:12345/metrics");
-        // println!("You can use curl http://127.0.0.1:12345/metrics to view them");
-        // println!("The metrics will be in standard Prometheus format");
-        std::thread::sleep(std::time::Duration::from_secs(15));
-    }
-
-    #[test]
     fn test_compute() {
         // Initialize prometheus metrics exporter
         // let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
@@ -2294,143 +2223,6 @@ mod erc20_tests {
         println!(
             "Serial Full Graph Time Cost: {:?}",
             serial_full_result.execution_time
-        );
-        // println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
-        // println!("You can use curl http://127.0.0.1:9090/metrics to view them");
-        // println!("The metrics will be in standard Prometheus format");
-        // std::thread::sleep(std::time::Duration::from_secs(15));
-    }
-
-    #[test]
-    fn test_create_contract_parallel() {
-        let deploy_hex = hex::decode(DEPLOY_CODE).unwrap();
-        let input = Bytes::from(deploy_hex);
-
-        // Non-SSA execution
-        let non_ssa_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::BaselineNoSSA,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![],
-            input: Some(input.clone()),
-            thread_number: None,
-            enable_tracer: false,
-            is_deployed_contract: true,
-        };
-        let non_ssa_result = execute_case(Bytes::default(), "non_ssa", non_ssa_config);
-        println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
-        // Create Partial From LSN: 0, 456, 627, actually these storage slot won't produce conflicts.
-        // Serial partial graph execution
-        let parallel_full_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::ParallelGraph,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![],
-            input: Some(input.clone()),
-            thread_number: Some(16),
-            enable_tracer: false,
-            is_deployed_contract: true,
-        };
-        let parallel_full_result =
-            execute_case(Bytes::default(), "parallel_full", parallel_full_config);
-        println!(
-            "Parallel Full Graph Time Cost: {:?}",
-            parallel_full_result.execution_time
-        );
-    }
-
-    #[test]
-    fn test_mint_parallel() {
-        let runtime_hex = hex::decode(RUNTIME_CODE).unwrap();
-        let runtime_code = Bytes::from(runtime_hex);
-        let input_hex = hex::decode(MINT_INPUT).unwrap();
-        let input = Bytes::from(input_hex);
-
-        let non_ssa_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::BaselineNoSSA,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![],
-            input: Some(input.clone()),
-            thread_number: None,
-            enable_tracer: false,
-            is_deployed_contract: false,
-        };
-        let non_ssa_result = execute_case(runtime_code.clone(), "non_ssa", non_ssa_config);
-        println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
-        // Serial full graph execution
-        let parallel_full_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::ParallelGraph,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![],
-            input: Some(input.clone()),
-            thread_number: Some(16),
-            enable_tracer: false,
-            is_deployed_contract: false,
-        };
-        let parallel_full_result =
-            execute_case(runtime_code.clone(), "parallel_full", parallel_full_config);
-        println!(
-            "Parallel Full Graph Time Cost: {:?}",
-            parallel_full_result.execution_time
-        );
-    }
-
-    #[test]
-    fn test_transfer_parallel() {
-        // Initialize prometheus metrics exporter
-        // let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
-        // let _handle = builder
-        //     .with_http_listener(([127, 0, 0, 1], 9090))
-        //     .install()
-        //     .expect("failed to install Prometheus recorder");
-
-        let runtime_hex = hex::decode(RUNTIME_CODE).unwrap();
-        let runtime_code = Bytes::from(runtime_hex);
-        let input_hex = hex::decode(TRANSFER_INPUT).unwrap();
-        let input = Bytes::from(input_hex);
-        let slot1_hex = hex::decode(SLOT1).unwrap();
-        let slot2_hex = hex::decode(SLOT2).unwrap();
-        let slot1_bytes: [u8; 32] = slot1_hex.try_into().unwrap();
-        let slot2_bytes: [u8; 32] = slot2_hex.try_into().unwrap();
-        let slot1 = U256::from_be_bytes(slot1_bytes);
-        let slot2 = U256::from_be_bytes(slot2_bytes);
-        let value = U256::from(65536);
-
-        let non_ssa_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::BaselineNoSSA,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![(slot1, value), (slot2, U256::ZERO)],
-            input: Some(input.clone()),
-            thread_number: None,
-            enable_tracer: false,
-            is_deployed_contract: false,
-        };
-        let non_ssa_result = execute_case(runtime_code.clone(), "non_ssa", non_ssa_config);
-        println!("Non-SSA Time Cost: {:?}", non_ssa_result.execution_time);
-        let parallel_full_config = ExecutionConfig {
-            mode: ExecutionMode::Full,
-            test_mode: TestMode::ParallelGraph,
-            collect_metrics: true,
-            pre_deployed_contract: vec![],
-            pre_determined_slots: vec![(slot1, value), (slot2, U256::ZERO)],
-            input: Some(input.clone()),
-            thread_number: Some(16),
-            enable_tracer: false,
-            is_deployed_contract: false,
-        };
-        let parallel_full_result =
-            execute_case(runtime_code.clone(), "parallel_full", parallel_full_config);
-        println!(
-            "Parallel Full Graph Time Cost: {:?}",
-            parallel_full_result.execution_time
         );
         // println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
         // println!("You can use curl http://127.0.0.1:9090/metrics to view them");

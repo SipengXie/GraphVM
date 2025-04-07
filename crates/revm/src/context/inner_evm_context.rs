@@ -393,13 +393,6 @@ impl<DB: Database> InnerEvmContext<DB> {
         interpreter_result: &InterpreterResult,
         journal_checkpoint: JournalCheckpoint,
     ) {
-        // Log the call return, if SSA logger is present.
-        if self.ssa_logger.is_some() {
-            self.ssa_logger
-                .as_mut()
-                .unwrap()
-                .log_call_return(convert_interpreter_result(interpreter_result));
-        }
         // revert changes or not.
         if matches!(interpreter_result.result, return_ok!()) {
             self.journaled_state.checkpoint_commit();

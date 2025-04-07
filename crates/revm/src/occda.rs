@@ -31,7 +31,7 @@ use revm_primitives::{
     fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256
 };
 use revm_ssa::logger::LsnType;
-use revm_ssa::{SSACallInput, SSACreateInput, SSALogger, SSAOutput, StorageKey, StorageValue};
+use revm_ssa::{FrameInput, SSALogger, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -61,11 +61,8 @@ pub struct Occda {
     /// reads_store
     reads_store: Vec<HashMap<StorageKey, LsnType>>,
 
-    /// first_call_input_store
-    first_call_input_store: Vec<Option<SSACallInput>>,
-
-    /// first_create_input_store
-    first_create_input_store: Vec<Option<SSACreateInput>>,
+    /// first_frame_input_store
+    first_frame_input_store: Vec<Option<FrameInput>>,
 }
 
 impl Occda {
@@ -87,8 +84,7 @@ impl Occda {
             to_re_execution_store: vec![],
             dag_store: vec![],
             reads_store: vec![],
-            first_call_input_store: vec![],
-            first_create_input_store: vec![],
+            first_frame_input_store: vec![],
         }
     }
 
@@ -170,8 +166,7 @@ impl Occda {
         let failed_task_clone = failed_task.clone();
         let result_ptr = result_store.as_mut_ptr() as usize;
         let reads_ptr = self.reads_store.as_mut_ptr() as usize;
-        let first_call_input_ptr = self.first_call_input_store.as_mut_ptr() as usize;
-        let first_create_input_ptr = self.first_create_input_store.as_mut_ptr() as usize;
+        let first_frame_input_ptr = self.first_frame_input_store.as_mut_ptr() as usize;
         let opcode_counts_ptr = opcode_counts_store.as_mut_ptr() as usize;
         let parallel_start = std::time::Instant::now();
 
@@ -318,8 +313,7 @@ impl Occda {
                                     graph,
                                     db_ref,
                                     &task.env,
-                                    self.first_call_input_store[idx].clone(),
-                                    self.first_create_input_store[idx].clone(),
+                                    self.first_frame_input_store[idx].clone(),
                                     task.spec_id
                                 )
                             .with_mode(execution_mode);
@@ -437,14 +431,10 @@ impl Occda {
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
-                            let first_call_input_raw_ptr =
-                                first_call_input_ptr as *mut Option<SSACallInput>;
-                            let first_create_input_raw_ptr =
-                                first_create_input_ptr as *mut Option<SSACreateInput>;
+                            let first_frame_input_raw_ptr =
+                                first_frame_input_ptr as *mut Option<FrameInput>;
                             unsafe {
-                                *first_call_input_raw_ptr.add(idx) = logger.take_first_call_input();
-                                *first_create_input_raw_ptr.add(idx) =
-                                    logger.take_first_create_input();
+                                *first_frame_input_raw_ptr.add(idx) = logger.take_first_frame_input();
                             }
                             let opcode_counts_raw_ptr = opcode_counts_ptr as *mut usize;
                             unsafe {
@@ -601,15 +591,13 @@ impl Occda {
             self.to_re_execution_store = Vec::<Vec<LsnType>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
             self.reads_store = Vec::<HashMap<StorageKey, LsnType>>::with_capacity(len);
-            self.first_call_input_store = Vec::<Option<SSACallInput>>::with_capacity(len);
-            self.first_create_input_store = Vec::<Option<SSACreateInput>>::with_capacity(len);
+            self.first_frame_input_store = Vec::<Option<FrameInput>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
                 self.dag_store
                     .push(Arc::new(RwLock::new(GraphWrapper::new())));
                 self.reads_store.push(HashMap::default());
-                self.first_call_input_store.push(None);
-                self.first_create_input_store.push(None);
+                self.first_frame_input_store.push(None);
                 opcode_counts_store.push(0);
             }
         }
@@ -698,8 +686,7 @@ impl Occda {
                                 graph,
                                 db_ref_for_parallel,
                                 &task.env,
-                                self.first_call_input_store[idx].clone(),
-                                self.first_create_input_store[idx].clone(),
+                                self.first_frame_input_store[idx].clone(),
                                 task.spec_id
                             )
                         .with_mode(execution_mode);
@@ -853,6 +840,9 @@ impl Occda {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] =
                             Self::get_storage_first_reads(first_reads, &conflict);
+                        if h_tx[task_idx].tx_hash.unwrap() == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+                            eprintln!("conflicts: {:?}", conflict);
+                        }
                     }
                     !conflict.is_empty()
                 };
@@ -960,33 +950,6 @@ impl Occda {
             "  seq_exec_size: {}, parallel_exec_size: {}",
             seq_exec_size, parallel_exec_size
         );
-
-        // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
-        // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
-        // let addr3 = address!("ecded4f38f7cca4f472086b9a26d4de2a3cf903b");
-        // let addr4 = address!("f8e95297dba53ccf8cb62dbd8a28b934580884ee");
-        // let addr5 = address!("ff69d3dba117a55ba29a24610d67135b82dc0e58");
-        // let account1 = parallel_db.basic_ref(addr1).map_err(|_|());
-        // let account2 = parallel_db.basic_ref(addr2).map_err(|_|());
-        // let account3 = parallel_db.basic_ref(addr3).map_err(|_|());
-        // let account4 = parallel_db.basic_ref(addr4).map_err(|_|());
-        // let account5 = parallel_db.basic_ref(addr5).map_err(|_|());
-
-        // let contract_addr = address!("b30df92bb107e6f1e46f7df4fd31a316ceb4e7d9");
-        // let storage = parallel_db.cache.read().accounts.get(&contract_addr).unwrap().clone().storage;
-        // eprintln!("\n===========================================");
-        // eprintln!("              ParallelDB State             ");
-        // eprintln!("===========================================");
-        // eprintln!("\n------------- Normal Accounts -------------");
-        // eprintln!("Account 1: {:?}", account1);
-        // eprintln!("Account 2: {:?}", account2);
-        // eprintln!("Account 3: {:?}", account3);
-        // eprintln!("Account 4: {:?}", account4);
-        // eprintln!("Account 5: {:?}", account5);
-
-        // eprintln!("\n------------- Contract Storage -------------");
-        // eprintln!("Storage Content: {:?}", storage);
-        // eprintln!("===========================================\n");
 
         Ok(())
     }

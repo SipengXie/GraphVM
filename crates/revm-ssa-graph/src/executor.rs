@@ -4,8 +4,8 @@ use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result,
 };
 
-use revm_primitives::{db::DatabaseRef, fixed_bytes, spec_to_generic, Env, FixedBytes, Spec, SpecId};
-use revm_ssa::{logger::LsnType, SSACallInput, SSACreateInput, SSAInstructionResult, SSALogEntry};
+use revm_primitives::{db::DatabaseRef, spec_to_generic, Env, FixedBytes, Spec, SpecId};
+use revm_ssa::{logger::LsnType, FrameInput, SSAInstructionResult, SSALogEntry};
 
 /// Execution mode
 #[derive(Debug, Clone, PartialEq)]
@@ -41,15 +41,13 @@ where
         graph: Arc<SsaGraph>,
         db: DB,
         env: &'a Env,
-        first_call_input: Option<SSACallInput>,
-        first_create_input: Option<SSACreateInput>,
+        first_frame_input: Option<FrameInput>,
     ) -> Self {
         Self {
             context: Arc::new(ExecutionContext::new::<SPEC>(
                 env,
                 db,
-                first_call_input,
-                first_create_input,
+                first_frame_input,
             )),
             graph,
             tracer: None,
@@ -61,11 +59,10 @@ where
         graph: Arc<SsaGraph>,
         db: DB,
         env: &'a Env,
-        first_call_input: Option<SSACallInput>,
-        first_create_input: Option<SSACreateInput>,
+        first_frame_input: Option<FrameInput>,
         spec_id: SpecId,
     ) -> Self {
-        spec_to_generic!(spec_id, Self::new::<SPEC>(graph, db, env, first_call_input, first_create_input))
+        spec_to_generic!(spec_id, Self::new::<SPEC>(graph, db, env, first_frame_input))
     }
 
     /// Set execution mode
@@ -117,33 +114,42 @@ where
             }
         };
 
+        if let Some(tracer) = &mut self.tracer {
+            let graph = self.graph.clone();
+            for &lsn in &nodes_to_execute {
+                let node = graph.get_node(lsn)?;
+                let outputs = graph.get_original_outputs(lsn)?.unwrap();
+                tracer.record_graph(lsn, outputs.into(), node.opcode);
+            }
+        }
+
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
         nodes_to_execute.sort();
         
-        // for lsn in nodes_to_execute {
-        //     let node = graph.get_node_mut(lsn)?;
-        //     Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
-        // }
-       
-        let first_lsn = nodes_to_execute[0];
-        let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
-        
-        for lsn in first_lsn..=last_lsn {
-            if let Ok(node) = graph.get_node(lsn) {
-                if nodes_to_execute.contains(&lsn) {
-                    let node = graph.get_node_mut(lsn)?;
-                    Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
-                    if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
-                        eprintln!("after execute node: {}", node);
-                    }
-                } else {
-                    if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
-                        eprintln!("after execute node: {}", node);
-                    }
-                }
-            }
+        for lsn in nodes_to_execute {
+            let node = graph.get_node_mut(lsn)?;
+            Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
         }
+       
+        // let first_lsn = nodes_to_execute[0];
+        // let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
+        
+        // for lsn in first_lsn..=last_lsn {
+        //     if let Ok(node) = graph.get_node(lsn) {
+        //         if nodes_to_execute.contains(&lsn) {
+        //             let node = graph.get_node_mut(lsn)?;
+        //             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
+        //             if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+        //                 eprintln!("after execute node: {}", node);
+        //             }
+        //         } else {
+        //             if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+        //                 eprintln!("no re-execute node: {}", node);
+        //             }
+        //         }
+        //     }
+        // }
         
         let execute_duration = execute_start.elapsed();
 
