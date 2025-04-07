@@ -35,7 +35,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let condition = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let current_pc = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-
+        eprintln!("target: {:?}, condition: {:?}, current_pc: {:?}", target, condition, current_pc);
         // If condition is 0, no jump, relative offset is 0
         let new_jump = if condition.is_zero() {
             0

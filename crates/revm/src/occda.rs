@@ -360,7 +360,7 @@ impl Occda {
                         // ! 只有特定的tx_hash才print
                         let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
                             TracerEip3155::new(
-                                Box::new(std::io::stdout()),
+                                Box::new(std::io::sink()),
                             ).without_summary()
                         } else {
                             TracerEip3155::new(
