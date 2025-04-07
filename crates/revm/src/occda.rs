@@ -683,7 +683,7 @@ impl Occda {
 
                     // Handle re-execution case (using SSA)
                     if enable_ssa && !self.to_re_execution_store[idx].is_empty() {
-                        eprintln!("re-execute task: {:?} with ssa.", task.tx_hash.unwrap());
+                        // eprintln!("re-execute task: {:?} with ssa.", task.tx_hash.unwrap());
                         let to_re_execute = &self.to_re_execution_store[idx];
 
                         while !self.dag_store[idx].read().is_built() {

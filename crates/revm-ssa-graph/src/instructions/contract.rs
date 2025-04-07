@@ -103,8 +103,8 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
             key: Box::new(StorageKey::AccountInfo(caller)),
             value: Box::new(StorageValue::AccountInfo(new_caller_info)),
         };
-        node.outputs[1] = SSAOutput::Gas(base_gas_remaining - dynamic_gas_cost);
-        node.outputs[2] = SSAOutput::GasRefund(base_gas_refunded + dynamic_gas_refund);
+        node.outputs[1] = SSAOutput::Gas(remaining_gas);
+        node.outputs[2] = SSAOutput::GasRefund(true_refund_gas);
         Ok(())
     }
 
