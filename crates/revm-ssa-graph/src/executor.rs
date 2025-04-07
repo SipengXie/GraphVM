@@ -100,7 +100,7 @@ where
     pub fn execute<SPEC:Spec>(&mut self, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
-        if _tx_hash == fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") {
+        if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
             eprintln!("execute graph: {}", graph);
             eprintln!("reachable nodes: {:?}", self.graph.get_reachable_nodes(2)?);
         }
@@ -126,33 +126,29 @@ where
         let execute_start = Instant::now();
         nodes_to_execute.sort();
         
-        if _tx_hash == fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") {
-            eprintln!("nodes_to_execute: {:?}", nodes_to_execute);
-        }
-        
-        for lsn in nodes_to_execute {
-            let node = graph.get_node_mut(lsn)?;
-            Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
-        }
-       
-        // let first_lsn = nodes_to_execute[0];
-        // let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
-        
-        // for lsn in first_lsn..=last_lsn {
-        //     if let Ok(node) = graph.get_node(lsn) {
-        //         if nodes_to_execute.contains(&lsn) {
-        //             let node = graph.get_node_mut(lsn)?;
-        //             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
-        //             if _tx_hash == fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") {
-        //                 eprintln!("after execute node: {}", node);
-        //             }
-        //         } else {
-        //             if _tx_hash == fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") {
-        //                 eprintln!("after execute node: {}", node);
-        //             }
-        //         }
-        //     }
+        // for lsn in nodes_to_execute {
+        //     let node = graph.get_node_mut(lsn)?;
+        //     Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
         // }
+       
+        let first_lsn = nodes_to_execute[0];
+        let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
+        
+        for lsn in first_lsn..=last_lsn {
+            if let Ok(node) = graph.get_node(lsn) {
+                if nodes_to_execute.contains(&lsn) {
+                    let node = graph.get_node_mut(lsn)?;
+                    Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
+                    if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+                        eprintln!("after execute node: {}", node);
+                    }
+                } else {
+                    if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+                        eprintln!("after execute node: {}", node);
+                    }
+                }
+            }
+        }
         
         let execute_duration = execute_start.elapsed();
 

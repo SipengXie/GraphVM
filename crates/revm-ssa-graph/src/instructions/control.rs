@@ -2,7 +2,7 @@ use crate::{
     as_usize_saturated, get_memory, get_ssa_output_stack_or_const, ExecutionContext,
     ExecutionError, Result, SsaGraph,
 };
-use revm_primitives::{db::DatabaseRef, Bytes, U256};
+use revm_primitives::{db::DatabaseRef, Bytes};
 use revm_ssa::{SSAInput, SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput};
 
 impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
