@@ -711,6 +711,7 @@ impl Occda {
                         match ssa_execution {
                             Ok(nodes_to_execute_len) => {
                                 let tx_hash = task.tx_hash.unwrap();
+                                eprintln!("SSA re-execution success: {:?}", tx_hash);
                                 let result_state =
                                     executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
@@ -724,7 +725,7 @@ impl Occda {
                                 continue;
                             }
                             Err(_err) => {
-                                // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
+                                eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                 drop(executor);
                                 re_execution_opcodes += opcode_counts_store[idx];
                                 // fall through to EVM re-execution path below
