@@ -656,10 +656,11 @@ impl SSALogger {
         let lsn = self.current_lsn;
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::InterpreterResult(SSAInterpreterResult {
-            result: result,
+            result,
             output: Bytes::new(), // Empty output for stop/invalid/unknown cases
         }));
         self.last_interpreter_return = (lsn, 0);
+        self.contract_env.pop();
 
         self.log_operation(opcode, Vec::new(), ssa_outputs);
     }

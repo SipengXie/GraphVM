@@ -319,7 +319,7 @@ impl Occda {
                             .with_mode(execution_mode);
 
                             profiler::start("ssa-execution");
-                            let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap());
+                            let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
                             profiler::end("ssa-execution");
 
                             match ssa_execution {
@@ -332,7 +332,7 @@ impl Occda {
                                     task_result.inspector = Some(inspector);
                                     task_result.ssa_output = Some(result_state);
                                     task_result.result =
-                                        Some(executor.graph.generate_result(task.gas, task.tx_hash.unwrap()).unwrap());
+                                        Some(executor.graph.generate_result(task.gas, task.tx_hash.unwrap_or_default()).unwrap());
                                     let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
                                     unsafe {
                                         *result_raw_ptr.add(idx) = task_result;
@@ -352,7 +352,7 @@ impl Occda {
                             }
                         }
                         // ! 只有特定的tx_hash才print
-                        let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") { 
+                        let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) { 
                             TracerEip3155::new(
                                 Box::new(std::io::sink()),
                             ).without_summary()
@@ -371,7 +371,7 @@ impl Occda {
                             let evm_inside = Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(tracer_inspector)
+                                .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .with_ssa_logger(SSALogger::new())
@@ -382,7 +382,7 @@ impl Occda {
                             Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(tracer_inspector)
+                                .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .build()
@@ -692,12 +692,12 @@ impl Occda {
                         .with_mode(execution_mode);
 
                         profiler::start("ssa-execution");
-                        let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap());
+                        let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
                         profiler::end("ssa-execution");
 
                         match ssa_execution {
                             Ok(nodes_to_execute_len) => {
-                                let tx_hash = task.tx_hash.unwrap();
+                                let tx_hash = task.tx_hash.unwrap_or_default();
                                 // eprintln!("SSA re-execution success: {:?}", tx_hash);
                                 let result_state =
                                     executor.graph.get_storage_write_outputs().unwrap();
@@ -721,15 +721,15 @@ impl Occda {
                     }
 
                     // ! 只有特定的tx_hash才print
-                    // let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
-                    //     TracerEip3155::new(
-                    //         Box::new(std::io::sink()),
-                    //     ).without_summary()
-                    // } else {
-                    //     TracerEip3155::new(
-                    //         Box::new(std::fs::File::create("tracer_re_execution.json").unwrap()),
-                    //     )
-                    // };
+                    let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4")) { 
+                        TracerEip3155::new(
+                            Box::new(std::io::sink()),
+                        ).without_summary()
+                    } else {
+                        TracerEip3155::new(
+                            Box::new(std::fs::File::create("tracer_re_execution.json").unwrap()),
+                        )
+                    };
 
                     // Normal execution path
                     let mut evm = Evm::builder()
@@ -840,7 +840,7 @@ impl Occda {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] =
                             Self::get_storage_first_reads(first_reads, &conflict);
-                        if h_tx[task_idx].tx_hash.unwrap() == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+                        if h_tx[task_idx].tx_hash == Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) {
                             eprintln!("conflicts: {:?}", conflict);
                         }
                     }

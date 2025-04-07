@@ -114,14 +114,14 @@ where
             }
         };
 
-        if let Some(tracer) = &mut self.tracer {
-            let graph = self.graph.clone();
-            for &lsn in &nodes_to_execute {
-                let node = graph.get_node(lsn)?;
-                let outputs = graph.get_original_outputs(lsn)?.unwrap();
-                tracer.record_graph(lsn, outputs.into(), node.opcode);
-            }
-        }
+        // if let Some(tracer) = &mut self.tracer {
+        //     let graph = self.graph.clone();
+        //     for &lsn in &nodes_to_execute {
+        //         let node = graph.get_node(lsn)?;
+        //         let outputs = graph.get_original_outputs(lsn)?.unwrap();
+        //         tracer.record_graph(lsn, outputs.into(), node.opcode);
+        //     }
+        // }
 
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();

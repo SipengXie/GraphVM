@@ -516,7 +516,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         //     post_exec.reward_beneficiary(ctx, result.gas())?;
         // }
         // TODO: Fix the reward_beneficiary
-        post_exec.reward_beneficiary(ctx, result.gas())?;
+        // post_exec.reward_beneficiary(ctx, result.gas())?;
         // Returns output of transaction.
 
         post_exec.output(ctx, result)
