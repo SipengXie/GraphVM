@@ -100,11 +100,6 @@ where
     pub fn execute<SPEC:Spec>(&mut self, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
-        if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
-            eprintln!("execute graph: {}", graph);
-            eprintln!("reachable nodes: {:?}", self.graph.get_reachable_nodes(2)?);
-        }
-
         let mut nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {

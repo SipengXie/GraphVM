@@ -358,7 +358,7 @@ impl Occda {
                             }
                         }
                         // ! 只有特定的tx_hash才print
-                        let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") { 
+                        let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") { 
                             TracerEip3155::new(
                                 Box::new(std::io::sink()),
                             ).without_summary()
@@ -853,11 +853,6 @@ impl Occda {
                         let first_reads = &self.reads_store[task_idx];
                         self.to_re_execution_store[task_idx] =
                             Self::get_storage_first_reads(first_reads, &conflict);
-                        if h_tx[task_idx].tx_hash.unwrap() == fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") {
-                            eprintln!("first_read: {:?}", first_reads);
-                            eprintln!("conflicts: {:?}", conflict);
-                            eprintln!("result: {:?}", task_result.result);
-                        }
                     }
                     !conflict.is_empty()
                 };
