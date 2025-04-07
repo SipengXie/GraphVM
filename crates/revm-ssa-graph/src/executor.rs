@@ -102,6 +102,7 @@ where
 
         if _tx_hash == fixed_bytes!("9c8a99e334e7f5d8d45f3656be5947c97a4bb73027ad8e9db42010d86c87bc50") {
             eprintln!("execute graph: {}", graph);
+            eprintln!("reachable nodes: {:?}", self.graph.get_reachable_nodes(2)?);
         }
 
         let mut nodes_to_execute = match &self.mode {
