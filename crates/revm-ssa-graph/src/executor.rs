@@ -100,7 +100,7 @@ where
     pub fn execute<SPEC:Spec>(&mut self, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
-        let nodes_to_execute = match &self.mode {
+        let mut nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
                 let mut reachable_nodes = Vec::new();
@@ -128,14 +128,12 @@ where
 
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
+        nodes_to_execute.sort();
         for node_index in nodes_to_execute {
             let node = graph.get_node_by_index_mut(node_index);
-            if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
-                eprintln!("before execute node: {:?}", node);
-            }
             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
             if _tx_hash == fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") {
-                eprintln!("after execute node: {:?}", node);
+                eprintln!("after execute node: {}", node);
             }
         }
         let execute_duration = execute_start.elapsed();
