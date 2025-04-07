@@ -358,15 +358,15 @@ impl Occda {
                             }
                         }
                         // ! 只有特定的tx_hash才print
-                        let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
-                            TracerEip3155::new(
-                                Box::new(std::io::sink()),
-                            ).without_summary()
-                        } else {
-                            TracerEip3155::new(
-                                Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
-                            )
-                        };
+                        // let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
+                        //     TracerEip3155::new(
+                        //         Box::new(std::io::sink()),
+                        //     ).without_summary()
+                        // } else {
+                        //     TracerEip3155::new(
+                        //         Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
+                        //     )
+                        // };
                         
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
@@ -377,7 +377,7 @@ impl Occda {
                             let evm_inside = Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(tracer_inspector)
+                                .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .with_ssa_logger(SSALogger::new())
@@ -388,7 +388,7 @@ impl Occda {
                             Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(tracer_inspector)
+                                .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .build()
@@ -711,7 +711,7 @@ impl Occda {
                         match ssa_execution {
                             Ok(nodes_to_execute_len) => {
                                 let tx_hash = task.tx_hash.unwrap();
-                                eprintln!("SSA re-execution success: {:?}", tx_hash);
+                                // eprintln!("SSA re-execution success: {:?}", tx_hash);
                                 let result_state =
                                     executor.graph.get_storage_write_outputs().unwrap();
                                 let mut task_result: TaskResultItem<I> = TaskResultItem::default();
@@ -725,7 +725,7 @@ impl Occda {
                                 continue;
                             }
                             Err(_err) => {
-                                eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
+                                // eprintln!("TxHash: {:?} SSA re-execution failed: {:?}, fall back to EVM re-execution.", task.tx_hash, _err);
                                 drop(executor);
                                 re_execution_opcodes += opcode_counts_store[idx];
                                 // fall through to EVM re-execution path below
@@ -734,21 +734,21 @@ impl Occda {
                     }
 
                     // ! 只有特定的tx_hash才print
-                    let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
-                        TracerEip3155::new(
-                            Box::new(std::io::sink()),
-                        ).without_summary()
-                    } else {
-                        TracerEip3155::new(
-                            Box::new(std::fs::File::create("tracer_re_execution.json").unwrap()),
-                        )
-                    };
+                    // let tracer_inspector = if task.tx_hash.unwrap() != fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4") { 
+                    //     TracerEip3155::new(
+                    //         Box::new(std::io::sink()),
+                    //     ).without_summary()
+                    // } else {
+                    //     TracerEip3155::new(
+                    //         Box::new(std::fs::File::create("tracer_re_execution.json").unwrap()),
+                    //     )
+                    // };
 
                     // Normal execution path
                     let mut evm = Evm::builder()
                         .with_ref_db(&parallel_db)
                         .modify_env(|env| env.clone_from(&task.env))
-                        .with_external_context(tracer_inspector)
+                        .with_external_context(NoOpInspector)
                         .with_spec_id(task.spec_id)
                         .append_handler_register(inspector_handle_register)
                         .build();
