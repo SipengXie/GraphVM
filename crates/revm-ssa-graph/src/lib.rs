@@ -92,7 +92,7 @@ impl ExecutionError {
     pub const EXPECTED_GAS_REFUND: &'static str = "Expected GasRefund output value";
     pub const EXPECTED_CONSTANT_I64: &'static str = "Expected ConstantI64 output value";
     pub const EXPECTED_TRANSIENT_VALUE: &'static str = "Expected Transient output value";
-
+    pub const STORAGE_KEY_MISMATCH: &'static str = "Storage key mismatch with expected key";
     #[inline(always)]
     pub fn control_flow_not_deterministic(
         node: &impl std::fmt::Debug,

@@ -4,7 +4,7 @@ use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result,
 };
 
-use revm_primitives::{db::DatabaseRef, spec_to_generic, Env, FixedBytes, Spec, SpecId};
+use revm_primitives::{db::DatabaseRef, fixed_bytes, spec_to_generic, Env, FixedBytes, Spec, SpecId};
 use revm_ssa::{logger::LsnType, FrameInput, SSAInstructionResult, SSALogEntry};
 
 /// Execution mode
@@ -148,11 +148,11 @@ where
         //         if nodes_to_execute.contains(&lsn) {
         //             let node = graph.get_node_mut(lsn)?;
         //             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
-        //             if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+        //             if _tx_hash == fixed_bytes!("8d40561b1e918cb7c7849c43bf48a2e0fcc3eda80fd0f8a24f32daad9f7a2e55") {
         //                 eprintln!("after execute node: {}", node);
         //             }
         //         } else {
-        //             if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+        //             if _tx_hash == fixed_bytes!("8d40561b1e918cb7c7849c43bf48a2e0fcc3eda80fd0f8a24f32daad9f7a2e55") {
         //                 eprintln!("no re-execute node: {}", node);
         //             }
         //         }

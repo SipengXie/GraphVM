@@ -129,7 +129,7 @@ impl SsaGraph {
                     source.iter().for_each(|dep| lsn_vec.push(dep.lsn.0))
                 }
             }
-            SSAInput::Storage(_, source) => lsn_vec.push(source.0),
+            SSAInput::Storage(source) => lsn_vec.push(source.0),
             SSAInput::ReturnDataBuffer(source) => lsn_vec.push(source.0),
             SSAInput::ContractEnv(entry_lsn) => {
                 if entry_lsn.0 != 2 {

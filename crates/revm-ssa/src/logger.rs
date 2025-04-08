@@ -36,7 +36,6 @@ macro_rules! pop_stack_or_const {
 macro_rules! input_account_info {
     ($self:expr, $address:expr) => {{
         SSAInput::Storage(
-            StorageKey::AccountInfo($address),
             $self.get_storage_def(StorageKey::AccountInfo($address)),
         )
     }};
@@ -47,7 +46,6 @@ macro_rules! input_account_info {
 macro_rules! input_account_status {
     ($self:expr, $address:expr) => {{
         SSAInput::Storage(
-            StorageKey::AccountStatus($address),
             $self.get_storage_def(StorageKey::AccountStatus($address)),
         )
     }};
@@ -1557,7 +1555,7 @@ impl SSALogger {
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
-        ssa_inputs.push(SSAInput::Storage(key, self.get_storage_def(key)));
+        ssa_inputs.push(SSAInput::Storage(self.get_storage_def(key)));
         self.log_storage_read(key, lsn);
         ssa_inputs.push(input_account_status!(self, address)); // identify if it is created
         self.log_storage_read(StorageKey::AccountStatus(address), lsn);
@@ -1586,8 +1584,8 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
         ssa_inputs.push(pop_stack_or_const!(self, value));
-        ssa_inputs.push(SSAInput::Storage(key, (0, 0))); // origin value
-        ssa_inputs.push(SSAInput::Storage(key, self.get_storage_def(key))); // present value
+        ssa_inputs.push(SSAInput::Storage((0, 0))); // origin value
+        ssa_inputs.push(SSAInput::Storage(self.get_storage_def(key))); // present value
         ssa_inputs.push(SSAInput::Constant(U256::from(is_read)));
 
         let mut ssa_outputs = Vec::with_capacity(3);

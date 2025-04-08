@@ -27,7 +27,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let caller = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let is_create = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let gas_cost = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        let caller_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
+
+        let key = StorageKey::AccountInfo(Address::from_word(B256::from(caller)));
+        let caller_info = get_storage_value!(graph, node.inputs[3], &key, |key| self.get_state(key));
 
         let caller_info = caller_info.as_account_info().unwrap();
         let is_create = u256_to_bool!(is_create)?;
@@ -80,9 +82,10 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let gas_limit = get_ssa_output_stack_or_const!(graph, node.inputs[offset + 5]);
         let gas_limit = as_u64_saturated!(gas_limit);
 
+        let key = StorageKey::AccountInfo(Address::from_word(B256::from(caller)));
         let caller_info =
-            get_storage_value!(graph, node.inputs[offset + 6], |key| self.get_state(key));
-
+            get_storage_value!(graph, node.inputs[offset + 6], &key, |key| self.get_state(key));
+     
         let refund_gas = base_gas_refunded + dynamic_gas_refund + eip7702_gas_refund;
         let remaining_gas = base_gas_remaining - dynamic_gas_cost;
         let spent_gas = gas_limit - remaining_gas;
@@ -119,11 +122,13 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         graph: &SsaGraph,
     ) -> Result<()> {
         let beneficiary = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
-        let beneficiary_account_info =
-            get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
-        let reward = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-
         let beneficiary = Address::from_word(B256::from(beneficiary));
+
+        let key = StorageKey::AccountInfo(beneficiary);
+        let beneficiary_account_info =
+            get_storage_value!(graph, node.inputs[1], &key, |key| self.get_state(key));
+
+        let reward = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
         let beneficiary_account_info = beneficiary_account_info.as_account_info().unwrap();
         let new_beneficiary_account_info = AccountInfo {
             balance: beneficiary_account_info.balance + reward,
@@ -376,9 +381,13 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     ) -> Result<()> {
         let call_input =
             get_frame_input!(graph, node.inputs[0], self.get_first_frame_input().unwrap());
-        let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
-        let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
-        let bytecode_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
+        let caller_key = StorageKey::AccountInfo(call_input.caller);
+        let target_key = StorageKey::AccountInfo(call_input.target_address);
+        let bytecode_key = StorageKey::AccountInfo(call_input.bytecode_address);
+
+        let caller_info = get_storage_value!(graph, node.inputs[1], &caller_key, |key| self.get_state(key));
+        let target_info = get_storage_value!(graph, node.inputs[2], &target_key, |key| self.get_state(key));
+        let bytecode_info = get_storage_value!(graph, node.inputs[3], &bytecode_key, |key| self.get_state(key));
 
         let caller_info = caller_info.as_account_info().unwrap();
         let target_info = target_info.as_account_info().unwrap();
@@ -587,8 +596,11 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
             }
         };
 
-        let caller_info = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
-        let created_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
+        let caller_key = StorageKey::AccountInfo(create_input.caller);
+        let created_key = StorageKey::AccountInfo(create_input.target_address);
+
+        let caller_info = get_storage_value!(graph, node.inputs[1], &caller_key, |key| self.get_state(key));
+        let created_info = get_storage_value!(graph, node.inputs[2], &created_key, |key| self.get_state(key));
 
         let caller_info = caller_info.as_account_info().unwrap();
         let created_info = created_info.as_account_info().unwrap();
@@ -652,14 +664,13 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         }
 
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
-        let address = get_contract_env!(graph, node.inputs[1])
-            .frame_input
-            .target_address;
-        let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
+        let address = get_contract_env!(graph, node.inputs[1]).frame_input.target_address;
+        let target_key = StorageKey::AccountInfo(address);
+        let target_info = get_storage_value!(graph, node.inputs[2], &target_key, |key| self.get_state(key));
         let analysis_kind = get_ssa_output_stack_or_const!(graph, node.inputs[3]);
         let analysis_kind = u256_to_bool!(analysis_kind)?;
         let target_info = target_info.as_account_info().unwrap();
-        // TODO: Gas metering and error handling
+       
 
         let create_outcome = SSACreateOutcome {
             result: interpreter_result.clone(),

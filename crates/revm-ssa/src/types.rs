@@ -125,7 +125,7 @@ pub enum SSAInput {
     ConstantI64(i64), // for gas_refunded
     Stack(LsnWithIndex),
     Memory(Vec<MemoryDep>),
-    Storage(StorageKey, LsnWithIndex),
+    Storage(LsnWithIndex),
     Transient(LsnWithIndex),
     ReturnDataBuffer(LsnWithIndex),
     InterpreterResult(LsnWithIndex),

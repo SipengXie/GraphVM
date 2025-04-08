@@ -66,19 +66,26 @@ macro_rules! get_ssa_output_stack_or_const {
 }
 
 /// Macro for getting storage value from SSAInput::Storage
-/// Returns the value if input is valid Storage, otherwise returns an ExecutionError
+/// Returns the value if input is valid Storage and key matches, otherwise returns an ExecutionError
 #[macro_export]
 macro_rules! get_storage_value {
-    ($graph:expr, $input:expr, $get_state:expr) => {
+    ($graph:expr, $input:expr, $key:expr, $get_state:expr) => {
         match $input {
-            SSAInput::Storage(key, source) => {
+            SSAInput::Storage(source) => {
                 if source == (0, 0) {
                     // fetch from the database
-                    $get_state(&key)?
+                    $get_state($key)?
                 } else {
                     let dep_node = $graph.get_node(source.0)?;
                     match &dep_node.outputs[source.1 as usize] {
-                        SSAOutput::Storage { value, .. } => *value.clone(),
+                        SSAOutput::Storage { key: dep_key, value } => {
+                            if &**dep_key != $key {
+                                return Err(ExecutionError::ExecutionError(
+                                    ExecutionError::STORAGE_KEY_MISMATCH.to_string(),
+                                ));
+                            }
+                            *value.clone()
+                        }
                         _ => {
                             return Err(ExecutionError::ExecutionError(
                                 ExecutionError::EXPECTED_STORAGE_VALUE.to_string(),
