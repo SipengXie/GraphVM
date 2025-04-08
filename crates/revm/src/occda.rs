@@ -841,6 +841,8 @@ impl Occda {
                         self.to_re_execution_store[task_idx] =
                             Self::get_storage_first_reads(first_reads, &conflict);
                         if h_tx[task_idx].tx_hash == Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) {
+                            eprintln!("first_reads: {:?}", first_reads);
+                            eprintln!("start_lsns: {:?}", self.to_re_execution_store[task_idx]);
                             eprintln!("conflicts: {:?}", conflict);
                         }
                     }
