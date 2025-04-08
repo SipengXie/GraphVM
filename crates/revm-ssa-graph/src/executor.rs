@@ -44,11 +44,7 @@ where
         first_frame_input: Option<FrameInput>,
     ) -> Self {
         Self {
-            context: Arc::new(ExecutionContext::new::<SPEC>(
-                env,
-                db,
-                first_frame_input,
-            )),
+            context: Arc::new(ExecutionContext::new::<SPEC>(env, db, first_frame_input)),
             graph,
             tracer: None,
             mode: ExecutionMode::Full,
@@ -62,7 +58,10 @@ where
         first_frame_input: Option<FrameInput>,
         spec_id: SpecId,
     ) -> Self {
-        spec_to_generic!(spec_id, Self::new::<SPEC>(graph, db, env, first_frame_input))
+        spec_to_generic!(
+            spec_id,
+            Self::new::<SPEC>(graph, db, env, first_frame_input)
+        )
     }
 
     /// Set execution mode
@@ -86,15 +85,22 @@ where
     pub fn into_tracer(self) -> Option<ExecutionTracer> {
         self.tracer
     }
-    
+
     #[inline(always)]
-    pub fn execute_with_spec(&mut self, spec_id: SpecId, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
+    pub fn execute_with_spec(
+        &mut self,
+        spec_id: SpecId,
+        _tx_hash: FixedBytes<32>,
+    ) -> Result<(usize, std::time::Duration)> {
         spec_to_generic!(spec_id, self.execute::<SPEC>(_tx_hash))
     }
 
     /// Execute the entire graph
     #[inline(always)]
-    pub fn execute<SPEC:Spec>(&mut self, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
+    pub fn execute<SPEC: Spec>(
+        &mut self,
+        _tx_hash: FixedBytes<32>,
+    ) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
         let mut nodes_to_execute = match &self.mode {
@@ -127,16 +133,16 @@ where
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
         nodes_to_execute.sort();
-        
+
         for lsn in nodes_to_execute {
             let node = graph.get_node_mut(lsn)?;
             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
         }
-       
+
         // ! Debug for SSA
         // let first_lsn = nodes_to_execute[0];
         // let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
-        
+
         // for lsn in first_lsn..=last_lsn {
         //     if let Ok(node) = graph.get_node(lsn) {
         //         if nodes_to_execute.contains(&lsn) {
@@ -152,7 +158,7 @@ where
         //         }
         //     }
         // }
-        
+
         let execute_duration = execute_start.elapsed();
 
         Ok((len, execute_duration))
@@ -174,7 +180,7 @@ where
 
     /// Execute operation based on opcode
     #[inline(always)]
-    fn execute_node<SPEC:Spec>(
+    fn execute_node<SPEC: Spec>(
         node: &mut SSALogEntry,
         graph: &SsaGraph,
         context: &Arc<ExecutionContext<'a, DB>>,
@@ -239,21 +245,21 @@ where
             0x4A => context.execute_host_env(node, graph, node.opcode),        // BLOBBASEFEE
 
             // Stack, Memory, Storage and Flow Operations (0x50-0x5F)
-            0x50 => Ok(()),                               // POP
-            0x51 => context.execute_mload(node, graph),   // MLOAD
-            0x52 => context.execute_mstore(node, graph),  // MSTORE
-            0x53 => context.execute_mstore8(node, graph), // MSTORE8
-            0x54 => context.execute_sload(node, graph),   // SLOAD
-            0x55 => context.execute_sstore::<SPEC>(node, graph),  // SSTORE
-            0x56 => context.execute_jump(node, graph),    // JUMP
-            0x57 => context.execute_jumpi(node, graph),   // JUMPI
-            0x58 => Ok(()),                               // PC
-            0x59 => context.execute_msize(node, graph),   // MSIZE
-            0x5A => context.execute_gas(node, graph),     // GAS
-            0x5C => context.execute_tload(node, graph),   // TLOAD
-            0x5D => context.execute_tstore(node, graph),  // TSTORE
-            0x5E => context.execute_mcopy(node, graph),   // MCOPY
-            0x5F..=0x7f => Ok(()),                        // PUSH0-32
+            0x50 => Ok(()),                                      // POP
+            0x51 => context.execute_mload(node, graph),          // MLOAD
+            0x52 => context.execute_mstore(node, graph),         // MSTORE
+            0x53 => context.execute_mstore8(node, graph),        // MSTORE8
+            0x54 => context.execute_sload(node, graph),          // SLOAD
+            0x55 => context.execute_sstore::<SPEC>(node, graph), // SSTORE
+            0x56 => context.execute_jump(node, graph),           // JUMP
+            0x57 => context.execute_jumpi(node, graph),          // JUMPI
+            0x58 => Ok(()),                                      // PC
+            0x59 => context.execute_msize(node, graph),          // MSIZE
+            0x5A => context.execute_gas(node, graph),            // GAS
+            0x5C => context.execute_tload(node, graph),          // TLOAD
+            0x5D => context.execute_tstore(node, graph),         // TSTORE
+            0x5E => context.execute_mcopy(node, graph),          // MCOPY
+            0x5F..=0x7f => Ok(()),                               // PUSH0-32
 
             // Duplication Operations (0x80-0x8F)
             0x80..=0x8f => Ok(()), // DUP1-DUP16
@@ -272,7 +278,7 @@ where
             0xD8 => context.execute_call_return(node, graph),       // CALL_RETURN
             0xD9 => context.execute_insert_call_outcome(node, graph), // INSERT_CALL_OUTCOME
             0xDA => context.execute_deduct_caller(node, graph),     // DEDUCT_CALLER
-            0xDB => context.execute_refund_gas::<SPEC>(node, graph),        // REFUND_GAS
+            0xDB => context.execute_refund_gas::<SPEC>(node, graph), // REFUND_GAS
             0xDC => context.execute_reward_beneficiary(node, graph), // REWARD_BENEFICIARY
 
             // System Operations (0xF0-0xFF)

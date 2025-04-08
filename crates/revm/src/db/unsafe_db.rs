@@ -1,17 +1,14 @@
 use crate::db::Database;
-use crate::primitives::{Address, AccountInfo, B256, Bytecode, U256};
+use crate::primitives::{AccountInfo, Address, Bytecode, B256, U256};
 pub struct UnsafeDB<DB> {
     db: DB,
 }
-
 
 impl<DB: Database> UnsafeDB<DB> {
     pub fn new(db: DB) -> Self {
         Self { db }
     }
 }
-
-
 
 impl<DB: Database> Database for UnsafeDB<DB> {
     type Error = DB::Error;

@@ -28,9 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::SpecId::LONDON;
-use revm_primitives::{
-    Account, AccountStatus, EVMError, EvmStorageSlot, U256,
-};
+use revm_primitives::{Account, AccountStatus, EVMError, EvmStorageSlot, U256};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -309,18 +307,18 @@ impl Occda {
                             let execution_mode = ExecutionMode::Partial(
                                 to_re_execute.iter().map(|x| *x).collect::<Vec<_>>(),
                             );
-                            let mut executor =
-                                SSAExecutor::new_with_spec(
-                                    graph,
-                                    db_ref,
-                                    &task.env,
-                                    self.first_frame_input_store[idx].clone(),
-                                    task.spec_id
-                                )
+                            let mut executor = SSAExecutor::new_with_spec(
+                                graph,
+                                db_ref,
+                                &task.env,
+                                self.first_frame_input_store[idx].clone(),
+                                task.spec_id,
+                            )
                             .with_mode(execution_mode);
 
                             profiler::start("ssa-execution");
-                            let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
+                            let ssa_execution = executor
+                                .execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
                             profiler::end("ssa-execution");
 
                             match ssa_execution {
@@ -332,8 +330,15 @@ impl Occda {
                                     task_result.gas_limit = task.gas;
                                     task_result.inspector = Some(inspector);
                                     task_result.ssa_output = Some(result_state);
-                                    task_result.result =
-                                        Some(executor.graph.generate_result(task.gas, task.tx_hash.unwrap_or_default()).unwrap());
+                                    task_result.result = Some(
+                                        executor
+                                            .graph
+                                            .generate_result(
+                                                task.gas,
+                                                task.tx_hash.unwrap_or_default(),
+                                            )
+                                            .unwrap(),
+                                    );
                                     let result_raw_ptr = result_ptr as *mut TaskResultItem<I>;
                                     unsafe {
                                         *result_raw_ptr.add(idx) = task_result;
@@ -353,7 +358,7 @@ impl Occda {
                             }
                         }
                         // ! Debug for SSA
-                        // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) { 
+                        // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) {
                         //     TracerEip3155::new(
                         //         Box::new(std::io::sink()),
                         //     ).without_summary()
@@ -362,7 +367,7 @@ impl Occda {
                         //         Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
                         //     )
                         // };
-                        
+
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
                         let init_start = std::time::Instant::now();
@@ -409,7 +414,6 @@ impl Occda {
                         transact_time += this_transact_time;
                         transact_times.push(this_transact_time);
 
-
                         // Process and store execution results
                         // This phase includes collecting execution data and storing results
                         let write_start = std::time::Instant::now();
@@ -436,7 +440,8 @@ impl Occda {
                             let first_frame_input_raw_ptr =
                                 first_frame_input_ptr as *mut Option<FrameInput>;
                             unsafe {
-                                *first_frame_input_raw_ptr.add(idx) = logger.take_first_frame_input();
+                                *first_frame_input_raw_ptr.add(idx) =
+                                    logger.take_first_frame_input();
                             }
                             let opcode_counts_raw_ptr = opcode_counts_ptr as *mut usize;
                             unsafe {
@@ -683,18 +688,18 @@ impl Occda {
                         let execution_mode = ExecutionMode::Partial(
                             to_re_execute.iter().map(|x| *x).collect::<Vec<_>>(),
                         );
-                        let mut executor = 
-                            SSAExecutor::new_with_spec(
-                                graph,
-                                db_ref_for_parallel,
-                                &task.env,
-                                self.first_frame_input_store[idx].clone(),
-                                task.spec_id
-                            )
+                        let mut executor = SSAExecutor::new_with_spec(
+                            graph,
+                            db_ref_for_parallel,
+                            &task.env,
+                            self.first_frame_input_store[idx].clone(),
+                            task.spec_id,
+                        )
                         .with_mode(execution_mode);
 
                         profiler::start("ssa-execution");
-                        let ssa_execution = executor.execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
+                        let ssa_execution = executor
+                            .execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
                         profiler::end("ssa-execution");
 
                         match ssa_execution {
@@ -707,7 +712,9 @@ impl Occda {
                                 task_result.gas_limit = task.gas;
                                 task_result.inspector = Some(inspector);
                                 task_result.ssa_output = Some(result_state);
-                                task_result.result = Some(executor.graph.generate_result(task.gas, tx_hash).unwrap());
+                                task_result.result = Some(
+                                    executor.graph.generate_result(task.gas, tx_hash).unwrap(),
+                                );
                                 result_store[idx] = task_result;
                                 drop(executor);
                                 re_execution_opcodes += nodes_to_execute_len.0;
@@ -723,7 +730,7 @@ impl Occda {
                     }
 
                     // ! Debug for SSA
-                    // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4")) { 
+                    // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4")) {
                     //     TracerEip3155::new(
                     //         Box::new(std::io::sink()),
                     //     ).without_summary()
@@ -955,7 +962,12 @@ impl Occda {
         Ok(())
     }
 
-    fn apply_beneficiary<DB: DatabaseCommit + DatabaseRef, I>(&self, db: &mut DB, tasks: &[Task], result_store: &mut[TaskResultItem<I>]) {
+    fn apply_beneficiary<DB: DatabaseCommit + DatabaseRef, I>(
+        &self,
+        db: &mut DB,
+        tasks: &[Task],
+        result_store: &mut [TaskResultItem<I>],
+    ) {
         let beneficiary = tasks[0].env.block.coinbase;
         let mut coinbase_refund = U256::ZERO;
         for task in tasks.iter() {

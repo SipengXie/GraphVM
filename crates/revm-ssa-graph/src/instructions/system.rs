@@ -7,7 +7,7 @@ use revm_primitives::db::DatabaseRef;
 use revm_primitives::{B256, U256};
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
-impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute GAS operation
     /// ! For a formal implementation, we should consider all front-loaded dynamic gas commands
     #[inline(always)]
@@ -21,7 +21,8 @@ impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
     #[inline(always)]
     pub fn execute_address(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let contract_env = get_contract_env!(graph, node.inputs[0]);
-        node.outputs[0] = SSAOutput::Stack(contract_env.frame_input.target_address.into_word().into());
+        node.outputs[0] =
+            SSAOutput::Stack(contract_env.frame_input.target_address.into_word().into());
         Ok(())
     }
 
@@ -84,7 +85,10 @@ impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
     #[inline(always)]
     pub fn execute_calldataload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
-        let call_data = get_contract_env!(graph, node.inputs[1]).frame_input.input.clone();
+        let call_data = get_contract_env!(graph, node.inputs[1])
+            .frame_input
+            .input
+            .clone();
         let offset = as_usize_saturated!(offset);
         let mut word = [0u8; 32];
         if offset < call_data.len() {
@@ -98,7 +102,10 @@ impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
     /// Execute CALLDATASIZE operation
     #[inline(always)]
     pub fn execute_calldatasize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let input = get_contract_env!(graph, node.inputs[0]).frame_input.input.clone();
+        let input = get_contract_env!(graph, node.inputs[0])
+            .frame_input
+            .input
+            .clone();
         node.outputs[0] = SSAOutput::Stack(U256::from(input.len()));
         Ok(())
     }
@@ -106,7 +113,9 @@ impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
     /// Execute CALLVALUE operation
     #[inline(always)]
     pub fn execute_callvalue(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let call_value = get_contract_env!(graph, node.inputs[0]).frame_input.transfer_value;
+        let call_value = get_contract_env!(graph, node.inputs[0])
+            .frame_input
+            .transfer_value;
         node.outputs[0] = SSAOutput::Stack(call_value);
         Ok(())
     }
@@ -117,7 +126,10 @@ impl<'a, DB: DatabaseRef + Send + Sync,> ExecutionContext<'a, DB> {
         let memory_offset = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
         let data_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        let call_data = get_contract_env!(graph, node.inputs[3]).frame_input.input.clone();
+        let call_data = get_contract_env!(graph, node.inputs[3])
+            .frame_input
+            .input
+            .clone();
 
         let memory_offset = as_usize_saturated!(memory_offset);
         let data_offset = as_usize_saturated!(data_offset);

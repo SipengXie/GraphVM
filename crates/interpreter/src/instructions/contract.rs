@@ -500,7 +500,6 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
     if has_transfer {
         gas_limit = gas_limit.saturating_add(gas::CALL_STIPEND);
     }
-    
 
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Call {
@@ -586,7 +585,7 @@ pub fn call_code<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
     if !value.is_zero() {
         gas_limit = gas_limit.saturating_add(gas::CALL_STIPEND);
     }
-    
+
     // Call host to interact with target contract
     interpreter.next_action = InterpreterAction::Call {
         inputs: Box::new(CallInputs {

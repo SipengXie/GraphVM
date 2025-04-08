@@ -42,7 +42,7 @@ pub struct State<DB> {
     pub transition_state: Option<TransitionState>,
     /// After block is finishes we merge those changes inside bundle.
     /// Bundle is used to update database and create changesets.
-    /// Bundle state can be set on initialization if we wan t to use preloaded bundle.
+    /// Bundle state can be set on initialization if we want to use preloaded bundle.
     pub bundle_state: BundleState,
     /// Addition layer that is going to be used to fetched values before fetching values
     /// from database.
@@ -237,18 +237,22 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         if let Some(account) = self.cache.accounts.get(&address) {
             let is_storage_known = account.status.is_storage_known();
-            Ok(account.account.as_ref().map(|a| match a.storage.get(&index) {
-                Some(entry) => Ok(*entry),
-                None => {
-                    let value = if is_storage_known {
-                        U256::ZERO
-                    } else {
-                        self.database.storage_ref(address, index)?
-                    };
-                    Ok(value)
-                },
-            }).transpose()?
-            .unwrap_or_default())
+            Ok(account
+                .account
+                .as_ref()
+                .map(|a| match a.storage.get(&index) {
+                    Some(entry) => Ok(*entry),
+                    None => {
+                        let value = if is_storage_known {
+                            U256::ZERO
+                        } else {
+                            self.database.storage_ref(address, index)?
+                        };
+                        Ok(value)
+                    }
+                })
+                .transpose()?
+                .unwrap_or_default())
         } else {
             self.database.storage_ref(address, index)
             // We should find a better way to handle this.

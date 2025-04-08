@@ -2,8 +2,8 @@ use super::{CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome};
 use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
 use revm_primitives::CreateScheme;
 use revm_ssa::{
-    ContractEnv, FrameInput, SSACallOutcome, TxScheme, SSACreateOutcome,
-    SSAInstructionResult, SSAInterpreterResult,
+    ContractEnv, FrameInput, SSACallOutcome, SSACreateOutcome, SSAInstructionResult,
+    SSAInterpreterResult, TxScheme,
 };
 
 /// Convert interpreter's Contract to SSA's ContractEnv
@@ -20,14 +20,14 @@ pub fn convert_contract_env_for_system(env: &Contract) -> ContractEnv {
     ContractEnv {
         bytecode: env.bytecode.clone(),
         hash: env.hash,
-        frame_input: FrameInput { 
-            input: env.input.clone(), 
-            bytecode_address: env.bytecode_address.unwrap_or_default(), 
-            target_address: env.target_address, 
-            caller: env.caller, 
-            transfer_value: env.call_value, 
+        frame_input: FrameInput {
+            input: env.input.clone(),
+            bytecode_address: env.bytecode_address.unwrap_or_default(),
+            target_address: env.target_address,
+            caller: env.caller,
+            transfer_value: env.call_value,
             ..Default::default()
-         }
+        },
     }
 }
 

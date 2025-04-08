@@ -4,9 +4,10 @@ use crate::types::{
     ContractEnv, InternalOp, MemoryDep, SSAInput, SSALogEntry, SSAOutput, StorageKey, StorageValue,
 };
 use crate::{
-    FrameInput, SSACallOutcome, TxScheme, SSACreateOutcome,
-    SSAInstructionResult, SSAInterpreterResult,
+    FrameInput, SSACallOutcome, SSACreateOutcome, SSAInstructionResult, SSAInterpreterResult,
+    TxScheme,
 };
+use core::ops::Range;
 use revm_primitives::bitvec::bitvec;
 use revm_primitives::bitvec::order::Lsb0;
 use revm_primitives::bitvec::vec::BitVec;
@@ -16,7 +17,6 @@ use revm_primitives::{
     JumpTable, LegacyAnalyzedBytecode, Log, B256, U256,
 };
 use std::cmp::min;
-use core::ops::Range;
 use std::sync::Arc;
 // Update macro pop_stack_or_const to take two parameters: self and value
 #[macro_export]
@@ -677,9 +677,13 @@ impl SSALogger {
             0x30 => ssa_output.push(SSAOutput::Stack(
                 contract_env.frame_input.target_address.into_word().into(),
             )), // ADDRESS
-            0x33 => ssa_output.push(SSAOutput::Stack(contract_env.frame_input.caller.into_word().into())), // CALLER
+            0x33 => ssa_output.push(SSAOutput::Stack(
+                contract_env.frame_input.caller.into_word().into(),
+            )), // CALLER
             0x34 => ssa_output.push(SSAOutput::Stack(contract_env.frame_input.transfer_value)), // CALLVALUE
-            0x36 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.frame_input.input.len()))), // CALLDATASIZE
+            0x36 => ssa_output.push(SSAOutput::Stack(U256::from(
+                contract_env.frame_input.input.len(),
+            ))), // CALLDATASIZE
             0x38 => ssa_output.push(SSAOutput::Stack(U256::from(contract_env.bytecode.len()))), // CODESIZE
             _ => unreachable!("Unsupported system operation: {}", opcode),
         }
@@ -966,7 +970,7 @@ impl SSALogger {
         new_caller_info: AccountInfo,
         new_target_info: AccountInfo,
         new_target_status: AccountStatus, // needed as it is marked created
-        contract_env: ContractEnv, // which contains create_input
+        contract_env: ContractEnv,        // which contains create_input
     ) {
         let opcode = InternalOp::MAKE_CREATE_FRAME;
         let lsn = self.current_lsn;
@@ -998,7 +1002,6 @@ impl SSALogger {
         self.contract_env.push((lsn, 3));
         self.generate_new_stack();
 
-        
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
 
@@ -1374,13 +1377,19 @@ impl SSALogger {
     }
 
     #[inline(always)]
-    pub fn log_call_return(&mut self, interpreter_result: SSAInterpreterResult, ret_range: Range<usize>) {
+    pub fn log_call_return(
+        &mut self,
+        interpreter_result: SSAInterpreterResult,
+        ret_range: Range<usize>,
+    ) {
         let lsn = self.current_lsn;
         let opcode = InternalOp::CALL_RETURN;
 
         let mut ssa_inputs = Vec::with_capacity(2);
         ssa_inputs.push(SSAInput::InterpreterResult(self.last_interpreter_return)); // interpreter_result
-        ssa_inputs.push(SSAInput::ContractEnv(self.contract_env.pop().unwrap_or_default()));
+        ssa_inputs.push(SSAInput::ContractEnv(
+            self.contract_env.pop().unwrap_or_default(),
+        ));
 
         let mut ssa_outputs = Vec::with_capacity(1);
         ssa_outputs.push(SSAOutput::CallOutcome(Box::new(SSACallOutcome {
@@ -1388,7 +1397,7 @@ impl SSALogger {
             ret_range,
         })));
         self.last_call_return.push((lsn, 0));
-        
+
         self.remove_last_stack();
         self.log_operation(opcode.into(), ssa_inputs, ssa_outputs);
     }
@@ -1548,10 +1557,7 @@ impl SSALogger {
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
-        ssa_inputs.push(SSAInput::Storage(
-            key,
-            self.get_storage_def(key),
-        ));
+        ssa_inputs.push(SSAInput::Storage(key, self.get_storage_def(key)));
         self.log_storage_read(key, lsn);
         ssa_inputs.push(input_account_status!(self, address)); // identify if it is created
         self.log_storage_read(StorageKey::AccountStatus(address), lsn);
@@ -1738,7 +1744,10 @@ impl SSALogger {
     #[inline(always)]
     pub fn log_storage_read(&mut self, key: StorageKey, lsn: LsnType) {
         if !self.latest_writes.contains_key(&key) {
-            self.origin_reads.entry(key).or_insert_with(Vec::new).push(lsn);
+            self.origin_reads
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .push(lsn);
         }
     }
 
@@ -1838,7 +1847,6 @@ impl SSALogger {
         self.latest_writes.clear();
         self.origin_reads.clear();
     }
-
 }
 
 /// Perform bytecode analysis.

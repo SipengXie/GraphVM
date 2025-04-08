@@ -5,13 +5,13 @@ use revm_primitives::{Address, Bytes, B256, U256};
 use revm_ssa::logger::to_analysed;
 use revm_ssa::{
     output_account_info, output_account_status, ContractEnv, FrameInput, SSACallOutcome,
-    TxScheme, SSACreateOutcome, SSAInput,
-    SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput, StorageKey, StorageValue,
+    SSACreateOutcome, SSAInput, SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput,
+    StorageKey, StorageValue, TxScheme,
 };
 
 use crate::{
-    as_u64_saturated, as_usize_saturated, get_contract_env, get_interpreter_result,
-    get_memory, get_storage_value, u256_to_bool,
+    as_u64_saturated, as_usize_saturated, get_contract_env, get_interpreter_result, get_memory,
+    get_storage_value, u256_to_bool,
 };
 
 use super::{get_constant_i64, get_frame_input, get_gas_cost, get_gas_refund};
@@ -53,7 +53,11 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     }
 
     #[inline(always)]
-    pub fn execute_refund_gas<SPEC: Spec>(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
+    pub fn execute_refund_gas<SPEC: Spec>(
+        &mut self,
+        node: &mut SSALogEntry,
+        graph: &SsaGraph,
+    ) -> Result<()> {
         let gas_length = (node.inputs.len() - 7) / 2;
 
         let mut dynamic_gas_cost: u64 = 0;
@@ -78,7 +82,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
 
         let caller_info =
             get_storage_value!(graph, node.inputs[offset + 6], |key| self.get_state(key));
-     
+
         let refund_gas = base_gas_refunded + dynamic_gas_refund + eip7702_gas_refund;
         let remaining_gas = base_gas_remaining - dynamic_gas_cost;
         let spent_gas = gas_limit - remaining_gas;
@@ -151,7 +155,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[6]);
         let input = get_memory!(graph, &node.inputs[7]);
-        let target_address = get_contract_env!(graph, node.inputs[8]).frame_input.target_address;
+        let target_address = get_contract_env!(graph, node.inputs[8])
+            .frame_input
+            .target_address;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
@@ -209,7 +215,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[6]);
         let input = get_memory!(graph, &node.inputs[7]);
-        let contract_address = get_contract_env!(graph, node.inputs[8]).frame_input.target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[8])
+            .frame_input
+            .target_address;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
@@ -261,7 +269,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[4]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let input = get_memory!(graph, &node.inputs[6]);
-        let contract_address = get_contract_env!(graph, node.inputs[7]).frame_input.target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[7])
+            .frame_input
+            .target_address;
         let caller = get_contract_env!(graph, node.inputs[8]).frame_input.caller;
 
         let gas_limit = as_u64_saturated!(gas_limit);
@@ -315,7 +325,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let out_offset = get_ssa_output_stack_or_const!(graph, node.inputs[4]);
         let out_len = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
         let input = get_memory!(graph, &node.inputs[6]);
-        let contract_address = get_contract_env!(graph, node.inputs[7]).frame_input.target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[7])
+            .frame_input
+            .target_address;
 
         let gas_limit = as_u64_saturated!(gas_limit);
         let out_offset = as_usize_saturated!(out_offset);
@@ -502,7 +514,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
         let code = get_memory!(graph, &node.inputs[3]);
-        let contract_address = get_contract_env!(graph, node.inputs[4]).frame_input.target_address;
+        let contract_address = get_contract_env!(graph, node.inputs[4])
+            .frame_input
+            .target_address;
         let salt = if node.inputs.len() == 6 {
             Some(get_ssa_output_stack_or_const!(graph, node.inputs[5]))
         } else {
@@ -586,8 +600,8 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
             TxScheme::Create2 { salt } => {
                 init_code_hash = keccak256(&create_input.input);
                 caller.create2(salt.to_be_bytes(), init_code_hash)
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         };
 
         let new_caller_info = AccountInfo {
@@ -638,7 +652,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         }
 
         let interpreter_result = get_interpreter_result!(graph, node.inputs[0]);
-        let address = get_contract_env!(graph, node.inputs[1]).frame_input.target_address;
+        let address = get_contract_env!(graph, node.inputs[1])
+            .frame_input
+            .target_address;
         let target_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
         let analysis_kind = get_ssa_output_stack_or_const!(graph, node.inputs[3]);
         let analysis_kind = u256_to_bool!(analysis_kind)?;

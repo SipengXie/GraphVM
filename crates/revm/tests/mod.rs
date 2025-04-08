@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use revm_primitives::{
-    fixed_bytes, keccak256, uint, AccountInfo, Address, Bytecode, Bytes, Env, SpecId, TxKind, U256
+    fixed_bytes, keccak256, uint, AccountInfo, Address, Bytecode, Bytes, Env, SpecId, TxKind, U256,
 };
 
 use revm::{
@@ -168,15 +168,9 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
             // Choose execution method based on test mode
             let (tracer, execution_time) = match config.test_mode {
                 TestMode::SerialGraph => {
-                    let result = graph_execute(
-                        logs,
-                        config.clone(),
-                        &mut cdb,
-                        &env,
-                        first_call,
-                    );
+                    let result = graph_execute(logs, config.clone(), &mut cdb, &env, first_call);
                     result
-                },
+                }
                 _ => unreachable!(),
             };
 
@@ -231,13 +225,24 @@ fn graph_execute(
         graph.add_edges(lsn).unwrap();
     }
     // Create executor and tracer
-    let mut executor = 
+    let mut executor =
         SSAExecutor::new_with_spec(graph.into(), db, env, first_frame, SpecId::LATEST)
-        .with_mode(config.mode)
-        .with_tracer(tracer);
+            .with_mode(config.mode)
+            .with_tracer(tracer);
     // Execute
-    let res = executor.execute_with_spec(SpecId::LATEST, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000")).unwrap();
-    let result = executor.graph.generate_result(0x0f424000, fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000")).unwrap();
+    let res = executor
+        .execute_with_spec(
+            SpecId::LATEST,
+            fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000"),
+        )
+        .unwrap();
+    let result = executor
+        .graph
+        .generate_result(
+            0x0f424000,
+            fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000"),
+        )
+        .unwrap();
     eprintln!("result: {:?}", result);
 
     (executor.into_tracer(), Some(res.1))
@@ -249,7 +254,11 @@ mod arithmetic_tests {
 
     #[test]
     fn test_native_transfer() {
-        execute_case(Bytes::default(), "simple addition", ExecutionConfig::default());
+        execute_case(
+            Bytes::default(),
+            "simple addition",
+            ExecutionConfig::default(),
+        );
     }
 
     #[test]

@@ -408,8 +408,11 @@ impl Interpreter {
                     if shadow_stack.len() != stack.len() {
                         panic!(
                             "Stack length mismatch: result = {:?}, shadow_stack.len() = {}, \
-                            stack.len() = {}, opcode = {}", 
-                            result, shadow_stack.len(), stack.len(), opcode
+                            stack.len() = {}, opcode = {}",
+                            result,
+                            shadow_stack.len(),
+                            stack.len(),
+                            opcode
                         );
                     }
                 }

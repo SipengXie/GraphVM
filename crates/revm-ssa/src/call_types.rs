@@ -56,7 +56,9 @@ pub enum TxScheme {
     DelegateCall,
     StaticCall,
     Create,
-    Create2 { salt: U256 },
+    Create2 {
+        salt: U256,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -39,7 +39,10 @@ pub fn address<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::BASE);
     push_b256!(interpreter, interpreter.contract.target_address.into_word());
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(ADDRESS, convert_contract_env_for_system(&interpreter.contract));
+        logger.log_system_operation(
+            ADDRESS,
+            convert_contract_env_for_system(&interpreter.contract),
+        );
     }
 }
 
@@ -47,7 +50,10 @@ pub fn caller<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::BASE);
     push_b256!(interpreter, interpreter.contract.caller.into_word());
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CALLER, convert_contract_env_for_system(&interpreter.contract));
+        logger.log_system_operation(
+            CALLER,
+            convert_contract_env_for_system(&interpreter.contract),
+        );
     }
 }
 
@@ -57,7 +63,10 @@ pub fn codesize<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
     assume!(!interpreter.contract.bytecode.is_eof());
     push!(interpreter, U256::from(interpreter.contract.bytecode.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CODESIZE, convert_contract_env_for_system(&interpreter.contract));
+        logger.log_system_operation(
+            CODESIZE,
+            convert_contract_env_for_system(&interpreter.contract),
+        );
     }
 }
 
@@ -149,7 +158,10 @@ pub fn calldatasize<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut
     gas!(interpreter, gas::BASE);
     push!(interpreter, U256::from(interpreter.contract.input.len()));
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CALLDATASIZE, convert_contract_env_for_system(&interpreter.contract));
+        logger.log_system_operation(
+            CALLDATASIZE,
+            convert_contract_env_for_system(&interpreter.contract),
+        );
     }
 }
 
@@ -157,7 +169,10 @@ pub fn callvalue<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H)
     gas!(interpreter, gas::BASE);
     push!(interpreter, interpreter.contract.call_value);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_system_operation(CALLVALUE, convert_contract_env_for_system(&interpreter.contract));
+        logger.log_system_operation(
+            CALLVALUE,
+            convert_contract_env_for_system(&interpreter.contract),
+        );
     }
 }
 

@@ -8,10 +8,7 @@ use revm_primitives::{
     db::DatabaseRef, AccountInfo, AccountStatus, Address, Bytes, Env, PrecompileErrors, Spec,
     BLOCK_HASH_HISTORY, U256,
 };
-use revm_ssa::{
-    FrameInput, SSAInstructionResult, SSAInterpreterResult, StorageKey,
-    StorageValue,
-};
+use revm_ssa::{FrameInput, SSAInstructionResult, SSAInterpreterResult, StorageKey, StorageValue};
 
 use crate::{instructions::as_u64_saturated, ExecutionError, Result};
 
@@ -30,11 +27,7 @@ pub struct ExecutionContext<'a, DB: DatabaseRef> {
 }
 
 impl<'a, DB: DatabaseRef> ExecutionContext<'a, DB> {
-    pub fn new<SPEC: Spec>(
-        env: &'a Env,
-        db: DB,
-        first_frame_input: Option<FrameInput>,
-    ) -> Self {
+    pub fn new<SPEC: Spec>(env: &'a Env, db: DB, first_frame_input: Option<FrameInput>) -> Self {
         Self {
             env: Arc::new(env),
             db: Arc::new(db),

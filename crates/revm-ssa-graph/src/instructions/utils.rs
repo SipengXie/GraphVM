@@ -332,7 +332,7 @@ macro_rules! get_constant_i64 {
 
 /// Re-export macros for convenience
 pub use {
-    as_u64_saturated, as_usize_saturated, get_frame_input, get_constant_i64, get_contract_env,
+    as_u64_saturated, as_usize_saturated, get_constant_i64, get_contract_env, get_frame_input,
     get_gas_cost, get_gas_refund, get_interpreter_result, get_memory, get_return_data_buffer,
     get_storage_value, u256_to_bool,
 };

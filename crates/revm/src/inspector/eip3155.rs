@@ -30,7 +30,7 @@ pub struct TracerEip3155 {
     memory: Option<String>,
 
     // ! Used for SSA Tracing
-    lsn: LsnType
+    lsn: LsnType,
 }
 
 // # Output
@@ -209,7 +209,7 @@ impl<DB: Database> Inspector<DB> for TracerEip3155 {
         self.mem_size = interp.shared_memory.len();
         self.gas = interp.gas.remaining();
         self.refunded = interp.gas.refunded();
-        
+
         // SSA Tracing
         if let Some(logger) = &interp.ssa_logger {
             self.lsn = logger.current_lsn;

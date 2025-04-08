@@ -1,7 +1,9 @@
 use crate::{ExecutionError, Result};
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
-use revm_primitives::{ExecutionResult, FixedBytes, HaltReason, HashMap, HashSet, Output, SuccessReason};
+use revm_primitives::{
+    ExecutionResult, FixedBytes, HaltReason, HashMap, HashSet, Output, SuccessReason,
+};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput};
 
@@ -67,7 +69,7 @@ impl SsaGraph {
         for lsn in &self.storage_write {
             let node_idx = self.lsn_to_node[*lsn as usize];
             let node = self.get_node_by_index(node_idx)?;
-            
+
             // Check if the operation is SSTORE (opcode 0x55)
             if node.opcode == 0x55 {
                 sstore_nodes.push(node);
@@ -77,7 +79,6 @@ impl SsaGraph {
         Ok(sstore_nodes)
     }
 
-
     /// Add a node
     #[inline(always)]
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
@@ -86,23 +87,23 @@ impl SsaGraph {
         let op = entry.opcode;
         if is_storage_write!(op) {
             self.storage_write.push(lsn);
-        } 
-        
+        }
+
         // Check if opcode is a LOG operation (LOG0-LOG4)
         if (0xA0..=0xA4).contains(&op) {
             self.logs.push(lsn);
-        } 
-        
+        }
+
         // Track gas calculation operation
         if op == 0xDB {
-            self.gas_calc = lsn; 
-        } 
-        
+            self.gas_calc = lsn;
+        }
+
         // Track return operations
         if op == 0xD5 || op == 0xD8 || op == 0xD7 {
             self.last_return = lsn;
         }
-        
+
         let node_idx = self.graph.add_node(entry);
 
         //The vector has enough capacity for the current LSN
@@ -450,20 +451,32 @@ impl SsaGraph {
         Ok(layers)
     }
 
-    pub fn generate_result(&self, gas_limit: u64, _tx_hash: FixedBytes<32>) -> Result<ExecutionResult> {
+    pub fn generate_result(
+        &self,
+        gas_limit: u64,
+        _tx_hash: FixedBytes<32>,
+    ) -> Result<ExecutionResult> {
         // 1. Get the result node, handle error cases early
         let result_node = self.get_node(self.last_return)?;
         // eprintln!("result_node: {:?}", result_node);
-        let output = result_node.outputs.iter().find_map(|output| {
-            match output {
+        let output = result_node
+            .outputs
+            .iter()
+            .find_map(|output| match output {
                 SSAOutput::CallOutcome(outcome) => Some(SSAOutput::CallOutcome(outcome.clone())),
-                SSAOutput::CreateOutcome(outcome) => Some(SSAOutput::CreateOutcome(outcome.clone())),
-                SSAOutput::InterpreterResult(result) => Some(SSAOutput::InterpreterResult(result.clone())),
+                SSAOutput::CreateOutcome(outcome) => {
+                    Some(SSAOutput::CreateOutcome(outcome.clone()))
+                }
+                SSAOutput::InterpreterResult(result) => {
+                    Some(SSAOutput::InterpreterResult(result.clone()))
+                }
                 _ => None,
-            }
-        }).ok_or_else(|| {
-            ExecutionError::GraphError("No interpreter result found in last return node".to_string())
-        })?;
+            })
+            .ok_or_else(|| {
+                ExecutionError::GraphError(
+                    "No interpreter result found in last return node".to_string(),
+                )
+            })?;
         // assert_ne!(self.gas_calc, 0);
         let gas_node = self.get_node(self.gas_calc)?;
         let gas_remaining = match &gas_node.outputs[1] {
@@ -559,10 +572,9 @@ impl SsaGraph {
                     }),
                 }
             }
-            _ => {
-                Err(ExecutionError::GraphError(
+            _ => Err(ExecutionError::GraphError(
                 "Last return node is not a call or create outcome".to_string(),
-            ))},
+            )),
         }
     }
 }
