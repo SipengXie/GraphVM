@@ -2,7 +2,7 @@ use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Res
 use revm_interpreter::{gas, SStoreResult};
 use revm_primitives::db::DatabaseRef;
 use revm_primitives::{
-    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, U256
+    AccountStatus, Address, Bytecode, Bytes, FixedBytes, Log, LogData, Spec, B256, U256
 };
 use revm_ssa::{
     output_account_info, output_account_status, SSAInput, SSAInstructionResult,
@@ -19,8 +19,14 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute SLOAD operation
     #[inline(always)]
     pub fn execute_sload(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let value = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
-        let account_status = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
+        let contract_env = get_contract_env!(graph, node.inputs[0]);
+        let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+
+        let value_key = StorageKey::Slot(contract_env.frame_input.target_address, index);
+        let account_status_key = StorageKey::AccountStatus(contract_env.frame_input.target_address);
+
+        let value = get_storage_value!(graph, node.inputs[2], &value_key, |key| self.get_state(key));
+        let account_status = get_storage_value!(graph, node.inputs[3], &account_status_key, |key| self.get_state(key));
 
         let value = if account_status
             .as_account_status()
@@ -40,20 +46,17 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     #[inline(always)]
     pub fn execute_sstore<SPEC: Spec>(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
         let address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
-
         let index = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
+        let slot_key = StorageKey::Slot(address, index);
         let value = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
-        let origin_value = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
-        let present_value = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
+        let origin_value = get_storage_value!(graph, node.inputs[3], &slot_key, |key| self.get_state(key));
+        let present_value = get_storage_value!(graph, node.inputs[4], &slot_key, |key| self.get_state(key));
         let is_read = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
 
         let origin_value = origin_value.as_slot().unwrap();
         let present_value = present_value.as_slot().unwrap();
         let is_read = u256_to_bool!(is_read).unwrap();
-        // TODO: origin_value和present_value存在原先index和目前index对不上的问题
-        // *如果对不上， 先检查是否为(0,0)，如果是，直接去get_state
-        // *如果不是(0,0)， 则去对应的LSN处排查，观察其写入的Index和当前Index是否一致
-        // *如果一致，则说明是重放，否则就是错误
+        
         let sstore_result = SStoreResult {
             original_value: origin_value.clone(),
             present_value: present_value.clone(),
@@ -61,7 +64,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         };
 
         let is_cold = match node.inputs[4] {
-            SSAInput::Storage(_, lsn_with_index) => {
+            SSAInput::Storage(lsn_with_index) => {
                 lsn_with_index.0 == 0 // not been written before
             }
             _ => panic!("present value of sstore input is not a storage key"),
@@ -128,7 +131,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute BALANCE operation
     #[inline(always)]
     pub fn execute_balance(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let address = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let account_key = StorageKey::AccountInfo(Address::from_word(B256::from(address)));
+        let account = get_storage_value!(graph, node.inputs[1], &account_key, |key| self.get_state(key));
         let balance = account.as_account_info().unwrap().balance;
         node.outputs[0] = SSAOutput::Stack(balance);
         Ok(())
@@ -137,7 +142,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute SELFBALANCE operation
     #[inline(always)]
     pub fn execute_selfbalance(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let contract_env = get_contract_env!(graph, node.inputs[0]);
+        let account_key = StorageKey::AccountInfo(contract_env.frame_input.target_address);
+        let account = get_storage_value!(graph, node.inputs[1], &account_key, |key| self.get_state(key));
         let balance = account.as_account_info().unwrap().balance;
         node.outputs[0] = SSAOutput::Stack(balance);
         Ok(())
@@ -146,7 +153,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute EXTCODESIZE operation
     #[inline(always)]
     pub fn execute_extcodesize(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let address = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let account_key = StorageKey::AccountInfo(Address::from_word(B256::from(address)));
+        let account = get_storage_value!(graph, node.inputs[1], &account_key, |key| self.get_state(key));
         // we ignore EIP 7702 here
         let code = match &account.as_account_info().unwrap().code {
             Some(code) => code,
@@ -159,7 +168,9 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute EXTCODEHASH operation
     #[inline(always)]
     pub fn execute_extcodehash(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let account = get_storage_value!(graph, node.inputs[1], |key| self.get_state(key));
+        let address = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let account_key = StorageKey::AccountInfo(Address::from_word(B256::from(address)));
+        let account = get_storage_value!(graph, node.inputs[1], &account_key, |key| self.get_state(key));
         let code_hash = account.as_account_info().unwrap().code_hash;
         node.outputs[0] = SSAOutput::Stack(code_hash.into());
         Ok(())
@@ -168,10 +179,12 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute EXTCODECOPY operation
     #[inline(always)]
     pub fn execute_extcodecopy(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
+        let address = get_ssa_output_stack_or_const!(graph, node.inputs[0]);
+        let account_key = StorageKey::AccountInfo(Address::from_word(B256::from(address)));
         let mem_offset = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
         let code_offset = get_ssa_output_stack_or_const!(graph, node.inputs[2]);
         let len = get_ssa_output_stack_or_const!(graph, node.inputs[3]);
-        let account_info = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
+        let account_info = get_storage_value!(graph, node.inputs[4], &account_key, |key| self.get_state(key));
 
         let mem_offset = as_usize_saturated!(mem_offset);
         let code_offset = as_usize_saturated!(code_offset);
@@ -247,11 +260,18 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute SELFDESTRUCT operation
     #[inline(always)]
     pub fn execute_selfdestruct(&mut self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {
-        let contract_address = get_contract_env!(graph, node.inputs[0]).frame_input.target_address;
+        let contract_env = get_contract_env!(graph, node.inputs[0]);
+        let contract_address = contract_env.frame_input.target_address;
         let target = get_ssa_output_stack_or_const!(graph, node.inputs[1]);
-        let address_info = get_storage_value!(graph, node.inputs[2], |key| self.get_state(key));
-        let target_info = get_storage_value!(graph, node.inputs[3], |key| self.get_state(key));
-        let address_status = get_storage_value!(graph, node.inputs[4], |key| self.get_state(key));
+        let target = Address::from_word(target.to_be_bytes::<32>().into());
+
+        let address_info_key = StorageKey::AccountInfo(contract_address);
+        let target_info_key = StorageKey::AccountInfo(target);
+        let address_status_key = StorageKey::AccountStatus(contract_address);
+        
+        let address_info = get_storage_value!(graph, node.inputs[2], &address_info_key, |key| self.get_state(key));
+        let target_info = get_storage_value!(graph, node.inputs[3], &target_info_key, |key| self.get_state(key));
+        let address_status = get_storage_value!(graph, node.inputs[4], &address_status_key, |key| self.get_state(key));
         let is_cancun_enabled = get_ssa_output_stack_or_const!(graph, node.inputs[5]);
 
         let address_info = address_info.as_account_info().unwrap();
@@ -259,7 +279,7 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let address_status = address_status.as_account_status().unwrap();
         let is_cancun_enabled = u256_to_bool!(is_cancun_enabled).unwrap();
 
-        let target = Address::from_word(target.to_be_bytes::<32>().into());
+        
         let is_created = address_status.contains(AccountStatus::Created);
 
         let mut index = 0;
