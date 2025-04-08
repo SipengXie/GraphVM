@@ -155,7 +155,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> Ex
                     }
                     tx.gas_limit = 0x0f424000;
                 })
-                .with_ssa_logger(SSALogger::new())
+                .with_ssa_logger()
                 .build_with_ssa_logger();
 
             let env = evm.context.evm.env().clone();

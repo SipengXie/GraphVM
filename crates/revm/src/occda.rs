@@ -374,7 +374,7 @@ impl Occda {
                                 .with_external_context(NoOpInspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
-                                .with_ssa_logger(SSALogger::new())
+                                .with_ssa_logger()
                                 .build_with_ssa_logger();
                             prefetch_time += prefetch_start.elapsed().as_nanos();
                             evm_inside
