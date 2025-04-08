@@ -574,7 +574,7 @@ impl Occda {
 
         // Performance monitoring timers for different execution phases
         // These help identify bottlenecks and optimize performance
-        let mut perpare_time = Duration::from_secs(0);
+        let mut prepare_time = Duration::from_secs(0);
         let mut commit_time = Duration::from_secs(0);
         let mut parallel_time = Duration::from_secs(0);
         let mut seq_time = Duration::from_secs(0);
@@ -652,7 +652,7 @@ impl Occda {
             }
 
             let perpare_end = std::time::Instant::now();
-            perpare_time += perpare_end - perpare_start;
+            prepare_time += perpare_end - perpare_start;
 
             // Prepare batch of tasks for execution
             exec_size += h_ready.len();
@@ -908,7 +908,7 @@ impl Occda {
         );
 
         // Log detailed timing breakdown for performance analysis
-        println!("perpare_time: {:?}", perpare_time);
+        println!("prepare_time: {:?}", prepare_time);
         println!("parallel_time: {:?}", parallel_time);
         println!("seq_time: {:?}", seq_time);
         println!("commit_time: {:?}", commit_time);
