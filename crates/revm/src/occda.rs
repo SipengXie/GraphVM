@@ -4,7 +4,7 @@ use crate::db::{parallel_db::ParallelDB, Database, DatabaseCommit, DatabaseRef};
 use crate::evm::Evm;
 use crate::graph_wrapper::GraphWrapper;
 use crate::inspector_handle_register;
-use crate::inspectors::{NoOpInspector, TracerEip3155};
+use crate::inspectors::NoOpInspector;
 use crate::journaled_state::AccessType;
 /// OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
 ///
@@ -351,16 +351,16 @@ impl Occda {
                                 }
                             }
                         }
-                        // ! 只有特定的tx_hash才print
-                        let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) { 
-                            TracerEip3155::new(
-                                Box::new(std::io::sink()),
-                            ).without_summary()
-                        } else {
-                            TracerEip3155::new(
-                                Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
-                            )
-                        };
+                        // ! Debug for SSA
+                        // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) { 
+                        //     TracerEip3155::new(
+                        //         Box::new(std::io::sink()),
+                        //     ).without_summary()
+                        // } else {
+                        //     TracerEip3155::new(
+                        //         Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
+                        //     )
+                        // };
                         
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
@@ -720,16 +720,16 @@ impl Occda {
                         }
                     }
 
-                    // ! 只有特定的tx_hash才print
-                    let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4")) { 
-                        TracerEip3155::new(
-                            Box::new(std::io::sink()),
-                        ).without_summary()
-                    } else {
-                        TracerEip3155::new(
-                            Box::new(std::fs::File::create("tracer_re_execution.json").unwrap()),
-                        )
-                    };
+                    // ! Debug for SSA
+                    // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("11dd4578015c5c9a50eb85cd16cf2554b2e8a8c624bdf1659a41bab522186cd4")) { 
+                    //     TracerEip3155::new(
+                    //         Box::new(std::io::sink()),
+                    //     ).without_summary()
+                    // } else {
+                    //     TracerEip3155::new(
+                    //         Box::new(std::fs::File::create("tracer_re_execution.json").unwrap()),
+                    //     )
+                    // };
 
                     // Normal execution path
                     let mut evm = Evm::builder()
