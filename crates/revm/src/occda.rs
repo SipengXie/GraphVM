@@ -6,7 +6,7 @@ use crate::graph_wrapper::GraphWrapper;
 use crate::inspector_handle_register;
 use crate::inspectors::NoOpInspector;
 use crate::journaled_state::AccessType;
-/// OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
+/// OCCDA (Optimistic Concurrent Contract Deterministic Aborts)
 ///
 /// This module implements parallel execution of EVM transactions using optimistic concurrency control.
 /// The main idea is to:
@@ -27,9 +27,9 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
+use revm_primitives::SpecId::LONDON;
 use revm_primitives::{
-    Account, AccountStatus, Bytes, EVMError, EvmStorageSlot, ExecutionResult, HaltReason,
-    LatestSpec, Output, SuccessReason, U256,
+    Account, AccountStatus, EVMError, EvmStorageSlot, U256,
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
