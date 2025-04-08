@@ -11,15 +11,16 @@ This guide will walk you through setting up and running parallel tests for the A
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-2. Clone the Altius-REVM repository and checkout the `reth-profiler` branch:
+2. Clone the Altius-REVM repository and checkout the `alpha_release` branch:
 ```bash
 git clone https://github.com/Altius-Labs/revm.git
 cd revm
-git checkout reth-profiler
+git checkout alpha_release
 ```
 
 3. Clone the altius-benchtools repository:
 ```bash
+cd ..
 git clone https://github.com/Altius-Labs/altius-benchtools.git
 ```
 
@@ -132,6 +133,7 @@ More documentation can be found in the [altius-benchtools](https://github.com/Al
 ```bash
 cd ../revm
 cargo build --release --package revme
+export RUST_MIN_STACK=8388608     # Set the minimum stack size in case of stack overflow
 ```
 
 2. Run parallel tests using the generated transaction data:
