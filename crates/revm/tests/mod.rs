@@ -8,7 +8,7 @@ use revm::{
     db::{CacheDB, EmptyDB},
     Evm,
 };
-use revm_ssa::{logger::LsnType, FrameInput, SSALogEntry, SSALogger};
+use revm_ssa::{logger::LsnType, FrameInput, SSALogEntry};
 use revm_ssa_graph::{ExecutionMode, ExecutionTracer, SSAExecutor, SsaGraph};
 
 #[derive(Debug, Clone)]

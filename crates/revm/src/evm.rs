@@ -528,7 +528,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         if let Some(logger) = &self.context.evm.inner.ssa_logger {
             let mut ret = ReadWriteSet::default();
             // Add all first reads
-            for (key, _) in logger.get_first_reads() {
+            for (key, _) in logger.get_origin_reads() {
                 match key {
                     StorageKey::Slot(addr, slot) => {
                         ret.add_read(*addr, AccessType::StorageSlot(*slot))

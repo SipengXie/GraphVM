@@ -31,7 +31,7 @@ use revm_primitives::{
     fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256
 };
 use revm_ssa::logger::LsnType;
-use revm_ssa::{FrameInput, SSALogger, SSAOutput, StorageKey, StorageValue};
+use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
@@ -59,7 +59,7 @@ pub struct Occda {
     dag_store: Vec<Arc<RwLock<GraphWrapper>>>,
 
     /// reads_store
-    reads_store: Vec<HashMap<StorageKey, LsnType>>,
+    reads_store: Vec<HashMap<StorageKey, Vec<LsnType>>>,
 
     /// first_frame_input_store
     first_frame_input_store: Vec<Option<FrameInput>>,
@@ -106,7 +106,7 @@ impl Occda {
         if enable_ssa {
             self.to_re_execution_store = Vec::<Vec<LsnType>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
-            self.reads_store = Vec::<HashMap<StorageKey, LsnType>>::with_capacity(len);
+            self.reads_store = Vec::<HashMap<StorageKey, Vec<LsnType>>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
                 self.dag_store
@@ -427,7 +427,7 @@ impl Occda {
                                 let mut graph = graph_wrapper.write();
                                 graph.build(logs);
                             });
-                            let reads_raw_ptr = reads_ptr as *mut HashMap<StorageKey, LsnType>;
+                            let reads_raw_ptr = reads_ptr as *mut HashMap<StorageKey, Vec<LsnType>>;
                             unsafe {
                                 *reads_raw_ptr.add(idx) = logger.take_first_reads();
                             }
@@ -590,7 +590,7 @@ impl Occda {
         if enable_ssa {
             self.to_re_execution_store = Vec::<Vec<LsnType>>::with_capacity(len);
             self.dag_store = Vec::<Arc<RwLock<GraphWrapper>>>::with_capacity(len);
-            self.reads_store = Vec::<HashMap<StorageKey, LsnType>>::with_capacity(len);
+            self.reads_store = Vec::<HashMap<StorageKey, Vec<LsnType>>>::with_capacity(len);
             self.first_frame_input_store = Vec::<Option<FrameInput>>::with_capacity(len);
             for _ in 0..len {
                 self.to_re_execution_store.push(vec![]);
@@ -1027,7 +1027,7 @@ impl Occda {
     /// Returns an array of first read LSNs from the SSA logger
     /// Input is a HashMap<Address, HashSet<AccessType>> representing the read set
     fn get_storage_first_reads(
-        first_reads: &HashMap<StorageKey, LsnType>,
+        first_reads: &HashMap<StorageKey, Vec<LsnType>>,
         read_set: &Vec<(Address, AccessType)>,
     ) -> Vec<LsnType> {
         let mut result = Vec::new();
@@ -1040,11 +1040,11 @@ impl Occda {
                 AccessType::StorageSlot(slot) => first_reads.get(&StorageKey::Slot(*addr, *slot)),
                 _ => continue,
             };
-            if lsn.is_none() {
-                // eprintln!("Cannot find lsn for {:?}: {:?}, fall back to EVM re-execution.", addr, access_type);
+            if let Some(lsns) = lsn {
+                result.extend(lsns.clone());
+            } else {
                 return vec![];
             }
-            result.push(*lsn.unwrap());
         }
         result
     }

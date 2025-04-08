@@ -13,7 +13,7 @@ use revm_primitives::bitvec::vec::BitVec;
 use revm_primitives::Spec;
 use revm_primitives::{
     AccountInfo, AccountStatus, Address, AnalysisKind, Bytecode, Bytes, FixedBytes, HashMap,
-    HashSet, JumpTable, LegacyAnalyzedBytecode, Log, B256, U256,
+    JumpTable, LegacyAnalyzedBytecode, Log, B256, U256,
 };
 use std::cmp::min;
 use core::ops::Range;
@@ -127,7 +127,7 @@ pub struct SSALogger {
     // First reads of storage slots
     // records the first lsn of sload that read the slot
     // used for identifying storage conflicts
-    first_reads: HashMap<StorageKey, LsnType>,
+    origin_reads: HashMap<StorageKey, Vec<LsnType>>,
     // to record the latest lsn that modifies memory
     last_memory: LsnWithIndex,
     // to record the latest lsn that modifies return data buffer
@@ -157,26 +157,6 @@ pub struct SSALogger {
     gas_refund: Vec<(LsnWithIndex, i64)>,
 }
 
-#[derive(Clone, Debug)]
-pub struct SsaRwSet {
-    pub read_set: HashMap<StorageKey, LsnType>,
-    pub write_set: HashSet<StorageKey>,
-}
-
-impl SsaRwSet {
-    /// Get all storage keys in the read set
-    pub fn get_read_keys(&self) -> Vec<StorageKey> {
-        self.read_set.keys().cloned().collect()
-    }
-
-    pub fn new_with_write_set(write_set: HashSet<StorageKey>) -> Self {
-        Self {
-            read_set: HashMap::default(),
-            write_set,
-        }
-    }
-}
-
 impl SSALogger {
     fn get_entry_lsn(&mut self) -> LsnWithIndex {
         if self.contract_env.len() > 0 {
@@ -194,7 +174,7 @@ impl SSALogger {
             stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
             latest_transient_writes: HashMap::default(),
-            first_reads: HashMap::default(),
+            origin_reads: HashMap::default(),
             last_memory: (0, 0),
             last_return_data_buffer: (0, 0),
             last_interpreter_return: (0, 0),
@@ -220,7 +200,7 @@ impl SSALogger {
             stack_pool: vec![ShadowStack::new()],
             latest_writes: HashMap::default(),
             latest_transient_writes: HashMap::default(),
-            first_reads: HashMap::default(),
+            origin_reads: HashMap::default(),
             last_memory: (0, 0),
             last_return_data_buffer: (0, 0),
             last_interpreter_return: (0, 0),
@@ -1564,15 +1544,15 @@ impl SSALogger {
     #[inline(always)]
     pub fn log_sload(&mut self, opcode: u8, address: Address, index: U256, value: U256) {
         let lsn = self.current_lsn;
-
+        let key = StorageKey::Slot(address, index);
         let mut ssa_inputs = Vec::with_capacity(4);
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
         ssa_inputs.push(SSAInput::Storage(
-            StorageKey::Slot(address, index),
-            self.get_storage_def(StorageKey::Slot(address, index)),
+            key,
+            self.get_storage_def(key),
         ));
-        self.log_storage_read(StorageKey::Slot(address, index), lsn);
+        self.log_storage_read(key, lsn);
         ssa_inputs.push(input_account_status!(self, address)); // identify if it is created
         self.log_storage_read(StorageKey::AccountStatus(address), lsn);
 
@@ -1595,7 +1575,7 @@ impl SSALogger {
     ) {
         let lsn = self.current_lsn;
         let key = StorageKey::Slot(address, index);
-        let is_read = self.first_reads.contains_key(&key);
+        let is_read = self.origin_reads.contains_key(&key);
         let mut ssa_inputs = Vec::with_capacity(6);
         ssa_inputs.push(SSAInput::ContractEnv(self.get_entry_lsn()));
         ssa_inputs.push(pop_stack_or_const!(self, U256::from(index)));
@@ -1758,7 +1738,7 @@ impl SSALogger {
     #[inline(always)]
     pub fn log_storage_read(&mut self, key: StorageKey, lsn: LsnType) {
         if !self.latest_writes.contains_key(&key) {
-            self.first_reads.entry(key).or_insert(lsn);
+            self.origin_reads.entry(key).or_insert_with(Vec::new).push(lsn);
         }
     }
 
@@ -1839,12 +1819,12 @@ impl SSALogger {
         &self.latest_writes
     }
 
-    pub fn get_first_reads(&self) -> &HashMap<StorageKey, LsnType> {
-        &self.first_reads
+    pub fn get_origin_reads(&self) -> &HashMap<StorageKey, Vec<LsnType>> {
+        &self.origin_reads
     }
 
-    pub fn take_first_reads(&mut self) -> HashMap<StorageKey, LsnType> {
-        std::mem::take(&mut self.first_reads)
+    pub fn take_first_reads(&mut self) -> HashMap<StorageKey, Vec<LsnType>> {
+        std::mem::take(&mut self.origin_reads)
     }
 
     pub fn take_first_frame_input(&mut self) -> Option<FrameInput> {
@@ -1856,19 +1836,9 @@ impl SSALogger {
         self.logs.clear();
         self.stack_pool = vec![ShadowStack::new()];
         self.latest_writes.clear();
-        self.first_reads.clear();
+        self.origin_reads.clear();
     }
 
-    /// Get the read and write sets of storage accesses
-    /// Returns a tuple: (read_set, write_set)
-    /// read_set contains storage keys and their LSNs for first reads
-    /// write_set contains storage keys and their LSNs for latest writes
-    pub fn get_read_write_set(&self) -> SsaRwSet {
-        SsaRwSet {
-            read_set: self.first_reads.clone(),
-            write_set: self.latest_writes.keys().cloned().collect(),
-        }
-    }
 }
 
 /// Perform bytecode analysis.
