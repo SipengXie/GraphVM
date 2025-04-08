@@ -50,7 +50,10 @@ impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
         let origin_value = origin_value.as_slot().unwrap();
         let present_value = present_value.as_slot().unwrap();
         let is_read = u256_to_bool!(is_read).unwrap();
-
+        // TODO: origin_value和present_value存在原先index和目前index对不上的问题
+        // *如果对不上， 先检查是否为(0,0)，如果是，直接去get_state
+        // *如果不是(0,0)， 则去对应的LSN处排查，观察其写入的Index和当前Index是否一致
+        // *如果一致，则说明是重放，否则就是错误
         let sstore_result = SStoreResult {
             original_value: origin_value.clone(),
             present_value: present_value.clone(),
