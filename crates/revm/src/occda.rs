@@ -4,7 +4,7 @@ use crate::db::{parallel_db::ParallelDB, Database, DatabaseCommit, DatabaseRef};
 use crate::evm::Evm;
 use crate::graph_wrapper::GraphWrapper;
 use crate::inspector_handle_register;
-use crate::inspectors::NoOpInspector;
+use crate::inspectors::{NoOpInspector, TracerEip3155};
 use crate::journaled_state::AccessType;
 /// OCCDA (Optimistic Concurrent Contract Deterministic Aborts)
 ///
@@ -29,7 +29,7 @@ use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::SpecId::LONDON;
 use revm_primitives::{
-    Account, AccountStatus, EVMError, EvmStorageSlot, U256,
+    fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256
 };
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
@@ -353,15 +353,15 @@ impl Occda {
                             }
                         }
                         // ! Debug for SSA
-                        // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) { 
-                        //     TracerEip3155::new(
-                        //         Box::new(std::io::sink()),
-                        //     ).without_summary()
-                        // } else {
-                        //     TracerEip3155::new(
-                        //         Box::new(std::fs::File::create("tracer_parallel_prefetch.json").unwrap()),
-                        //     )
-                        // };
+                        let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("8d40561b1e918cb7c7849c43bf48a2e0fcc3eda80fd0f8a24f32daad9f7a2e55")) { 
+                            TracerEip3155::new(
+                                Box::new(std::io::sink()),
+                            ).without_summary()
+                        } else {
+                            TracerEip3155::new(
+                                Box::new(std::fs::File::create("tracer_parallel_prefetch_8d40.json").unwrap()),
+                            )
+                        };
                         
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time
@@ -372,7 +372,7 @@ impl Occda {
                             let evm_inside = Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(NoOpInspector)
+                                .with_external_context(_tracer_inspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .with_ssa_logger()
@@ -383,7 +383,7 @@ impl Occda {
                             Evm::builder()
                                 .with_ref_db(db_ref)
                                 .modify_env(|env| env.clone_from(&task.env))
-                                .with_external_context(NoOpInspector)
+                                .with_external_context(_tracer_inspector)
                                 .with_spec_id(task.spec_id)
                                 .append_handler_register(inspector_handle_register)
                                 .build()
