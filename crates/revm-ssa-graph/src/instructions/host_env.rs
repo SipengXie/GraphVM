@@ -1,10 +1,10 @@
 use crate::as_usize_saturated;
 use crate::{get_ssa_output_stack_or_const, ExecutionContext, ExecutionError, Result, SsaGraph};
 use revm_primitives::db::DatabaseRef;
-use revm_primitives::{Spec, U256};
+use revm_primitives::U256;
 use revm_ssa::{SSAInput, SSALogEntry, SSAOutput};
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute host environment operation
     #[inline(always)]
     pub fn execute_host_env(

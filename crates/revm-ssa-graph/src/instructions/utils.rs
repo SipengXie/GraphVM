@@ -211,16 +211,16 @@ macro_rules! get_return_data_buffer {
 /// Macro for getting call input from SSAInput::CallInput
 /// Returns the call input value if input is valid CallInput, otherwise returns an ExecutionError
 #[macro_export]
-macro_rules! get_call_input {
+macro_rules! get_frame_input {
     ($graph:expr, $input:expr, $first_call_input:expr) => {
         match $input {
-            SSAInput::CallInput((lsn, index)) => {
+            SSAInput::FrameInput((lsn, index)) => {
                 if lsn == 0 {
                     &Box::new($first_call_input)
                 } else {
                     let dep_node = $graph.get_node(lsn)?;
                     match &dep_node.outputs[index as usize] {
-                        SSAOutput::CallInput(input) => input,
+                        SSAOutput::FrameInput(input) => input,
                         _ => {
                             return Err(ExecutionError::ExecutionError(
                                 ExecutionError::EXPECTED_CALL_INPUT.to_string(),
@@ -332,7 +332,7 @@ macro_rules! get_constant_i64 {
 
 /// Re-export macros for convenience
 pub use {
-    as_u64_saturated, as_usize_saturated, get_call_input, get_constant_i64, get_contract_env,
+    as_u64_saturated, as_usize_saturated, get_frame_input, get_constant_i64, get_contract_env,
     get_gas_cost, get_gas_refund, get_interpreter_result, get_memory, get_return_data_buffer,
     get_storage_value, u256_to_bool,
 };

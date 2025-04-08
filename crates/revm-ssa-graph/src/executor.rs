@@ -1,11 +1,11 @@
-use std::{marker::PhantomData, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 
 use crate::{
     context::ExecutionContext, graph::SsaGraph, tracer::ExecutionTracer, ExecutionError, Result,
 };
-use rayon::ThreadPool;
-use revm_primitives::{db::DatabaseRef, Env, Spec};
-use revm_ssa::{logger::LsnType, SSACallInput, SSACreateInput, SSAInstructionResult, SSALogEntry};
+
+use revm_primitives::{db::DatabaseRef, spec_to_generic, Env, FixedBytes, Spec, SpecId};
+use revm_ssa::{logger::LsnType, FrameInput, SSAInstructionResult, SSALogEntry};
 
 /// Execution mode
 #[derive(Debug, Clone, PartialEq)]
@@ -16,99 +16,53 @@ pub enum ExecutionMode {
     Partial(Vec<LsnType>),
 }
 
-// #[repr(align(64))] // Force cache line alignment
-// struct PaddedAtomicU64(AtomicU64);
-
-// struct AtomicBitMap {
-//     bits: Vec<PaddedAtomicU64> // Each AtomicU64 occupies a full cache line
-// }
-
-// impl AtomicBitMap {
-//     /// Create new bitmap with specified initialization state
-//     /// - max_lsn: Maximum LSN to support
-//     /// - initial_state: true = all bits set (mark as completed), false = all bits cleared
-//     fn new(max_lsn: LsnType, initial_state: bool) -> Self {
-//         let size = (max_lsn as usize + 63) / 64;
-//         let init_value = if initial_state { u64::MAX } else { 0 };
-
-//         let bits = (0..size)
-//             .map(|_| PaddedAtomicU64(AtomicU64::new(init_value)))
-//             .collect();
-
-//         Self { bits }
-//     }
-
-//     /// Atomically mark an LSN as completed
-//     #[inline(always)]
-//     fn mark(&self, lsn: LsnType) {
-//         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
-//         if let Some(atomic) = self.bits.get(idx) {
-//             // Modifying bits[idx] won't affect other elements in bits
-//             atomic.0.fetch_or(mask, Ordering::Release);
-//         }
-//     }
-
-//     /// Atomically clear a bit (set to 0)
-//     #[inline(always)]
-//     fn unmark(&self, lsn: LsnType) {
-//         let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
-//         if let Some(atomic) = self.bits.get(idx) {
-//             atomic.0.fetch_and(!mask, std::sync::atomic::Ordering::Release);
-//         }
-//     }
-// }
-
 /// SSA Executor
-pub struct SSAExecutor<'a, DB, SPEC>
+pub struct SSAExecutor<'a, DB>
 where
     DB: DatabaseRef + Send + Sync + 'a,
     DB::Error: Send + Sync,
-    SPEC: Spec + Send + Sync,
 {
     /// Execution context
-    pub context: Arc<ExecutionContext<'a, DB, SPEC>>,
+    pub context: Arc<ExecutionContext<'a, DB>>,
     /// Dependency graph
     pub graph: Arc<SsaGraph>,
     /// Execution tracer (optional)
     pub tracer: Option<ExecutionTracer>,
     /// Execution mode
     pub mode: ExecutionMode,
-    /// Hardfork specification
-    pub spec: PhantomData<SPEC>,
-    // thread_pool: Option<ThreadPool>,
-
-    // completed_nodes: Arc<AtomicBitMap>,
 }
 
-impl<'a, DB, SPEC> SSAExecutor<'a, DB, SPEC>
+impl<'a, DB> SSAExecutor<'a, DB>
 where
     DB: DatabaseRef + Send + Sync + 'a,
     DB::Error: Send + Sync,
-    SPEC: Spec + Send + Sync,
 {
-    pub fn new(
+    pub fn new<SPEC: Spec>(
         graph: Arc<SsaGraph>,
         db: DB,
         env: &'a Env,
-        _thread_pool: Option<ThreadPool>,
-        first_call_input: Option<SSACallInput>,
-        first_create_input: Option<SSACreateInput>,
+        first_frame_input: Option<FrameInput>,
     ) -> Self {
-        // let max_lsn = graph.num_nodes();
         Self {
-            context: Arc::new(ExecutionContext::new(
+            context: Arc::new(ExecutionContext::new::<SPEC>(
                 env,
                 db,
-                first_call_input,
-                first_create_input,
+                first_frame_input,
             )),
             graph,
             tracer: None,
             mode: ExecutionMode::Full,
-            spec: PhantomData,
-            // thread_pool,
-            // completed_nodes: Arc::new(AtomicBitMap::new(max_lsn as LsnType, false)),
         }
+    }
+
+    pub fn new_with_spec(
+        graph: Arc<SsaGraph>,
+        db: DB,
+        env: &'a Env,
+        first_frame_input: Option<FrameInput>,
+        spec_id: SpecId,
+    ) -> Self {
+        spec_to_generic!(spec_id, Self::new::<SPEC>(graph, db, env, first_frame_input))
     }
 
     /// Set execution mode
@@ -132,221 +86,84 @@ where
     pub fn into_tracer(self) -> Option<ExecutionTracer> {
         self.tracer
     }
+    
+    #[inline(always)]
+    pub fn execute_with_spec(&mut self, spec_id: SpecId, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
+        spec_to_generic!(spec_id, self.execute::<SPEC>(_tx_hash))
+    }
 
     /// Execute the entire graph
     #[inline(always)]
-    pub fn execute(&mut self) -> Result<(usize, std::time::Duration)> {
+    pub fn execute<SPEC:Spec>(&mut self, _tx_hash: FixedBytes<32>) -> Result<(usize, std::time::Duration)> {
         let graph = unsafe { Self::get_mut_graph(&self.graph) };
 
-        let nodes_to_execute = match &self.mode {
+        let mut nodes_to_execute = match &self.mode {
             ExecutionMode::Full => self.graph.topological_sort()?,
             ExecutionMode::Partial(start_lsns) => {
-                let mut reachable_nodes = Vec::new();
+                let mut reachable_lsns = Vec::new();
                 let mut seen_lsns = std::collections::HashSet::new();
                 for &start_lsn in start_lsns {
                     for node_index in self.graph.get_reachable_nodes(start_lsn)? {
                         let node = self.graph.get_node_by_index(node_index)?;
                         if seen_lsns.insert(node.lsn) {
-                            reachable_nodes.push(node_index);
+                            reachable_lsns.push(node.lsn);
                         }
                     }
                 }
-                reachable_nodes
+                reachable_lsns
             }
         };
 
+        // ! Used for SSA unit test
         if let Some(tracer) = &mut self.tracer {
             let graph = self.graph.clone();
-            for node_index in &nodes_to_execute {
-                let node = graph.get_node_by_index(*node_index)?;
-                let outputs = graph.get_original_outputs(node.lsn)?.unwrap();
-                tracer.record_graph(node.lsn, outputs.into(), node.opcode);
+            for &lsn in &nodes_to_execute {
+                let node = graph.get_node(lsn)?;
+                let outputs = graph.get_original_outputs(lsn)?.unwrap();
+                tracer.record_graph(lsn, outputs.into(), node.opcode);
             }
         }
 
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
-        for node_index in nodes_to_execute {
-            let node = graph.get_node_by_index_mut(node_index);
-            Self::execute_node(node, &self.graph, &self.context)?;
+        nodes_to_execute.sort();
+        
+        for lsn in nodes_to_execute {
+            let node = graph.get_node_mut(lsn)?;
+            Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
         }
+       
+        // ! Debug for SSA
+        // let first_lsn = nodes_to_execute[0];
+        // let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
+        
+        // for lsn in first_lsn..=last_lsn {
+        //     if let Ok(node) = graph.get_node(lsn) {
+        //         if nodes_to_execute.contains(&lsn) {
+        //             let node = graph.get_node_mut(lsn)?;
+        //             Self::execute_node::<SPEC>(node, &self.graph, &self.context)?;
+        //             if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+        //                 eprintln!("after execute node: {}", node);
+        //             }
+        //         } else {
+        //             if _tx_hash == fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4") {
+        //                 eprintln!("no re-execute node: {}", node);
+        //             }
+        //         }
+        //     }
+        // }
+        
         let execute_duration = execute_start.elapsed();
 
         Ok((len, execute_duration))
     }
 
-    // pub fn execute_parallel_batches(&mut self) -> Result<std::time::Duration> {
-    //     let threshold = 1024;
-    //     // const PARALLEL_THRESHOLD : usize = 1024;
-
-    //     let layers = self.graph.execution_layers()?;
-    //     let thread_pool = self.thread_pool.as_ref().unwrap();
-    //     let thread_number = thread_pool.current_num_threads();
-    //     let graph = unsafe { Self::get_mut_graph(&self.graph) };
-
-    //     let start = Instant::now();
-    //     for (_layer_idx, layer) in layers.iter().enumerate() {
-    //         let layer_size = layer.len();
-    //         let layer_start = Instant::now();
-
-    //         if layer_size <= threshold {
-    //             break; // ! FOR TEST CASE
-    //             // for node in layer {
-    //             //     let exec_result = Self::execute_node(node, graph, &self.context);
-    //             //     if exec_result.is_err() {
-    //             //         panic!("Execution failed: {:?}", exec_result.err().unwrap());
-    //             //     }
-    //             // }
-    //         } else {
-    //             let batch_size = self.dynamic_batch_size(layer.len(), thread_number);
-    //             // thread_pool.install(|| {
-    //             //     layer.par_chunks(batch_size).for_each(|batch| {
-    //             //         let graph = unsafe { Self::get_mut_graph(&self.graph) };
-    //             //         for node in batch {
-    //             //             let exec_result = Self::execute_node(node, graph, &self.context);
-    //             //             if exec_result.is_err() {
-    //             //                 panic!("Execution failed: {:?}", exec_result.err().unwrap());
-    //             //             }
-    //             //         }
-    //             //     })
-    //             // });
-
-    //             for node in layer {
-    //                 let exec_result = Self::execute_node(node, graph, &self.context);
-    //                 if exec_result.is_err() {
-    //                     panic!("Execution failed: {:?}", exec_result.err().unwrap());
-    //                 }
-    //             }
-    //             let layer_duration = layer_start.elapsed();
-    //             println!("Layer {}: size = {}, batch_size = {}, thread_number = {}, execution time = {:?}", _layer_idx, layer_size, batch_size, thread_number, layer_duration);
-    //         }
-
-    //     }
-    //     let duration = start.elapsed();
-    //     Ok(duration)
-    // }
-
-    // // Calculate dynamic batch size based on layer size
-    // #[inline(always)]
-    // fn dynamic_batch_size(&self, layer_len: usize, thread_number: usize) -> usize {
-
-    //     // let min_per_thread = 4;
-    //     // let max_per_thread = 256;
-
-    //     let base_size = (layer_len + thread_number - 1) / thread_number;
-
-    //     base_size
-    //         // .next_power_of_two()
-    //         // .clamp(min_per_thread, max_per_thread)
-    // }
-
-    // pub fn execute_parallel(&mut self) -> Result<std::time::Duration> {
-    //     // Get nodes to execute based on execution mode
-    //     let nodes_to_execute: Vec<_> = match &self.mode {
-    //         ExecutionMode::Full => self.graph.topological_sort()?,
-    //         ExecutionMode::Partial(start_lsns) => {
-    //             // Get all nodes that need to be executed using BFS
-    //             let mut reachable_nodes = Vec::new();
-    //             let mut seen_lsns = std::collections::HashSet::new();
-    //             for &start_lsn in start_lsns {
-    //                 for node in self.graph.get_reachable_nodes(start_lsn)? {
-    //                     if seen_lsns.insert(node.lsn) {
-    //                         reachable_nodes.push(node);
-    //                     }
-    //                 }
-    //             }
-
-    //             let max_lsn = self.graph.num_nodes();
-    //             let bitmap = AtomicBitMap::new(max_lsn as LsnType, true);
-    //             // Mark all non-reachable nodes as completed
-    //             let reachable_lsns: HashSet<_> = reachable_nodes.iter().map(|node| node.lsn).collect();
-    //             for lsn in reachable_lsns {
-    //                 bitmap.unmark(lsn);
-    //             }
-    //             self.completed_nodes = Arc::new(bitmap);
-    //             reachable_nodes
-    //         }
-    //     }.into_iter().collect();
-
-    //     // Preprocess dependencies for all nodes
-    //     let nodes_with_masks: Vec<_> = nodes_to_execute.iter()
-    //         .map(|node| {
-    //             // Generate dependency mask for this node
-    //             let mut deps_mask = vec![0u64; self.completed_nodes.bits.len()];
-    //             for input in &node.inputs {
-    //                 let lsn_vec = SsaGraph::get_lsn_from_input(input);
-    //                 for lsn in lsn_vec {
-    //                     if lsn == 0 { continue; }
-    //                     let (idx, mask) = (lsn as usize / 64, 1u64 << (lsn % 64));
-    //                     if let Some(bits) = deps_mask.get_mut(idx) {
-    //                         *bits |= mask;
-    //                     }
-    //                 }
-    //             }
-    //             (node, deps_mask)
-    //         })
-    //         .collect();
-
-    //     let graph = unsafe { Self::get_mut_graph(&self.graph) };
-    //     let thread_pool = self.thread_pool.as_ref().unwrap();
-
-    //     let start = Instant::now();
-    //     thread_pool.install(|| {
-    //         nodes_with_masks.into_iter().for_each(|(node, deps_mask)| {
-    //             // Use bitmask for batch checking
-    //             // Wait for all dependencies to complete with spinning
-    //             // let wait_start = Instant::now();
-    //             while {
-    //                 let mut all_ready = true;
-    //                 for (idx, mask) in deps_mask.iter().enumerate() {
-    //                     if *mask != 0 && (self.completed_nodes.bits[idx].0.load(Ordering::Relaxed) & mask) != *mask {
-    //                         all_ready = false;
-    //                         break;
-    //                     }
-    //                 }
-    //                 !all_ready
-    //             } {
-    //                 std::hint::spin_loop();
-    //             }
-    //             // let wait_duration = wait_start.elapsed();
-    //             // histogram!("revm.ssa.executor.wait_time", wait_duration);
-
-    //             // let execute_start = Instant::now();
-    //             let exec_result = Self::execute_node(node, graph, &self.context);
-    //             // let execute_duration = execute_start.elapsed();
-    //             // histogram!("revm.ssa.executor.execute_time", execute_duration);
-
-    //             if exec_result.is_err() {
-    //                 panic!("Execution failed: {:?}", exec_result.err().unwrap());
-    //             }
-
-    //             // let set_result_start = Instant::now();
-    //             self.completed_nodes.mark(node.lsn);
-    //             // let set_result_duration = set_result_start.elapsed();
-    //             // histogram!("revm.ssa.executor.set_result_time", set_result_duration);
-    //         })
-    //     });
-    //     let duration = start.elapsed();
-
-    //     if let Some(tracer) = &mut self.tracer {
-    //         let graph = self.graph.clone();
-    //         for node in &nodes_to_execute {
-    //             let outputs = graph.get_original_outputs(node.lsn)?.unwrap();
-    //             tracer.record_graph(node.lsn, outputs.into(), node.opcode);
-    //         }
-    //     }
-    //     self.thread_pool.as_ref().unwrap().spawn(move || {
-    //         drop(nodes_to_execute);
-    //     });
-    //     Ok(duration)
-    // }
-
     /// Unsafely get mutable reference to context
     #[inline(always)]
     unsafe fn get_mut_context(
-        context: &Arc<ExecutionContext<'a, DB, SPEC>>,
-    ) -> &'a mut ExecutionContext<'a, DB, SPEC> {
-        &mut *(Arc::as_ptr(context) as *mut ExecutionContext<'a, DB, SPEC>)
+        context: &Arc<ExecutionContext<'a, DB>>,
+    ) -> &'a mut ExecutionContext<'a, DB> {
+        &mut *(Arc::as_ptr(context) as *mut ExecutionContext<'a, DB>)
     }
 
     /// Unsafely get mutable reference to graph
@@ -357,10 +174,10 @@ where
 
     /// Execute operation based on opcode
     #[inline(always)]
-    fn execute_node(
+    fn execute_node<SPEC:Spec>(
         node: &mut SSALogEntry,
         graph: &SsaGraph,
-        context: &Arc<ExecutionContext<'a, DB, SPEC>>,
+        context: &Arc<ExecutionContext<'a, DB>>,
     ) -> Result<()> {
         let context = unsafe { Self::get_mut_context(context) };
         match node.opcode {
@@ -427,7 +244,7 @@ where
             0x52 => context.execute_mstore(node, graph),  // MSTORE
             0x53 => context.execute_mstore8(node, graph), // MSTORE8
             0x54 => context.execute_sload(node, graph),   // SLOAD
-            0x55 => context.execute_sstore(node, graph),  // SSTORE
+            0x55 => context.execute_sstore::<SPEC>(node, graph),  // SSTORE
             0x56 => context.execute_jump(node, graph),    // JUMP
             0x57 => context.execute_jumpi(node, graph),   // JUMPI
             0x58 => Ok(()),                               // PC
@@ -455,7 +272,7 @@ where
             0xD8 => context.execute_call_return(node, graph),       // CALL_RETURN
             0xD9 => context.execute_insert_call_outcome(node, graph), // INSERT_CALL_OUTCOME
             0xDA => context.execute_deduct_caller(node, graph),     // DEDUCT_CALLER
-            0xDB => context.execute_refund_gas(node, graph),        // REFUND_GAS
+            0xDB => context.execute_refund_gas::<SPEC>(node, graph),        // REFUND_GAS
             0xDC => context.execute_reward_beneficiary(node, graph), // REWARD_BENEFICIARY
 
             // System Operations (0xF0-0xFF)

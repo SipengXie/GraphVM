@@ -98,7 +98,7 @@ impl ExecutionTracer {
             (SSAOutput::Jump(o1), SSAOutput::Jump(o2)) => o1 == o2,
 
             // Compare call frames
-            (SSAOutput::CallInput(f1), SSAOutput::CallInput(f2)) => {
+            (SSAOutput::FrameInput(f1), SSAOutput::FrameInput(f2)) => {
                 f1.caller == f2.caller
                     && f1.target_address == f2.target_address
                     && f1.input == f2.input
@@ -110,14 +110,6 @@ impl ExecutionTracer {
             // Compare call outcomes
             (SSAOutput::CallOutcome(o1), SSAOutput::CallOutcome(o2)) => {
                 o1.result == o2.result && o1.ret_range == o2.ret_range
-            }
-
-            // Compare create frames
-            (SSAOutput::CreateInput(f1), SSAOutput::CreateInput(f2)) => {
-                f1.caller == f2.caller
-                    && f1.value == f2.value
-                    && f1.init_code == f2.init_code
-                    && f1.scheme == f2.scheme
             }
 
             // Compare create outcomes
@@ -138,13 +130,13 @@ impl ExecutionTracer {
 
             // Compare contract environment
             (SSAOutput::ContractEnv(e1), SSAOutput::ContractEnv(e2)) => {
-                e1.target_address == e2.target_address
-                    && e1.caller == e2.caller
-                    && e1.call_value == e2.call_value
-                    && e1.input == e2.input
+                e1.frame_input.target_address == e2.frame_input.target_address
+                    && e1.frame_input.caller == e2.frame_input.caller
+                    && e1.frame_input.transfer_value == e2.frame_input.transfer_value
+                    && e1.frame_input.input == e2.frame_input.input
                     && e1.bytecode == e2.bytecode
                     && e1.hash == e2.hash
-                    && e1.bytecode_address == e2.bytecode_address
+                    && e1.frame_input.bytecode_address == e2.frame_input.bytecode_address
             }
 
             // Compare gas refund

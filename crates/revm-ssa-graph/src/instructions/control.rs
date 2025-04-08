@@ -2,10 +2,10 @@ use crate::{
     as_usize_saturated, get_memory, get_ssa_output_stack_or_const, ExecutionContext,
     ExecutionError, Result, SsaGraph,
 };
-use revm_primitives::{db::DatabaseRef, Bytes, Spec};
+use revm_primitives::{db::DatabaseRef, Bytes};
 use revm_ssa::{SSAInput, SSAInstructionResult, SSAInterpreterResult, SSALogEntry, SSAOutput};
 
-impl<'a, DB: DatabaseRef + Send + Sync, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
+impl<'a, DB: DatabaseRef + Send + Sync> ExecutionContext<'a, DB> {
     /// Execute JUMP operation
     #[inline(always)]
     pub fn execute_jump(&self, node: &mut SSALogEntry, graph: &SsaGraph) -> Result<()> {

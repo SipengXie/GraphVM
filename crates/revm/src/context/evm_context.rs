@@ -329,10 +329,10 @@ impl<DB: Database> EvmContext<DB> {
         if let Some(logger) = self.get_mut_logger() {
             let call_intput = convert_call_input(&inputs);
             logger.log_make_call_frame(
-                call_intput,
+                call_intput.clone(),
                 caller_account.info.clone(),
                 target_account.info.clone(),
-                Some(convert_contract_env(&contract)),
+                Some(convert_contract_env(&contract, call_intput)),
                 false,
                 None,
             );
@@ -437,12 +437,12 @@ impl<DB: Database> EvmContext<DB> {
         let caller_account = self.load_account(inputs.caller)?.clone();
         let target_account = self.load_account(created_address)?.clone();
         if let Some(logger) = self.get_mut_logger() {
+            let create_input = convert_create_input(&inputs);
             logger.log_make_create_frame(
-                convert_create_input(&inputs),
                 caller_account.info.clone(),
                 target_account.info.clone(),
                 target_account.status,
-                convert_contract_env(&contract),
+                convert_contract_env(&contract, create_input),
             );
         };
         let mut interpreter = Interpreter::new(contract, inputs.gas_limit, false);

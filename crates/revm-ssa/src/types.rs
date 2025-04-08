@@ -1,5 +1,5 @@
 use crate::{
-    call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome},
+    call_types::{FrameInput, SSACallOutcome, SSACreateOutcome},
     logger::{LsnType, LsnWithIndex},
     SSAInterpreterResult,
 };
@@ -65,22 +65,13 @@ pub struct MemoryDep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ContractEnv {
-    /// Contracts data
-    pub input: Bytes,
     /// Bytecode contains contract code, size of original code, analysis with gas block and jump table.
     /// Note that current code is extended with push padding and STOP at end.
     pub bytecode: Bytecode,
     /// Bytecode hash for legacy. For EOF this would be None.
     pub hash: Option<B256>,
-    /// Target address of the account. Storage of this address is going to be modified.
-    pub target_address: Address,
-    /// Address of the account the bytecode was loaded from. This can be different from target_address
-    /// in the case of DELEGATECALL or CALLCODE
-    pub bytecode_address: Option<Address>,
-    /// Caller of the EVM.
-    pub caller: Address,
-    /// Value send to contract from transaction or from CALL opcodes.
-    pub call_value: U256,
+    /// FrameInput of this contractEnv
+    pub frame_input: FrameInput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
@@ -141,8 +132,7 @@ pub enum SSAInput {
     CallOutcome(LsnWithIndex),
     CreateOutcome(LsnWithIndex),
     MemorySizeChange(LsnWithIndex),
-    CreateInput(LsnWithIndex),
-    CallInput(LsnWithIndex),
+    FrameInput(LsnWithIndex),
     ContractEnv(LsnWithIndex),
     GasCost(LsnWithIndex),
     GasRefund(LsnWithIndex),
@@ -167,9 +157,8 @@ pub enum SSAOutput {
     ReturnDataBuffer(Bytes),
     InterpreterResult(SSAInterpreterResult),
     MemorySize(usize),
-    CreateInput(Box<SSACreateInput>),
     CreateOutcome(Box<SSACreateOutcome>),
-    CallInput(Box<SSACallInput>),
+    FrameInput(Box<FrameInput>),
     CallOutcome(Box<SSACallOutcome>),
     Log(Box<Log>),
     ContractEnv(Box<ContractEnv>),

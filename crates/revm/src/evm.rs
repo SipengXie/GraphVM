@@ -136,21 +136,6 @@ impl<'a, EXT, DB: Database> Evm<'a, EXT, DB> {
             // ! recover ssa logger from frame if it has one, it will return to the frame we back to the frame logic
             recover_ssa_logger_from_frame!(self, stack_frame);
 
-            // !!!
-            if let Some(logger) = &self.context.evm.ssa_logger {
-                let js_depth = self.context.evm.journaled_state.depth;
-                let logger_stack_depth = logger.stack_pool.len();
-
-                if js_depth != logger_stack_depth - 1 {
-                    assert!(
-                        js_depth == logger_stack_depth,
-                        "Depth mismatch: journaled_state.depth={}, logger.stack_pool.len()={}",
-                        js_depth,
-                        logger_stack_depth
-                    );
-                }
-            }
-
             // Take error and break the loop, if any.
             // This error can be set in the Interpreter when it interacts with the context.
             self.context.evm.take_error()?;
@@ -462,13 +447,11 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 }
             }
         };
-
         // Starts the main running loop.
         let mut result = match first_frame_or_result {
             FrameOrResult::Frame(first_frame) => self.run_the_loop(first_frame)?,
             FrameOrResult::Result(result) => result,
         };
-
         let ctx = &mut self.context;
 
         // handle output of call/create calls.
@@ -478,10 +461,16 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
 
         let post_exec = self.handler.post_execution();
         // calculate final refund and add EIP-7702 refund to gas.
-        post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
         // Reimburse the caller
         if ctx.evm.inner.ssa_logger.is_some() {
+            let effective_gas_price = ctx.evm.env.effective_gas_price();
+            let origin_gas_remaining = result.gas().remaining();
+            let origin_gas_refunded = result.gas().refunded(); // original refund
+            let gas_limit = ctx.evm.env.tx.gas_limit;
+            post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
             post_exec.reimburse_caller(ctx, result.gas())?;
+            let computed_gas_remaining = result.gas().remaining();
+            let computed_gas_refunded = result.gas().refunded();
 
             let after_account = ctx
                 .evm
@@ -489,19 +478,20 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
                 .journaled_state
                 .account(ctx.evm.inner.env.tx.caller);
 
-            let effecive_gas_prices = ctx.evm.env.effective_gas_price();
-            let gas_remaining = result.gas().remaining();
-            let gas_refunded = result.gas().refunded();
-
             let logger = ctx.evm.inner.ssa_logger.as_mut().unwrap();
             logger.log_refund_gas(
                 ctx.evm.inner.env.tx.caller,
                 after_account.info.clone(),
-                effecive_gas_prices,
-                gas_remaining,
-                gas_refunded,
+                effective_gas_price,
+                origin_gas_remaining,
+                origin_gas_refunded, // original refund
+                computed_gas_remaining,
+                computed_gas_refunded,
+                eip7702_gas_refund,
+                gas_limit,
             );
         } else {
+            post_exec.refund(ctx, result.gas_mut(), eip7702_gas_refund);
             post_exec.reimburse_caller(ctx, result.gas())?;
         }
         // Reward beneficiary
@@ -544,7 +534,7 @@ impl<EXT, DB: Database> Evm<'_, EXT, DB> {
         if let Some(logger) = &self.context.evm.inner.ssa_logger {
             let mut ret = ReadWriteSet::default();
             // Add all first reads
-            for (key, _) in logger.get_first_reads() {
+            for (key, _) in logger.get_origin_reads() {
                 match key {
                     StorageKey::Slot(addr, slot) => {
                         ret.add_read(*addr, AccessType::StorageSlot(*slot))

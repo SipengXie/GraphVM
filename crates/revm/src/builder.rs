@@ -395,8 +395,8 @@ impl<'a, BuilderStage, EXT, DB: Database> EvmBuilder<'a, BuilderStage, EXT, DB> 
     }
 
     /// Sets ssa logger
-    pub fn with_ssa_logger(mut self, ssa_logger: SSALogger) -> Self {
-        self.context.evm.inner.ssa_logger = Some(ssa_logger);
+    pub fn with_ssa_logger(mut self) -> Self {
+        self.context.evm.inner.ssa_logger = Some(SSALogger::new());
         self
     }
 

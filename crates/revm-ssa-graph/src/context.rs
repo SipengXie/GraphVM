@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -10,45 +9,38 @@ use revm_primitives::{
     BLOCK_HASH_HISTORY, U256,
 };
 use revm_ssa::{
-    SSACallInput, SSACreateInput, SSAInstructionResult, SSAInterpreterResult, StorageKey,
+    FrameInput, SSAInstructionResult, SSAInterpreterResult, StorageKey,
     StorageValue,
 };
 
 use crate::{instructions::as_u64_saturated, ExecutionError, Result};
 
 /// Execution context
-pub struct ExecutionContext<'a, DB: DatabaseRef, SPEC: Spec> {
+pub struct ExecutionContext<'a, DB: DatabaseRef> {
     /// Environment
     env: Arc<&'a Env>,
     /// Database reference
     db: Arc<DB>,
     /// Virtual memory size
     memory_size: AtomicUsize,
-    /// Hardfork specification
-    spec: PhantomData<SPEC>,
     /// Precompiles
     precompiles: &'static Precompiles,
-    /// First call input
-    first_call_input: Option<SSACallInput>,
-    /// First create input
-    first_create_input: Option<SSACreateInput>,
+    /// First frame input
+    first_frame_input: Option<FrameInput>,
 }
 
-impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
-    pub fn new(
+impl<'a, DB: DatabaseRef> ExecutionContext<'a, DB> {
+    pub fn new<SPEC: Spec>(
         env: &'a Env,
         db: DB,
-        first_call_input: Option<SSACallInput>,
-        first_create_input: Option<SSACreateInput>,
+        first_frame_input: Option<FrameInput>,
     ) -> Self {
         Self {
             env: Arc::new(env),
             db: Arc::new(db),
             memory_size: AtomicUsize::new(0),
-            spec: PhantomData,
             precompiles: Precompiles::new(PrecompileSpecId::from_spec_id(SPEC::SPEC_ID)),
-            first_call_input,
-            first_create_input,
+            first_frame_input,
         }
     }
 
@@ -97,13 +89,8 @@ impl<'a, DB: DatabaseRef, SPEC: Spec> ExecutionContext<'a, DB, SPEC> {
     }
 
     #[inline(always)]
-    pub fn get_first_call_input(&self) -> Option<SSACallInput> {
-        self.first_call_input.clone()
-    }
-
-    #[inline(always)]
-    pub fn get_first_create_input(&self) -> Option<SSACreateInput> {
-        self.first_create_input.clone()
+    pub fn get_first_frame_input(&self) -> Option<FrameInput> {
+        self.first_frame_input.clone()
     }
 
     /// Get state value based on storage key

@@ -1,7 +1,7 @@
 use crate::{ExecutionError, Result};
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
-use revm_primitives::{ExecutionResult, HaltReason, HashMap, HashSet, Output, SuccessReason};
+use revm_primitives::{ExecutionResult, FixedBytes, HaltReason, HashMap, HashSet, Output, SuccessReason};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput};
 
@@ -18,7 +18,16 @@ pub struct SsaGraph {
     /// Last Return
     last_return: LsnType,
     /// Refund gas
-    gas_calc: LsnType,
+    pub gas_calc: LsnType,
+}
+
+impl std::fmt::Display for SsaGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for node in self.graph.raw_nodes() {
+            writeln!(f, "{:?}", node.weight)?;
+        }
+        Ok(())
+    }
 }
 
 impl SsaGraph {
@@ -42,19 +51,58 @@ impl SsaGraph {
     pub fn get_node_by_index(&self, index: NodeIndex) -> Result<&SSALogEntry> {
         Ok(&self.graph[index])
     }
+    /// Get all SSTORE nodes from the graph
+    ///
+    /// This function iterates through all storage write operations and
+    /// returns the nodes that correspond to SSTORE operations.
+    ///
+    /// # Returns
+    /// * `Result<Vec<&SSALogEntry>>` - A vector of all SSTORE nodes
+    #[inline(always)]
+    pub fn get_sstore_nodes(&self) -> Result<Vec<&SSALogEntry>> {
+        // Pre-allocate capacity to avoid reallocations
+        let mut sstore_nodes = Vec::with_capacity(self.storage_write.len());
+
+        // Iterate through all storage write operations
+        for lsn in &self.storage_write {
+            let node_idx = self.lsn_to_node[*lsn as usize];
+            let node = self.get_node_by_index(node_idx)?;
+            
+            // Check if the operation is SSTORE (opcode 0x55)
+            if node.opcode == 0x55 {
+                sstore_nodes.push(node);
+            }
+        }
+
+        Ok(sstore_nodes)
+    }
+
 
     /// Add a node
     #[inline(always)]
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
-        match entry.opcode {
-            op if is_storage_write!(op) => self.storage_write.push(lsn),
-            0xA0..=0xA4 => self.logs.push(lsn),
-            0xD5 | 0xD8 => self.last_return = lsn,
-            0xDB => self.gas_calc = lsn,
-            _ => {}
+        let op = entry.opcode;
+        if is_storage_write!(op) {
+            self.storage_write.push(lsn);
+        } 
+        
+        // Check if opcode is a LOG operation (LOG0-LOG4)
+        if (0xA0..=0xA4).contains(&op) {
+            self.logs.push(lsn);
+        } 
+        
+        // Track gas calculation operation
+        if op == 0xDB {
+            self.gas_calc = lsn; 
+        } 
+        
+        // Track return operations
+        if op == 0xD5 || op == 0xD8 || op == 0xD7 {
+            self.last_return = lsn;
         }
+        
         let node_idx = self.graph.add_node(entry);
 
         //The vector has enough capacity for the current LSN
@@ -88,8 +136,7 @@ impl SsaGraph {
                 }
             }
             SSAInput::MemorySizeChange(last_memory) => lsn_vec.push(last_memory.0),
-            SSAInput::CreateInput(source) => lsn_vec.push(source.0),
-            SSAInput::CallInput(source) => lsn_vec.push(source.0),
+            SSAInput::FrameInput(source) => lsn_vec.push(source.0),
             SSAInput::InterpreterResult(source) => lsn_vec.push(source.0),
             SSAInput::CallOutcome(source) => lsn_vec.push(source.0),
             SSAInput::CreateOutcome(source) => lsn_vec.push(source.0),
@@ -189,12 +236,17 @@ impl SsaGraph {
 
     /// Get topological sort
     #[inline(always)]
-    pub fn topological_sort(&self) -> Result<Vec<NodeIndex>> {
+    pub fn topological_sort(&self) -> Result<Vec<LsnType>> {
         let sorted_indices = toposort(&self.graph, None).map_err(|_| {
             ExecutionError::GraphError("Cycle detected in dependency graph".to_string())
         })?;
 
-        Ok(sorted_indices)
+        let mut sorted_lsns = Vec::with_capacity(sorted_indices.len());
+        for idx in sorted_indices {
+            sorted_lsns.push(self.graph[idx].lsn);
+        }
+
+        Ok(sorted_lsns)
     }
 
     /// Get mutable node
@@ -398,15 +450,22 @@ impl SsaGraph {
         Ok(layers)
     }
 
-    pub fn generate_result(&self, gas_limit: u64) -> Result<ExecutionResult> {
+    pub fn generate_result(&self, gas_limit: u64, _tx_hash: FixedBytes<32>) -> Result<ExecutionResult> {
         // 1. Get the result node, handle error cases early
         let result_node = self.get_node(self.last_return)?;
-        let output = result_node.outputs.get(0).ok_or_else(|| {
-            ExecutionError::GraphError("No output found in last return node".to_string())
+        // eprintln!("result_node: {:?}", result_node);
+        let output = result_node.outputs.iter().find_map(|output| {
+            match output {
+                SSAOutput::CallOutcome(outcome) => Some(SSAOutput::CallOutcome(outcome.clone())),
+                SSAOutput::CreateOutcome(outcome) => Some(SSAOutput::CreateOutcome(outcome.clone())),
+                SSAOutput::InterpreterResult(result) => Some(SSAOutput::InterpreterResult(result.clone())),
+                _ => None,
+            }
+        }).ok_or_else(|| {
+            ExecutionError::GraphError("No interpreter result found in last return node".to_string())
         })?;
-
+        // assert_ne!(self.gas_calc, 0);
         let gas_node = self.get_node(self.gas_calc)?;
-        eprintln!("gas_node: {:?}", gas_node);
         let gas_remaining = match &gas_node.outputs[1] {
             SSAOutput::Gas(gas) => *gas,
             _ => {
@@ -481,9 +540,29 @@ impl SsaGraph {
                     }),
                 }
             }
-            _ => Err(ExecutionError::GraphError(
+            SSAOutput::InterpreterResult(result) => {
+                let output = result.output.clone();
+                match result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Call(output),
+                    }),
+                    SSAInstructionResult::Revert => {
+                        Ok(ExecutionResult::Revert { gas_used, output })
+                    }
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    }),
+                }
+            }
+            _ => {
+                Err(ExecutionError::GraphError(
                 "Last return node is not a call or create outcome".to_string(),
-            )),
+            ))},
         }
     }
 }
