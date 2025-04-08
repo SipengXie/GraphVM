@@ -27,7 +27,7 @@ impl Cmd {
     /// Run statetest command.
     pub fn run(&self) -> Result<(), TestError> {
         if self.parallel {
-            println!("Running in parallel mode");
+            println!("========== Running in parallel mode ==========");
             run_parallel(
                 self.num_of_threads,
                 self.enable_ssa,
@@ -36,7 +36,7 @@ impl Cmd {
                 &self.test_file,
             )?;
         } else {
-            println!("Running in sequential mode");
+            println!("========== Running in sequential mode ==========");
             run_sequential(&self.test_file)?;
         }
 

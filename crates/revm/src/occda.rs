@@ -912,16 +912,16 @@ impl Occda {
         );
 
         println!(
-            "finished execute tasks size: {} with conflict rate: {:.2}%",
+            "\nFinished execute tasks size: {} with conflict rate: {:.2}%",
             result_store.len(),
             conflict_rate
         );
 
         // Log detailed timing breakdown for performance analysis
-        println!("prepare_time: {:?}", prepare_time);
-        println!("parallel_time: {:?}", parallel_time);
-        println!("seq_time: {:?}", seq_time);
-        println!("commit_time: {:?}", commit_time);
+        println!("- prepare time: {:?}", prepare_time);
+        println!("- parallel execution time: {:?}", parallel_time);
+        println!("- sequential execution time: {:?}", seq_time);
+        println!("- commit time: {:?}", commit_time);
         // Clean up resources in background to avoid blocking
         // This includes access tracker and task management queues
         self.thread_pool.spawn(move || {
@@ -931,33 +931,33 @@ impl Occda {
             drop(h_ready);
         });
         // Print both parallel and sequential stats at the end
-        println!("Parallel execution stats:");
-        let (hit_rate, hits, misses, db_time, cache_time, max_read, avg_read) = {
-            parallel_db.set_parallel_mode(true);
-            parallel_db.get_stats()
-        };
-        println!(
-            "  hit_rate: {:.2}%, hits: {}, misses: {}",
-            hit_rate, hits, misses
-        );
-        println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
-        println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
+        // println!("\nParallel execution stats:");
+        // let (hit_rate, hits, misses, db_time, cache_time, max_read, avg_read) = {
+        //     parallel_db.set_parallel_mode(true);
+        //     parallel_db.get_stats()
+        // };
+        // println!(
+        //     "  hit_rate: {:.2}%, hits: {}, misses: {}",
+        //     hit_rate, hits, misses
+        // );
+        // println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
+        // println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
 
-        println!("\nSequential execution stats:");
-        let (hit_rate, hits, misses, db_time, cache_time, max_read, avg_read) = {
-            parallel_db.set_parallel_mode(false);
-            parallel_db.get_stats()
-        };
-        println!(
-            "  hit_rate: {:.2}%, hits: {}, misses: {}",
-            hit_rate, hits, misses
-        );
-        println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
-        println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
-        println!(
-            "  seq_exec_size: {}, parallel_exec_size: {}",
-            seq_exec_size, parallel_exec_size
-        );
+        // println!("\nSequential execution stats:");
+        // let (hit_rate, hits, misses, db_time, cache_time, max_read, avg_read) = {
+        //     parallel_db.set_parallel_mode(false);
+        //     parallel_db.get_stats()
+        // };
+        // println!(
+        //     "  hit_rate: {:.2}%, hits: {}, misses: {}",
+        //     hit_rate, hits, misses
+        // );
+        // println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
+        // println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
+        // println!(
+        //     "  seq_exec_size: {}, parallel_exec_size: {}",
+        //     seq_exec_size, parallel_exec_size
+        // );
 
         Ok(())
     }

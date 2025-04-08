@@ -183,9 +183,10 @@ pub fn run_sequential(path: &PathBuf) -> Result<(), TestError> {
     }
     let elapsed = timer.elapsed();
 
-    println!("Total time: {:?}", elapsed);
-    println!("Execute time: {:?}", execute_time);
+    println!("\nExecute time: {:?}", execute_time);
     println!("Commit time: {:?}", commit_time);
+    println!("\nTotal time: {:?}", elapsed);
+    println!("TPS: {:?} tx/s", unit.transaction.len() as f64 / elapsed.as_secs_f64());
 
     // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
     // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
@@ -348,7 +349,8 @@ pub fn run_parallel(
         enable_ssa,
     );
     let after_main = std::time::Instant::now();
-    println!("Time after main: {:?}", after_main - total_start);
+    println!("\nTotal time: {:?}", after_main - total_start);
+    println!("TPS: {:?} tx/s", unit.transaction.len() as f64 / after_main.duration_since(total_start).as_secs_f64());
 
     // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
     // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
@@ -383,10 +385,10 @@ pub fn run_parallel(
         "\nState root: {:#?}",
         state_merkle_trie_root(state.cache.trie_account())
     );
-    println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
-    println!("You can use curl http://127.0.0.1:9090/metrics to view them");
-    println!("The metrics will be in standard Prometheus format");
-    std::thread::sleep(std::time::Duration::from_secs(60));
+    // println!("\nMetrics are available at http://127.0.0.1:9090/metrics");
+    // println!("You can use curl http://127.0.0.1:9090/metrics to view them");
+    // println!("The metrics will be in standard Prometheus format");
+    // std::thread::sleep(std::time::Duration::from_secs(60));
 
     Ok(())
 }

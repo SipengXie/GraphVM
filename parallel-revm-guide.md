@@ -78,7 +78,7 @@ mkdir -p ./data     # create a data directory for the test cases
 Simply add the `--erc20` flag to generate ERC20 transfer transactions:
 
 ```bash
-./target/release/generate pattern -y o2m -t 100 -g 10 -o ./data/o2m-erc20-100-10.json --erc20
+./target/release/generate pattern -y m2m -t 10000 -c 0 -o ./data/m2m-erc20-10k.json --erc20
 ```
 
 ### Test Case Format
@@ -136,7 +136,7 @@ cargo build --release --package revme
 
 2. Run parallel tests using the generated transaction data:
 ```bash
-./target/release/revme parallel-test ../altius-benchtools/data/o2m-erc20-100-10.json --parallel --num-of-threads 8
+./target/release/revme parallel-test ../altius-benchtools/data/m2m-erc20-10k.json --parallel --num-of-threads 8
 ```
 
 Or with a custom test file:
@@ -146,31 +146,45 @@ Or with a custom test file:
 
 3. Run with SSA, dependency graph, and prefetch:
 ```bash
-./target/release/revme parallel-test ../altius-benchtools/data/o2m-erc20-100-10.json --parallel --num-of-threads 8 --enable-ssa --enable-dep-graph --enable-prefetch
+./target/release/revme parallel-test ../altius-benchtools/data/m2m-erc20-10k.json --parallel --num-of-threads 8 --enable-ssa --enable-dep-graph --enable-prefetch
 ```
 
-The command will run the test in parallel with 8 threads, and enable SSA, dependency graph, and prefetch features. The test will be executed in both parallel and sequential modes for comparison. You will see the following output:
+The command will run the test in parallel with 8 threads, and enable SSA, dependency graph, and prefetch features.
+
+After the test finishes, you will see the following output:
 
 ```bash
-Running in parallel mode
-finished execute tasks size: 100 with conflict rate: 90.00%
-prepare_time: 8.45µs
-parallel_time: 1.110709ms
-seq_time: 2.717958ms
-commit_time: 661.796µs
-Parallel execution stats:
-  hit_rate: 75.40%, hits: 377, misses: 123
-  db_read: 27.612µs, cache_access: 131.538µs
-  max_read: 1.068µs, avg_read: 224ns
+========== Running in parallel mode ==========
 
-Sequential execution stats:
-  hit_rate: 100.00%, hits: 450, misses: 0
-  db_read: 0ns, cache_access: 38.783µs
-  max_read: 0ns, avg_read: 0ns
-  seq_exec_size: 90, parallel_exec_size: 100
-Time after main: 5.591453ms
+Finished execute tasks size: 10000 with conflict rate: 0.00%
+- prepare time: 3.49486ms
+- parallel execution time: 656.595831ms
+- sequential execution time: 0ns
+- commit time: 237.422364ms
 
-State root: 0x04b2101f052194091ff7cc999e630f77eda07379a4a3b62d480acc34f65d7ef6
+Total time: 905.792896ms
+TPS: 11040.051 tx/s
+
+State root: 0x9864bc0646e27947ddcddecfff7d390f866f458dacba2165a7cb021118f34d01
+```
+
+4. Run sequential tests and compare with parallel tests:
+```bash
+./target/release/revme parallel-test ../altius-benchtools/data/m2m-erc20-10k.json --parallel=false
+```
+
+After the test finishes, you will see the following output:
+
+```bash
+========== Running in sequential mode ==========
+
+Execute time: 2.842444602s
+Commit time: 149.205257ms
+
+Total time: 3.381541027s
+TPS: 2957.232 tx/s
+
+State root: 0x9864bc0646e27947ddcddecfff7d390f866f458dacba2165a7cb021118f34d01
 ```
 
 <br>
