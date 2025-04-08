@@ -26,7 +26,6 @@ mod journaled_state;
 pub mod occda;
 #[cfg(feature = "optimism")]
 pub mod optimism;
-pub mod ssa_access_tracker;
 pub mod task;
 
 // Export items.
