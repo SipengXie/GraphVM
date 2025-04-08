@@ -7,6 +7,7 @@ use crate::{
     EvmContext, Inspector,
 };
 use revm_interpreter::OpCode;
+use revm_ssa::logger::LsnType;
 use serde::Serialize;
 use std::io::Write;
 
@@ -27,6 +28,9 @@ pub struct TracerEip3155 {
     skip: bool,
     include_memory: bool,
     memory: Option<String>,
+
+    // ! Used for SSA Tracing
+    lsn: LsnType
 }
 
 // # Output
@@ -53,6 +57,8 @@ struct Output {
     refund: String,
     /// Size of memory array
     mem_size: String,
+    /// The Lsn Number
+    lsn: LsnType,
 
     // Optional fields:
     /// Name of the operation
@@ -141,6 +147,7 @@ impl TracerEip3155 {
             refunded: 0,
             mem_size: 0,
             skip: false,
+            lsn: 0,
         }
     }
 
@@ -202,6 +209,11 @@ impl<DB: Database> Inspector<DB> for TracerEip3155 {
         self.mem_size = interp.shared_memory.len();
         self.gas = interp.gas.remaining();
         self.refunded = interp.gas.refunded();
+        
+        // SSA Tracing
+        if let Some(logger) = &interp.ssa_logger {
+            self.lsn = logger.current_lsn;
+        }
     }
 
     fn step_end(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
@@ -221,6 +233,7 @@ impl<DB: Database> Inspector<DB> for TracerEip3155 {
             return_data: "0x".to_string(),
             refund: hex_number(self.refunded as u64),
             mem_size: self.mem_size.to_string(),
+            lsn: self.lsn,
 
             op_name: OpCode::new(self.opcode).map(|i| i.as_str()),
             error: if !interp.instruction_result.is_ok() {
