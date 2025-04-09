@@ -461,13 +461,13 @@ impl Occda {
                                 task_result.result = Some(result);
                             }
                             Err(_err) => {
-                                // match err {
-                                //     EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
-                                //     EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
-                                //     EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
-                                //     EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
-                                //     EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
-                                // }
+                                match _err {
+                                    EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
+                                    EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
+                                    EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
+                                    EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
+                                    EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
+                                }
                                 failed_task_clone.lock().push(idx);
                             }
                         }
@@ -768,9 +768,17 @@ impl Occda {
                             task_result.state = Some(state);
                             task_result.result = Some(result);
                         }
-                        Err(_) => {
+                        Err(_err) => {
                             task_result.state = None;
                             task_result.result = None;
+
+                            match _err {
+                                EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
+                                EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
+                                EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
+                                EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
+                                EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
+                            }
                         }
                     }
 
