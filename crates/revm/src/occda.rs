@@ -978,7 +978,12 @@ impl Occda {
                 effective_gas_price
             };
 
-            let result = result_store[task.tid as usize].result.as_ref().unwrap();
+            let result = match result_store[task.tid as usize].result.as_ref() {
+                Some(result) => result,
+                None => {
+                    panic!("Transaction execution failed for hash: {:?}, to_re_execution_store: {:?}", task.tx_hash, self.to_re_execution_store[task.tid as usize]);
+                }
+            };
             let gas = result.gas_used();
             coinbase_refund += coinbase_gas_price * U256::from(gas as u64);
         }
