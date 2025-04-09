@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::SpecId::LONDON;
-use revm_primitives::{Account, AccountStatus, EVMError, EvmStorageSlot, U256};
+use revm_primitives::{fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -461,13 +461,13 @@ impl Occda {
                                 task_result.result = Some(result);
                             }
                             Err(_err) => {
-                                match _err {
-                                    EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
-                                    EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
-                                    EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
-                                    EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
-                                    EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
-                                }
+                                // match _err {
+                                //     EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
+                                //     EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
+                                //     EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
+                                //     EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
+                                //     EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
+                                // }
                                 failed_task_clone.lock().push(idx);
                             }
                         }
@@ -772,13 +772,13 @@ impl Occda {
                             task_result.state = None;
                             task_result.result = None;
 
-                            match _err {
-                                EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
-                                EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
-                                EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
-                                EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
-                                EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
-                            }
+                            // match _err {
+                            //     EVMError::Transaction(error) => println!("TxHash: {:?} failed: Transaction error: {:?}", task.tx_hash, error),
+                            //     EVMError::Header(error) => println!("TxHash: {:?} failed: Header error: {:?}", task.tx_hash, error),
+                            //     EVMError::Database(_) => println!("TxHash: {:?} failed: DB error", task.tx_hash),
+                            //     EVMError::Custom(msg) => println!("TxHash: {:?} failed: Custom error: {}", task.tx_hash, msg),
+                            //     EVMError::Precompile(msg) => println!("TxHash: {:?} failed: Precompile error: {}", task.tx_hash, msg),
+                            // }
                         }
                     }
 
@@ -885,6 +885,10 @@ impl Occda {
                             continue;
                         };
                     // println!("idx:{}, state: {:?}", task_idx, state);
+                    if h_tx[task_idx].tx_hash == Some(fixed_bytes!("39303416f7396544e603c37217b617d6464a16fa2299c26cfb35ab1fc515fe87")) {
+                        println!("state: {:?}", state);
+                        println!("task_result: {:?}", task_result.result);
+                    }
 
                     parallel_db.commit(state.clone());
                     unsafe {
