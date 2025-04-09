@@ -317,8 +317,7 @@ impl Occda {
                             .with_mode(execution_mode);
 
                             profiler::start("ssa-execution");
-                            let ssa_execution = executor
-                                .execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
+                            let ssa_execution = executor.execute(task.tx_hash.unwrap_or_default());
                             profiler::end("ssa-execution");
 
                             match ssa_execution {
@@ -698,8 +697,7 @@ impl Occda {
                         .with_mode(execution_mode);
 
                         profiler::start("ssa-execution");
-                        let ssa_execution = executor
-                            .execute_with_spec(task.spec_id, task.tx_hash.unwrap_or_default());
+                        let ssa_execution = executor.execute(task.tx_hash.unwrap_or_default());
                         profiler::end("ssa-execution");
 
                         match ssa_execution {

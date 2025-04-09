@@ -78,7 +78,10 @@ macro_rules! get_storage_value {
                 } else {
                     let dep_node = $graph.get_node(source.0)?;
                     match &dep_node.outputs[source.1 as usize] {
-                        SSAOutput::Storage { key: dep_key, value } => {
+                        SSAOutput::Storage {
+                            key: dep_key,
+                            value,
+                        } => {
                             if &**dep_key != $key {
                                 return Err(ExecutionError::ExecutionError(
                                     ExecutionError::STORAGE_KEY_MISMATCH.to_string(),

@@ -231,11 +231,11 @@ fn graph_execute(
             .with_tracer(tracer);
     // Execute
     let res = executor
-        .execute_with_spec(
-            SpecId::LATEST,
-            fixed_bytes!("0000000000000000000000000000000000000000000000000000000000000000"),
-        )
+        .execute(fixed_bytes!(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ))
         .unwrap();
+
     let result = executor
         .graph
         .generate_result(

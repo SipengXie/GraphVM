@@ -186,7 +186,10 @@ pub fn run_sequential(path: &PathBuf) -> Result<(), TestError> {
     println!("\nExecute time: {:?}", execute_time);
     println!("Commit time: {:?}", commit_time);
     println!("\nTotal time: {:?}", elapsed);
-    println!("TPS: {:?} tx/s", unit.transaction.len() as f64 / elapsed.as_secs_f64());
+    println!(
+        "TPS: {:?} tx/s",
+        unit.transaction.len() as f64 / elapsed.as_secs_f64()
+    );
 
     // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
     // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");
@@ -350,7 +353,10 @@ pub fn run_parallel(
     );
     let after_main = std::time::Instant::now();
     println!("\nTotal time: {:?}", after_main - total_start);
-    println!("TPS: {:?} tx/s", unit.transaction.len() as f64 / after_main.duration_since(total_start).as_secs_f64());
+    println!(
+        "TPS: {:?} tx/s",
+        unit.transaction.len() as f64 / after_main.duration_since(total_start).as_secs_f64()
+    );
 
     // let addr1 = address!("7d902220f0c3c53281d310a5ad4e9514e1d24296");
     // let addr2 = address!("c8d700eb8cfbfa08552e7f63a6fcedd3672d1c41");

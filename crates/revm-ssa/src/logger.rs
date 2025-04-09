@@ -35,9 +35,7 @@ macro_rules! pop_stack_or_const {
 #[macro_export]
 macro_rules! input_account_info {
     ($self:expr, $address:expr) => {{
-        SSAInput::Storage(
-            $self.get_storage_def(StorageKey::AccountInfo($address)),
-        )
+        SSAInput::Storage($self.get_storage_def(StorageKey::AccountInfo($address)))
     }};
 }
 
@@ -45,9 +43,7 @@ macro_rules! input_account_info {
 #[macro_export]
 macro_rules! input_account_status {
     ($self:expr, $address:expr) => {{
-        SSAInput::Storage(
-            $self.get_storage_def(StorageKey::AccountStatus($address)),
-        )
+        SSAInput::Storage($self.get_storage_def(StorageKey::AccountStatus($address)))
     }};
 }
 
