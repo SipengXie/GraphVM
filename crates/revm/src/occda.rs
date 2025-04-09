@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::SpecId::LONDON;
-use revm_primitives::{fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256};
+use revm_primitives::{Account, AccountStatus, EVMError, EvmStorageSlot, U256};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -885,10 +885,6 @@ impl Occda {
                             continue;
                         };
                     // println!("idx:{}, state: {:?}", task_idx, state);
-                    if h_tx[task_idx].tx_hash == Some(fixed_bytes!("39303416f7396544e603c37217b617d6464a16fa2299c26cfb35ab1fc515fe87")) {
-                        println!("state: {:?}", state);
-                        println!("task_result: {:?}", task_result.result);
-                    }
 
                     parallel_db.commit(state.clone());
                     unsafe {
