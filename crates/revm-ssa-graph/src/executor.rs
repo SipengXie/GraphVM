@@ -120,36 +120,36 @@ where
                 tracer.record_graph(lsn, outputs.into(), node.opcode);
             }
         }
-
+        eprintln!("Re-execute tx: {:?}", _tx_hash);
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
         nodes_to_execute.sort();
 
         let context = unsafe { Self::get_mut_context(&self.context) };
-        // for lsn in nodes_to_execute {
-        //     let node = graph.get_node_mut(lsn)?;
-        //     self.table.instructions[node.opcode as usize](context, node, &self.graph)?;
-        // }
+        for lsn in nodes_to_execute {
+            let node = graph.get_node_mut(lsn)?;
+            self.table.instructions[node.opcode as usize](context, node, &self.graph)?;
+        }
 
         // ! Debug for SSA
-        let first_lsn = nodes_to_execute[0];
-        let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
+        // let first_lsn = nodes_to_execute[0];
+        // let last_lsn = nodes_to_execute[nodes_to_execute.len() - 1];
 
-        for lsn in first_lsn..=last_lsn {
-            if let Ok(node) = graph.get_node(lsn) {
-                if nodes_to_execute.contains(&lsn) {
-                    let node = graph.get_node_mut(lsn)?;
-                    self.table.instructions[node.opcode as usize](context, node, &self.graph)?;
-                    if _tx_hash == fixed_bytes!("39303416f7396544e603c37217b617d6464a16fa2299c26cfb35ab1fc515fe87") {
-                        eprintln!("after execute node: {}", node);
-                    }
-                } else {
-                    if _tx_hash == fixed_bytes!("39303416f7396544e603c37217b617d6464a16fa2299c26cfb35ab1fc515fe87") {
-                        eprintln!("no re-execute node: {}", node);
-                    }
-                }
-            }
-        }
+        // for lsn in first_lsn..=last_lsn {
+        //     if let Ok(node) = graph.get_node(lsn) {
+        //         if nodes_to_execute.contains(&lsn) {
+        //             let node = graph.get_node_mut(lsn)?;
+        //             self.table.instructions[node.opcode as usize](context, node, &self.graph)?;
+        //             if _tx_hash == fixed_bytes!("39303416f7396544e603c37217b617d6464a16fa2299c26cfb35ab1fc515fe87") {
+        //                 eprintln!("after execute node: {}", node);
+        //             }
+        //         } else {
+        //             if _tx_hash == fixed_bytes!("39303416f7396544e603c37217b617d6464a16fa2299c26cfb35ab1fc515fe87") {
+        //                 eprintln!("no re-execute node: {}", node);
+        //             }
+        //         }
+        //     }
+        // }
 
         let execute_duration = execute_start.elapsed();
 
