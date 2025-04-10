@@ -89,6 +89,8 @@ pub fn execute_refund_gas<DB: DatabaseRef + Send + Sync, SPEC: Spec>(
     let refund_gas = base_gas_refunded + dynamic_gas_refund + eip7702_gas_refund;
 
     if base_gas_remaining < dynamic_gas_cost {
+        // ! One tricky way is to find which sstore caused the gas insufficient, and just revert the dynamic gas cost.
+        // ! However, for correctness and robutness, we just revert the entire SSA-Execution.
         return Err(ExecutionError::ExecutionError(ExecutionError::GAS_INSUFFICIENT.to_string()));
     }
     
