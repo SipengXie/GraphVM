@@ -87,6 +87,11 @@ pub fn execute_refund_gas<DB: DatabaseRef + Send + Sync, SPEC: Spec>(
     let caller_info = get_storage_value!(graph, node.inputs[offset + 6], &key, |key| _context
         .get_state(key));
     let refund_gas = base_gas_refunded + dynamic_gas_refund + eip7702_gas_refund;
+
+    if base_gas_remaining < dynamic_gas_cost {
+        return Err(ExecutionError::ExecutionError(ExecutionError::GAS_INSUFFICIENT.to_string()));
+    }
+    
     let remaining_gas = base_gas_remaining - dynamic_gas_cost;
     let spent_gas = gas_limit - remaining_gas;
 
