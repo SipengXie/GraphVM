@@ -4,7 +4,7 @@ use crate::db::{parallel_db::ParallelDB, Database, DatabaseCommit, DatabaseRef};
 use crate::evm::Evm;
 use crate::graph_wrapper::GraphWrapper;
 use crate::inspector_handle_register;
-use crate::inspectors::NoOpInspector;
+use crate::inspectors::{NoOpInspector, TracerEip3155};
 use crate::journaled_state::AccessType;
 /// OCCDA (Optimistic Concurrent Contract Deterministic Aborts)
 ///
@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use revm_primitives::SpecId::LONDON;
-use revm_primitives::{Account, AccountStatus, EVMError, EvmStorageSlot, U256};
+use revm_primitives::{fixed_bytes, Account, AccountStatus, EVMError, EvmStorageSlot, U256};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAOutput, StorageKey, StorageValue};
 use revm_ssa_graph::{ExecutionMode, SSAExecutor};
@@ -357,15 +357,15 @@ impl Occda {
                             }
                         }
                         // ! Debug for SSA
-                        // let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("ba640261270235488c7515c6620a3f82b8ca255dfe44b83d05e907e96cc88fc4")) {
-                        //     TracerEip3155::new(
-                        //         Box::new(std::io::sink()),
-                        //     ).without_summary()
-                        // } else {
-                        //     TracerEip3155::new(
-                        //         Box::new(std::fs::File::create("tracer_parallel_prefetch_8d40.json").unwrap()),
-                        //     )
-                        // };
+                        let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("23f544dfae3fa09b7e7dbf755743d3e05384aa643b1a4acb40642ba8d3a1f639")) {
+                            TracerEip3155::new(
+                                Box::new(std::io::sink()),
+                            ).without_summary()
+                        } else {
+                            TracerEip3155::new(
+                                Box::new(std::fs::File::create("tracer_parallel_prefetch_23f5.json").unwrap()),
+                            )
+                        };
 
                         // Initialize EVM instance with task-specific configuration
                         // Measure setup time separately from execution time

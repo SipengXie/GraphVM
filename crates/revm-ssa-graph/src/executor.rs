@@ -120,7 +120,6 @@ where
                 tracer.record_graph(lsn, outputs.into(), node.opcode);
             }
         }
-        eprintln!("Re-execute tx: {:?}", _tx_hash);
         let len = nodes_to_execute.len();
         let execute_start = Instant::now();
         nodes_to_execute.sort();

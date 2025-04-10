@@ -86,9 +86,6 @@ pub fn execute_refund_gas<DB: DatabaseRef + Send + Sync, SPEC: Spec>(
     let key = StorageKey::AccountInfo(Address::from_word(B256::from(caller)));
     let caller_info = get_storage_value!(graph, node.inputs[offset + 6], &key, |key| _context
         .get_state(key));
-    eprintln!("Original Refund Node:{:?}", node);
-    eprintln!("base_gas_refunded:{}, dynamic_gas_refund:{}, eip7702_gas_refund:{}", base_gas_refunded, dynamic_gas_refund, eip7702_gas_refund);
-    eprintln!("base_gas_remaining:{}, dynamic_gas_cost:{}", base_gas_remaining, dynamic_gas_cost);
     let refund_gas = base_gas_refunded + dynamic_gas_refund + eip7702_gas_refund;
     let remaining_gas = base_gas_remaining - dynamic_gas_cost;
     let spent_gas = gas_limit - remaining_gas;
