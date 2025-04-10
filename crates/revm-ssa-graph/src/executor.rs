@@ -5,7 +5,7 @@ use crate::{
     tracer::ExecutionTracer, Result,
 };
 
-use revm_primitives::{db::DatabaseRef, fixed_bytes, spec_to_generic, Env, FixedBytes, Spec, SpecId};
+use revm_primitives::{db::DatabaseRef, spec_to_generic, Env, FixedBytes, Spec, SpecId};
 use revm_ssa::{logger::LsnType, FrameInput};
 
 /// Execution mode

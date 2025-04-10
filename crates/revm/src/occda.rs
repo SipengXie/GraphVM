@@ -357,14 +357,16 @@ impl Occda {
                             }
                         }
                         // ! Debug for SSA
-                        let _tracer_inspector = if task.tx_hash != Some(fixed_bytes!("23f544dfae3fa09b7e7dbf755743d3e05384aa643b1a4acb40642ba8d3a1f639")) {
-                            TracerEip3155::new(
-                                Box::new(std::io::sink()),
-                            ).without_summary()
+                        let _tracer_inspector = if task.tx_hash
+                            != Some(fixed_bytes!(
+                                "23f544dfae3fa09b7e7dbf755743d3e05384aa643b1a4acb40642ba8d3a1f639"
+                            )) {
+                            TracerEip3155::new(Box::new(std::io::sink())).without_summary()
                         } else {
-                            TracerEip3155::new(
-                                Box::new(std::fs::File::create("tracer_parallel_prefetch_23f5.json").unwrap()),
-                            )
+                            TracerEip3155::new(Box::new(
+                                std::fs::File::create("tracer_parallel_prefetch_23f5.json")
+                                    .unwrap(),
+                            ))
                         };
 
                         // Initialize EVM instance with task-specific configuration
@@ -960,10 +962,10 @@ impl Occda {
         // );
         // println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
         // println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
-        // println!(
-        //     "  seq_exec_size: {}, parallel_exec_size: {}",
-        //     seq_exec_size, parallel_exec_size
-        // );
+        println!(
+            "  seq_exec_size: {}, parallel_exec_size: {}",
+            seq_exec_size, parallel_exec_size
+        );
 
         Ok(())
     }
@@ -989,7 +991,10 @@ impl Occda {
             let result = match result_store[task.tid as usize].result.as_ref() {
                 Some(result) => result,
                 None => {
-                    panic!("Transaction execution failed for hash: {:?}, to_re_execution_store: {:?}", task.tx_hash, self.to_re_execution_store[task.tid as usize]);
+                    panic!(
+                        "Transaction execution failed for hash: {:?}, to_re_execution_store: {:?}",
+                        task.tx_hash, self.to_re_execution_store[task.tid as usize]
+                    );
                 }
             };
             let gas = result.gas_used();
