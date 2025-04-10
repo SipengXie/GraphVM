@@ -149,6 +149,9 @@ pub struct SSALogger {
     // for gas calculation
     gas_cost: Vec<(LsnWithIndex, u64)>,
     gas_refund: Vec<(LsnWithIndex, i64)>,
+
+    // fix for revert transaction
+    is_revert: bool,
 }
 
 impl SSALogger {
@@ -183,6 +186,8 @@ impl SSALogger {
 
             gas_cost: vec![],
             gas_refund: vec![],
+
+            is_revert: false,
         }
     }
 
@@ -209,6 +214,8 @@ impl SSALogger {
 
             gas_cost: vec![],
             gas_refund: vec![],
+
+            is_revert: false,
         }
     }
 
@@ -327,7 +334,14 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::ConstantI64(gas_refunded)); // base gas refunded
         ssa_inputs.push(SSAInput::ConstantI64(eip7702_gas_refund)); // eip7702 gas refund
         ssa_inputs.push(SSAInput::Constant(U256::from(gas_limit))); // gas limit
-        ssa_inputs.push(input_account_info!(self, caller));
+
+        let caller_dependency = if self.is_revert {
+            SSAInput::Storage((1,0)) // deduct caller's account info
+        } else {
+            input_account_info!(self, caller)
+        };
+        
+        ssa_inputs.push(caller_dependency);
 
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);
 
@@ -620,6 +634,10 @@ impl SSALogger {
         if let Some(mem_length) = mem_length {
             ssa_outputs.push(SSAOutput::MemorySize(mem_length));
             self.last_memory = (lsn, 1);
+        }
+
+        if opcode == 0xfd {
+            self.is_revert = true;
         }
 
         self.log_operation(opcode, ssa_inputs, ssa_outputs);
