@@ -1,5 +1,5 @@
-use revm_ssa::{SSALogger, StorageKey};
 use revm_interpreter::gas::InitialAndFloorGas;
+use revm_ssa::{SSALogger, StorageKey};
 
 use crate::{
     builder::{EvmBuilder, HandlerStage, SetGenericStage},

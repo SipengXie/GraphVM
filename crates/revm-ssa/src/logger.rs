@@ -336,11 +336,11 @@ impl SSALogger {
         ssa_inputs.push(SSAInput::Constant(U256::from(gas_limit))); // gas limit
 
         let caller_dependency = if self.is_revert {
-            SSAInput::Storage((1,0)) // deduct caller's account info
+            SSAInput::Storage((1, 0)) // deduct caller's account info
         } else {
             input_account_info!(self, caller)
         };
-        
+
         ssa_inputs.push(caller_dependency);
 
         self.log_storage_read(StorageKey::AccountInfo(caller), lsn);
