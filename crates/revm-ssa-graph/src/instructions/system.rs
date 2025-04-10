@@ -79,13 +79,15 @@ pub fn execute_codecopy<DB: DatabaseRef + Send + Sync>(
     let padded_code_slice = if len == 0 {
         Vec::new()
     } else {
-        // Prevent code from being too short
-        let code_end = min(code_offset + len, code.len());
-        let code_slice = &code[code_offset..code_end];
-        // Pad code to len length
-        let mut padded_slice = vec![0u8; len];
-        padded_slice[..code_slice.len()].copy_from_slice(&code_slice);
-        padded_slice
+        if code_offset >= code.len() {
+            vec![0u8; len]
+        } else {
+            let code_end = min(code_offset + len, code.len());
+            let code_slice = &code[code_offset..code_end];
+            let mut padded_slice = vec![0u8; len];
+            padded_slice[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_slice
+        }
     };
 
     node.outputs[0] = SSAOutput::Memory(padded_code_slice.into());
@@ -173,6 +175,8 @@ pub fn execute_calldatacopy<DB: DatabaseRef + Send + Sync>(
 
     let padded_data_slice = if len == 0 {
         Vec::new()
+    } else if data_offset >= call_data.len() {
+        vec![0u8; len]
     } else {
         // Prevent data from being too short
         let data_end = min(data_offset + len, call_data.len());
@@ -227,6 +231,8 @@ pub fn execute_returndatacopy<DB: DatabaseRef + Send + Sync>(
     // When len is 0, return an empty vector
     let padded_data_slice = if len == 0 {
         Vec::new()
+    } else if data_offset >= return_data.len() {
+        vec![0u8; len]
     } else {
         // Prevent data from being too short
         let data_end = min(data_offset + len, return_data.len());

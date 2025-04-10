@@ -253,12 +253,16 @@ pub fn execute_extcodecopy<DB: DatabaseRef + Send + Sync>(
     let padded_code_slice = if len == 0 {
         Vec::new()
     } else {
-        let code_len = min(code.len(), code_offset + len);
-        let code_slice = &code[code_offset..code_len];
-        // Pad code_slice to len
-        let mut padded_data = vec![0u8; len];
-        padded_data[..code_slice.len()].copy_from_slice(&code_slice);
-        padded_data
+        if code_offset >= code.len() {
+            vec![0u8; len]
+        } else {
+            let code_len = min(code.len(), code_offset + len);
+            let code_slice = &code[code_offset..code_len];
+            // Pad code_slice to len
+            let mut padded_data = vec![0u8; len];
+            padded_data[..code_slice.len()].copy_from_slice(&code_slice);
+            padded_data
+        }
     };
 
     node.outputs[0] = SSAOutput::Memory(padded_code_slice.into());
