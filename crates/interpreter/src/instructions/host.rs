@@ -88,7 +88,7 @@ pub fn extcodehash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     }
     push_b256!(interpreter, *code_hash);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_extcodehash(EXTCODEHASH, address, code_hash.into());
+        logger.log_extcodehash(EXTCODEHASH, address, code_hash.data.into());
     }
 }
 
@@ -118,7 +118,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
                 memory_offset,
                 code_offset,
                 len,
-                code,
+                code.data,
                 mem_length,
             );
             // record the shadow_memory
@@ -133,7 +133,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     // Note: this can't panic because we resized memory to fit.
     interpreter
         .shared_memory
-        .set_data(memory_offset, code_offset, len, &code);
+        .set_data(memory_offset, code_offset, len, &code.data);
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         let mem_length = if resized {
@@ -147,7 +147,7 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
             memory_offset,
             code_offset,
             len,
-            code,
+            code.data,
             mem_length,
         );
         // record the shadow_memory

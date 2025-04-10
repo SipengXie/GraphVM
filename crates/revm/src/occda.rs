@@ -960,10 +960,10 @@ impl Occda {
         // );
         // println!("  db_read: {:?}, cache_access: {:?}", db_time, cache_time);
         // println!("  max_read: {:?}, avg_read: {:?}", max_read, avg_read);
-        // println!(
-        //     "  seq_exec_size: {}, parallel_exec_size: {}",
-        //     seq_exec_size, parallel_exec_size
-        // );
+        println!(
+            "  seq_exec_size: {}, parallel_exec_size: {}",
+            seq_exec_size, parallel_exec_size
+        );
 
         Ok(())
     }
