@@ -21,6 +21,11 @@ pub struct SsaGraph {
     last_return: LsnType,
     /// Refund gas
     pub gas_calc: LsnType,
+
+    /// Mapping from LSN to its successor LSNs
+    successors: Vec<Vec<LsnType>>,
+    /// Mapping from LSN to its predecessor LSNs
+    predecessors: Vec<Vec<LsnType>>,
 }
 
 impl std::fmt::Display for SsaGraph {
@@ -41,6 +46,9 @@ impl SsaGraph {
             logs: Vec::with_capacity(node_num + 1),
             last_return: 0,
             gas_calc: 0,
+
+            successors: vec![Vec::new(); node_num + 1],
+            predecessors: vec![Vec::new(); node_num + 1],
         }
     }
 
@@ -161,6 +169,15 @@ impl SsaGraph {
             return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
         }
         Ok(&self.predecessors[lsn as usize])
+    }
+
+    /// Get successors for a given LSN
+    #[inline(always)]
+    pub fn get_successors(&self, lsn: LsnType) -> Result<&[LsnType]> {
+        if lsn as usize >= self.successors.len() {
+            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+        }
+        Ok(&self.successors[lsn as usize])
     }
 
     /// Get a reference to execution results, primarily used by tracer

@@ -184,10 +184,6 @@ impl TryFrom<SSAOutput> for Bytes {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(align(64))]
 pub struct SSALogEntry {
-    // The LSN of the log entry
-    pub lsn: LsnType,
-    // The opcode of the instruction
-    pub opcode: u8,
     // The inputs of the instruction
     pub inputs: Vec<SSAInput>, // 24 bytes
     // The outputs of the instruction, it is necessary to record the value

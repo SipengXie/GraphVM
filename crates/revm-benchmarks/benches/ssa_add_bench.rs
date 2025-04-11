@@ -1,12 +1,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use revm_primitives::{U256, Env, LatestSpec};
-use revm_ssa::{SSAInput, SSAOutput, SSALogEntry};
-use revm_ssa_graph::{ExecutionContext, SSAExecutor, SsaGraph};
+use revm_ssa::{logger::LsnType, SSAInput, SSALogEntry, SSAOutput};
+use revm_ssa_graph::{instruction_table::InstructionTable, ExecutionContext, SsaGraph};
 use revm::db::{EmptyDB, CacheDB};
 use rand::Rng;
 use std::{time::Duration, sync::Arc};
-use petgraph::graph::NodeIndex;
-
 // Constants for the benchmark
 const NODE_COUNT: usize = 10_000;
 const OPCODE_ADD: u8 = 0x01; // ADD opcode in EVM
@@ -34,8 +32,8 @@ fn generate_test_data() -> (Vec<usize>, Vec<U256>) {
 // Prepare SSA Graph for benchmarking
 struct SSABenchData {
     graph: Arc<SsaGraph>,
-    context: Arc<ExecutionContext<'static, CacheDB<EmptyDB>, LatestSpec>>,
-    nodes_to_execute: Vec<NodeIndex>,
+    context: Arc<ExecutionContext<'static, CacheDB<EmptyDB>>>,
+    nodes_to_execute: Vec<LsnType>,
 }
 
 fn prepare_ssa_graph(dependencies: &[usize], constants: &[U256]) -> SSABenchData {
@@ -68,10 +66,9 @@ fn prepare_ssa_graph(dependencies: &[usize], constants: &[U256]) -> SSABenchData
     // Create execution context with static env
     let env = Box::leak(Box::new(Env::default()));
     let cache = CacheDB::new(EmptyDB::default());
-    let context = Arc::new(ExecutionContext::<'static, CacheDB<EmptyDB>, LatestSpec>::new(
+    let context = Arc::new(ExecutionContext::<'static, CacheDB<EmptyDB>>::new::<LatestSpec>(
         env,
         cache,
-        None,
         None,
     ));
 
@@ -92,11 +89,13 @@ fn execute_ssa_graph(data: &SSABenchData) -> Vec<U256> {
     
     // Get mutable reference to graph (unsafe but necessary for benchmark)
     let mut_graph = unsafe { &mut *(Arc::as_ptr(&data.graph) as *mut SsaGraph) };
-
+    let table = InstructionTable::create_instruction_table::<LatestSpec>();
+    let mut_context = unsafe { &mut *(Arc::as_ptr(&data.context) as *mut ExecutionContext<CacheDB<EmptyDB>>) };
+    
     // Execute nodes using SSAExecutor
     for node_index in &data.nodes_to_execute {
-        let node = mut_graph.get_node_by_index_mut(*node_index);
-        SSAExecutor::execute_node(node, &data.graph, &data.context).unwrap();
+        let node = mut_graph.get_node_mut(*node_index).unwrap();
+        table.instructions[node.opcode as usize](mut_context, node, &data.graph).unwrap();
         
         // Store result
         if let SSAOutput::Stack(value) = node.outputs[0] {

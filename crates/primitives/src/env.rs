@@ -543,7 +543,7 @@ impl Default for BlockEnv {
         Self {
             number: U256::ZERO,
             coinbase: Address::ZERO,
-            timestamp: U256_ONE,
+            timestamp: U256::from(1),
             gas_limit: U256::MAX,
             basefee: U256::ZERO,
             difficulty: U256::ZERO,

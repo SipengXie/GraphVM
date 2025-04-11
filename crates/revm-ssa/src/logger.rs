@@ -11,7 +11,7 @@ use core::ops::Range;
 use revm_primitives::bitvec::bitvec;
 use revm_primitives::bitvec::order::Lsb0;
 use revm_primitives::bitvec::vec::BitVec;
-use revm_primitives::Spec;
+use revm_primitives::{Spec, U256_ONE};
 use revm_primitives::{
     AccountInfo, AccountStatus, Address, AnalysisKind, Bytecode, Bytes, FixedBytes, HashMap,
     JumpTable, LegacyAnalyzedBytecode, Log, B256, U256,
@@ -240,12 +240,12 @@ impl SSALogger {
             panic!("LSN overflow: reached maximum LsnType value");
         }
 
-        let entry = SSALogEntry {
-            lsn: self.current_lsn,
+        let entry = SSALogEntry::new(
+            self.current_lsn,
             opcode,
             inputs,
             outputs,
-        };
+        );
 
         self.logs.push(entry);
         self.current_lsn += 1;

@@ -12,8 +12,8 @@ mod tests {
     use revm::{inspector_handle_register, Evm};
     use revm_primitives::{AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind};
     use revm::db::{CacheDB, EmptyDB};
-    use revm_ssa::SSALogger;
-    use revm_ssa_graph::{ExecutionContext, SSAExecutor, SsaGraph};
+    use revm_ssa_graph::instruction_table::InstructionTable;
+    use revm_ssa_graph::{ExecutionContext, SsaGraph};
     use std::{collections::HashMap, sync::Arc, time::Instant};
     use std::sync::atomic::{AtomicU32, Ordering};
     use crossbeam::queue::SegQueue;
@@ -125,7 +125,7 @@ mod tests {
                 .with_spec_id(SpecId::LATEST)
                 .with_ref_db(cache)
                 .with_env(Box::new(env))
-                .with_ssa_logger(SSALogger::new())
+                .with_ssa_logger()
                 .with_external_context(StepCounter::default())
                 .append_handler_register(inspector_handle_register)
                 .build_with_ssa_logger();
@@ -197,7 +197,7 @@ mod tests {
             .with_spec_id(SpecId::LATEST)
             .with_ref_db(cache)
             .with_env(Box::new(env))
-            .with_ssa_logger(SSALogger::new())
+            .with_ssa_logger()
             .build_with_ssa_logger();
         
         // 执行交易
@@ -282,7 +282,7 @@ mod tests {
             .with_spec_id(SpecId::LATEST)
             .with_ref_db(cache.clone())
             .with_env(Box::new(env.clone()))
-            .with_ssa_logger(SSALogger::new())
+            .with_ssa_logger()
             .build_with_ssa_logger();
         
         // 执行交易
@@ -292,8 +292,7 @@ mod tests {
         let mut logger = evm.take_ssa_logger().unwrap();
         let logs = logger.take_logs();
         let lsns = logs.iter().map(|log| log.lsn).collect::<Vec<_>>();
-        let first_call = logger.take_first_call_input();
-        let first_create = logger.take_first_create_input();
+        let first_frame_input = logger.take_first_frame_input();
 
         // 创建依赖图
         let mut graph = SsaGraph::new(logs.len(), 2 * logs.len());
@@ -308,13 +307,12 @@ mod tests {
         }
 
         let env_clone = env.clone();
-        let context = Arc::new(ExecutionContext::<'_, CacheDB<EmptyDB>, LatestSpec>::new(
+        let mut context = ExecutionContext::<'_, CacheDB<EmptyDB>>::new::<LatestSpec>(
             &env_clone, 
             cache, 
-            first_call, 
-            first_create
-        ));
-
+            first_frame_input,
+        );
+        let table = InstructionTable::create_instruction_table::<LatestSpec>();
         // 获取拓扑排序的节点
         let nodes_to_execute = graph.topological_sort().unwrap();
         
@@ -323,9 +321,9 @@ mod tests {
         let mut_graph = unsafe { &mut *(Arc::as_ptr(&arc_graph) as *mut SsaGraph) };
         
         let start = Instant::now();
-        for node_index in nodes_to_execute.clone() {
-            let node = mut_graph.get_node_by_index_mut(node_index);
-            SSAExecutor::execute_node(node, &arc_graph, &context).unwrap();
+        for lsn in nodes_to_execute.clone() {
+            let node = mut_graph.get_node_mut(lsn).unwrap();
+            table.instructions[node.opcode as usize](&mut context, node, &arc_graph).unwrap();
         }
         let end = Instant::now();
         println!("Execution time: {:?}", end.duration_since(start));
@@ -372,7 +370,7 @@ mod tests {
             .with_spec_id(SpecId::LATEST)
             .with_ref_db(cache.clone())
             .with_env(Box::new(env.clone()))
-            .with_ssa_logger(SSALogger::new())
+            .with_ssa_logger()
             .build_with_ssa_logger();
         
         // 执行交易
@@ -382,8 +380,7 @@ mod tests {
         let mut logger = evm.take_ssa_logger().unwrap();
         let logs = logger.take_logs();
         let lsns = logs.iter().map(|log| log.lsn).collect::<Vec<_>>();
-        let first_call = logger.take_first_call_input();
-        let first_create = logger.take_first_create_input();
+        let first_frame_input = logger.take_first_frame_input();
         let len = logs.len();
 
         // 创建依赖图
@@ -407,12 +404,13 @@ mod tests {
         }
 
         let env_clone = env.clone();
-        let context = Arc::new(ExecutionContext::<'_, CacheDB<EmptyDB>, LatestSpec>::new(
+        let context = Arc::new(ExecutionContext::<'_, CacheDB<EmptyDB>>::new::<LatestSpec>(
             &env_clone, 
             cache, 
-            first_call, 
-            first_create
+            first_frame_input
         ));
+
+        let table = InstructionTable::create_instruction_table::<LatestSpec>();
 
         // 获取拓扑排序的节点
         let nodes_to_execute = graph.topological_sort().unwrap();
@@ -441,9 +439,8 @@ mod tests {
         let task_queue = SegQueue::new();
 
         // 初始化：将没有前驱的节点加入队列
-        for node_index in nodes_to_execute.iter() {
-            let node = graph.get_node_by_index(*node_index).unwrap();
-            let lsn = node.lsn;
+        for lsn in nodes_to_execute.iter() {
+            let lsn = *lsn;
             if pred_counters[lsn as usize].load(Ordering::Relaxed) == 0 {
                 task_queue.push(lsn);
             }
@@ -458,10 +455,11 @@ mod tests {
             (0..thread_pool.current_num_threads()).into_par_iter().for_each(|_| {
                 while let Some(lsn) = task_queue.pop() {
                     let mut_graph = unsafe { &mut *(Arc::as_ptr(&arc_graph) as *mut SsaGraph) };
+                    let mut_context = unsafe { &mut *(Arc::as_ptr(&context) as *mut ExecutionContext<CacheDB<EmptyDB>>) };
                     let node = mut_graph.get_node_mut(lsn).unwrap();
                     
                     // 执行节点
-                    let _ = SSAExecutor::execute_node(node, &arc_graph, &context);
+                    let _ = table.instructions[node.opcode as usize](mut_context, node, &arc_graph);
                     
                     // 更新所有后继节点的前驱计数器
                     for &succ_lsn in &successors[lsn as usize] {

@@ -6,8 +6,9 @@ use revm_primitives::{
     b256, hex, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256
 };
 use revm::db::{CacheDB, EmptyDB};
-use revm_ssa::{logger::LsnType, SSALogger};
-use revm_ssa_graph::{ExecutionContext, SSAExecutor, SsaGraph};
+use revm_ssa::logger::LsnType;
+use revm_ssa_graph::instruction_table::InstructionTable;
+use revm_ssa_graph::{ExecutionContext, SsaGraph};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -183,7 +184,7 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
                 .with_spec_id(SpecId::LATEST)
                 .with_ref_db(cache.clone())
                 .with_env(Box::new(env.clone()))
-                .with_ssa_logger(SSALogger::new())
+                .with_ssa_logger()
                 .build_with_ssa_logger();
                 evm.transact_preverified()
             })
@@ -196,15 +197,14 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         .with_spec_id(SpecId::LATEST)
         .with_ref_db(cache.clone())
         .with_env(Box::new(env.clone()))
-        .with_ssa_logger(SSALogger::new())
+        .with_ssa_logger()
         .build_with_ssa_logger();
         let _ = evm.transact_preverified();
 
         // 获取日志和调用信息
         let mut logger = evm.take_ssa_logger().unwrap();
         let logs = logger.take_logs();
-        let first_call = logger.take_first_call_input();
-        let first_create = logger.take_first_create_input();
+        let first_frame_input = logger.take_first_frame_input();
         let lsns: Vec<LsnType> = logs.iter().map(|log| log.lsn).collect();
 
         // 创建依赖图
@@ -221,13 +221,13 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         
         // 创建执行上下文
         let env_clone = env.clone();
-        let context = Arc::new(ExecutionContext::<'_, CacheDB<EmptyDB>, LatestSpec>::new(
+        let mut context = ExecutionContext::<'_, CacheDB<EmptyDB>>::new::<LatestSpec>(
             &env_clone, 
             cache, 
-            first_call, 
-            first_create
-        ));
-
+            first_frame_input
+        );
+        let table = InstructionTable::create_instruction_table::<LatestSpec>();
+        
         // 获取拓扑排序的节点
         let nodes_to_execute = graph.topological_sort().unwrap();
         
@@ -239,8 +239,8 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         group.bench_function("GraphVm", |b| {
             b.iter(|| {
                 for node_index in nodes_to_execute.clone() {
-                    let node = mut_graph.get_node_by_index_mut(node_index);
-                    SSAExecutor::execute_node(node, &arc_graph, &context).unwrap();
+                    let node = mut_graph.get_node_mut(node_index).unwrap();
+                    table.instructions[node.opcode as usize](&mut context, node, &arc_graph).unwrap();
                 }
             });
         });
