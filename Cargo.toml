@@ -8,7 +8,7 @@ members = [
     "crates/precompile",
     "crates/revm-ssa",
     "crates/revm-ssa-graph",
-    "crates/revm-benchmarks",
+    "crates/revm-benchmarks", "crates/typed-graph",
 ]
 resolver = "2"
 default-members = ["crates/revm"]
