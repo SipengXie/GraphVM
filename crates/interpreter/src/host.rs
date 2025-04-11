@@ -23,10 +23,10 @@ pub trait Host {
     fn balance(&mut self, address: Address) -> Option<StateLoad<U256>>;
 
     /// Get code of `address` and if the account is cold.
-    fn code(&mut self, address: Address) -> Option<Eip7702CodeLoad<Bytes>>;
+    fn code(&mut self, address: Address) -> Option<StateLoad<Bytes>>;
 
     /// Get code hash of `address` and if the account is cold.
-    fn code_hash(&mut self, address: Address) -> Option<Eip7702CodeLoad<B256>>;
+    fn code_hash(&mut self, address: Address) -> Option<StateLoad<B256>>;
 
     /// Get storage value of `address` at `index` and if the account is cold.
     fn sload(&mut self, address: Address, index: U256) -> Option<StateLoad<U256>>;
@@ -252,7 +252,7 @@ pub struct SelfDestructResult {
     pub had_value: bool,
     pub target_exists: bool,
     pub previously_destroyed: bool,
-    // ! add these two fields to support ssa
+    // ! add these 6 fields to support ssa
     pub is_created: bool,
     pub is_cancun_enabled: bool,
     pub address_info: AccountInfo,

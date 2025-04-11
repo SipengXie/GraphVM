@@ -1,5 +1,9 @@
+use crate::{
+    call_types::{FrameInput, SSACallOutcome, SSACreateOutcome},
+    logger::{LsnType, LsnWithIndex},
+    SSAInterpreterResult,
+};
 use revm_primitives::{AccountInfo, AccountStatus, Address, Bytecode, Bytes, Log, B256, U256};
-use crate::{call_types::{SSACallInput, SSACallOutcome, SSACreateInput, SSACreateOutcome}, logger::{LsnType, LsnWithIndex}, SSAInterpreterResult};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +16,7 @@ pub enum InternalOp {
     MAKE_CREATE_FRAME = 0xD4,
     CREATE_RETURN = 0xD5,
     INSERT_CREATE_OUTCOME = 0xD6,
-    
+
     // CALL operations
     MAKE_CALL_FRAME = 0xD7,
     CALL_RETURN = 0xD8,
@@ -27,7 +31,6 @@ pub enum InternalOp {
 }
 
 impl From<u8> for InternalOp {
-
     fn from(value: u8) -> Self {
         match value {
             0xD4 => Self::MAKE_CREATE_FRAME,
@@ -41,7 +44,6 @@ impl From<u8> for InternalOp {
             _ => panic!("Invalid internal opcode: {value:02x}"),
         }
     }
-
 }
 
 impl From<InternalOp> for u8 {
@@ -63,22 +65,13 @@ pub struct MemoryDep {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ContractEnv {
-    /// Contracts data
-    pub input: Bytes,
     /// Bytecode contains contract code, size of original code, analysis with gas block and jump table.
     /// Note that current code is extended with push padding and STOP at end.
     pub bytecode: Bytecode,
     /// Bytecode hash for legacy. For EOF this would be None.
     pub hash: Option<B256>,
-    /// Target address of the account. Storage of this address is going to be modified.
-    pub target_address: Address,
-    /// Address of the account the bytecode was loaded from. This can be different from target_address
-    /// in the case of DELEGATECALL or CALLCODE
-    pub bytecode_address: Option<Address>,
-    /// Caller of the EVM.
-    pub caller: Address,
-    /// Value send to contract from transaction or from CALL opcodes.
-    pub call_value: U256,
+    /// FrameInput of this contractEnv
+    pub frame_input: FrameInput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
@@ -102,15 +95,15 @@ impl StorageValue {
     pub fn as_account_info(&self) -> Option<&AccountInfo> {
         match self {
             StorageValue::AccountInfo(info) => Some(info),
-            _ => None
+            _ => None,
         }
     }
 
-    /// Get account status, returns None if not AccountStatus type 
+    /// Get account status, returns None if not AccountStatus type
     pub fn as_account_status(&self) -> Option<&AccountStatus> {
         match self {
             StorageValue::AccountStatus(status) => Some(status),
-            _ => None
+            _ => None,
         }
     }
 
@@ -118,11 +111,10 @@ impl StorageValue {
     pub fn as_slot(&self) -> Option<&U256> {
         match self {
             StorageValue::Slot(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -130,17 +122,20 @@ impl StorageValue {
 // as the value is unnecessary.
 pub enum SSAInput {
     Constant(U256),
-    Stack (LsnWithIndex),
+    ConstantI64(i64), // for gas_refunded
+    Stack(LsnWithIndex),
     Memory(Vec<MemoryDep>),
-    Storage (StorageKey, LsnWithIndex),
-    ReturnDataBuffer (LsnWithIndex),
+    Storage(LsnWithIndex),
+    Transient(LsnWithIndex),
+    ReturnDataBuffer(LsnWithIndex),
     InterpreterResult(LsnWithIndex),
     CallOutcome(LsnWithIndex),
     CreateOutcome(LsnWithIndex),
-    MemorySizeChange (LsnWithIndex),
-    CreateInput(LsnWithIndex),
-    CallInput(LsnWithIndex),
+    MemorySizeChange(LsnWithIndex),
+    FrameInput(LsnWithIndex),
     ContractEnv(LsnWithIndex),
+    GasCost(LsnWithIndex),
+    GasRefund(LsnWithIndex),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,16 +152,19 @@ pub enum SSAOutput {
         key: Box<StorageKey>,
         value: Box<StorageValue>,
     },
+    Transient(U256),
     Jump(isize),
     ReturnDataBuffer(Bytes),
     InterpreterResult(SSAInterpreterResult),
     MemorySize(usize),
-    CreateInput(Box<SSACreateInput>),
     CreateOutcome(Box<SSACreateOutcome>),
-    CallInput(Box<SSACallInput>),
+    FrameInput(Box<FrameInput>),
     CallOutcome(Box<SSACallOutcome>),
     Log(Box<Log>),
     ContractEnv(Box<ContractEnv>),
+    // Cost or remaining
+    Gas(u64),
+    GasRefund(i64),
 }
 
 // Implement TryFrom trait to convert SSAOutput to Bytes
@@ -186,6 +184,10 @@ impl TryFrom<SSAOutput> for Bytes {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(align(64))]
 pub struct SSALogEntry {
+    // The LSN of the log entry
+    pub lsn: LsnType,
+    // The opcode of the instruction
+    pub opcode: u8,
     // The inputs of the instruction
     pub inputs: Vec<SSAInput>, // 24 bytes
     // The outputs of the instruction, it is necessary to record the value

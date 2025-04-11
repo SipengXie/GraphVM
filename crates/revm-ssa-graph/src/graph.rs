@@ -1,9 +1,11 @@
-use petgraph::graph::{DiGraph, NodeIndex};
+use crate::{ExecutionError, Result};
 use petgraph::algo::toposort;
+use petgraph::graph::{DiGraph, NodeIndex};
+use revm_primitives::{
+    ExecutionResult, FixedBytes, HaltReason, HashMap, HashSet, Output, SuccessReason,
+};
 use revm_ssa::logger::LsnType;
-use revm_primitives::{HashMap, HashSet};
-use crate::{Result, ExecutionError};
-use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
+use revm_ssa::{SSAInput, SSAInstructionResult, SSALogEntry, SSAOutput};
 
 /// Dependency graph
 pub struct SsaGraph {
@@ -13,12 +15,22 @@ pub struct SsaGraph {
     lsn_to_node: Vec<NodeIndex>,
     /// Mapping from lsn to node index with storage write
     storage_write: Vec<LsnType>,
-    /// Mapping from LSN to its successor LSNs
-    successors: Vec<Vec<LsnType>>,
-    /// Mapping from LSN to its predecessor LSNs
-    predecessors: Vec<Vec<LsnType>>,
+    /// Mapping from lsn to node index with logs
+    logs: Vec<LsnType>,
+    /// Last Return
+    last_return: LsnType,
+    /// Refund gas
+    pub gas_calc: LsnType,
 }
 
+impl std::fmt::Display for SsaGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for node in self.graph.raw_nodes() {
+            writeln!(f, "{:?}", node.weight)?;
+        }
+        Ok(())
+    }
+}
 
 impl SsaGraph {
     pub fn new(node_num: usize, edge_num: usize) -> Self {
@@ -26,8 +38,9 @@ impl SsaGraph {
             graph: DiGraph::with_capacity(node_num, edge_num),
             lsn_to_node: vec![NodeIndex::new(0); node_num + 1],
             storage_write: Vec::with_capacity(node_num + 1),
-            successors: vec![Vec::new(); node_num + 1],
-            predecessors: vec![Vec::new(); node_num + 1],
+            logs: Vec::with_capacity(node_num + 1),
+            last_return: 0,
+            gas_calc: 0,
         }
     }
 
@@ -40,20 +53,62 @@ impl SsaGraph {
     pub fn get_node_by_index(&self, index: NodeIndex) -> Result<&SSALogEntry> {
         Ok(&self.graph[index])
     }
+    /// Get all SSTORE nodes from the graph
+    ///
+    /// This function iterates through all storage write operations and
+    /// returns the nodes that correspond to SSTORE operations.
+    ///
+    /// # Returns
+    /// * `Result<Vec<&SSALogEntry>>` - A vector of all SSTORE nodes
+    #[inline(always)]
+    pub fn get_sstore_nodes(&self) -> Result<Vec<&SSALogEntry>> {
+        // Pre-allocate capacity to avoid reallocations
+        let mut sstore_nodes = Vec::with_capacity(self.storage_write.len());
+
+        // Iterate through all storage write operations
+        for lsn in &self.storage_write {
+            let node_idx = self.lsn_to_node[*lsn as usize];
+            let node = self.get_node_by_index(node_idx)?;
+
+            // Check if the operation is SSTORE (opcode 0x55)
+            if node.opcode == 0x55 {
+                sstore_nodes.push(node);
+            }
+        }
+
+        Ok(sstore_nodes)
+    }
 
     /// Add a node
     #[inline(always)]
     pub fn add_node(&mut self, entry: SSALogEntry) -> Result<()> {
         // eprintln!("entry: {}", entry);
         let lsn = entry.lsn;
-        if is_storage_write!(entry.opcode) {
+        let op = entry.opcode;
+        if is_storage_write!(op) {
             self.storage_write.push(lsn);
         }
+
+        // Check if opcode is a LOG operation (LOG0-LOG4)
+        if (0xA0..=0xA4).contains(&op) {
+            self.logs.push(lsn);
+        }
+
+        // Track gas calculation operation
+        if op == 0xDB {
+            self.gas_calc = lsn;
+        }
+
+        // Track return operations
+        if op == 0xD5 || op == 0xD8 || op == 0xD7 {
+            self.last_return = lsn;
+        }
+
         let node_idx = self.graph.add_node(entry);
-        
+
         //The vector has enough capacity for the current LSN
         self.lsn_to_node[lsn as usize] = node_idx;
-        
+
         Ok(())
     }
 
@@ -63,8 +118,9 @@ impl SsaGraph {
         let mut lsn_vec = Vec::with_capacity(1);
         match input {
             SSAInput::Constant(_) => lsn_vec.push(0),
+            SSAInput::ConstantI64(_) => lsn_vec.push(0),
             SSAInput::Stack(lsn_with_index) => lsn_vec.push(lsn_with_index.0),
-            SSAInput::Memory (source) => {
+            SSAInput::Memory(source) => {
                 if source.is_empty() {
                     lsn_vec.push(0)
                 } else {
@@ -72,20 +128,22 @@ impl SsaGraph {
                     // Memory may contains multiple dependencies
                     source.iter().for_each(|dep| lsn_vec.push(dep.lsn.0))
                 }
-            },
-            SSAInput::Storage (_,source) => lsn_vec.push(source.0),
-            SSAInput::ReturnDataBuffer (source) => lsn_vec.push(source.0),
-            SSAInput::ContractEnv (entry_lsn) => {
+            }
+            SSAInput::Storage(source) => lsn_vec.push(source.0),
+            SSAInput::ReturnDataBuffer(source) => lsn_vec.push(source.0),
+            SSAInput::ContractEnv(entry_lsn) => {
                 if entry_lsn.0 != 2 {
                     lsn_vec.push(entry_lsn.0) // we should consider the first contract_env(lsn:2) as a constant
                 }
-            },
-            SSAInput::MemorySizeChange (last_memory) => lsn_vec.push(last_memory.0),
-            SSAInput::CreateInput (source) => lsn_vec.push(source.0),
-            SSAInput::CallInput (source) => lsn_vec.push(source.0),
-            SSAInput::InterpreterResult (source) => lsn_vec.push(source.0),
-            SSAInput::CallOutcome (source) => lsn_vec.push(source.0),
-            SSAInput::CreateOutcome (source) => lsn_vec.push(source.0),
+            }
+            SSAInput::MemorySizeChange(last_memory) => lsn_vec.push(last_memory.0),
+            SSAInput::FrameInput(source) => lsn_vec.push(source.0),
+            SSAInput::InterpreterResult(source) => lsn_vec.push(source.0),
+            SSAInput::CallOutcome(source) => lsn_vec.push(source.0),
+            SSAInput::CreateOutcome(source) => lsn_vec.push(source.0),
+            SSAInput::GasCost(source) => lsn_vec.push(source.0),
+            SSAInput::GasRefund(source) => lsn_vec.push(source.0),
+            SSAInput::Transient(source) => lsn_vec.push(source.0),
         };
         lsn_vec
     }
@@ -106,10 +164,10 @@ impl SsaGraph {
     }
 
     /// Get a reference to execution results, primarily used by tracer
-    /// 
+    ///
     /// # Arguments
     /// * `lsn` - Logical sequence number
-    /// 
+    ///
     /// # Returns
     /// * `Result<Option<&[SSAOutput]>>` - A reference to execution results if found
     pub fn get_original_outputs(&self, lsn: LsnType) -> Result<Option<&[SSAOutput]>> {
@@ -118,26 +176,29 @@ impl SsaGraph {
     }
 
     /// Get and extract a specific type of result using an extractor function
-    /// 
+    ///
     /// # Arguments
     /// * `lsn` - Logical sequence number
     /// * `extractor` - Function to extract the desired type from results
-    /// 
+    ///
     /// # Type Parameters
     /// * `T` - The type to extract
     /// * `F` - The extractor function type
-    /// 
+    ///
     /// # Returns
     /// * `Result<Option<T>>` - The extracted result if found
     #[inline(always)]
     pub fn get_result<T, F>(&self, lsn: LsnType, extractor: F) -> Result<Option<T>>
     where
         F: FnOnce(&[SSAOutput]) -> Option<T>,
-    {          
+    {
         if lsn as usize >= self.lsn_to_node.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                lsn
+            )));
         }
-        
+
         let node_idx = self.lsn_to_node[lsn as usize];
         Ok(extractor(&self.graph[node_idx].outputs))
     }
@@ -147,9 +208,12 @@ impl SsaGraph {
     pub fn add_edges(&mut self, lsn: LsnType) -> Result<()> {
         let lsn = lsn as usize;
         if lsn >= self.lsn_to_node.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                lsn
+            )));
         }
-        
+
         let node_idx = self.lsn_to_node[lsn];
 
         // Use HashSet to collect all LSN dependencies, automatically deduplicating
@@ -174,7 +238,10 @@ impl SsaGraph {
         let mut dep_indices = HashSet::with_capacity(dep_lsns.len());
         for dep_lsn in dep_lsns {
             if dep_lsn as usize >= self.lsn_to_node.len() {
-                return Err(ExecutionError::GraphError(format!("Dependency node not found for LSN: {}", dep_lsn)));
+                return Err(ExecutionError::GraphError(format!(
+                    "Dependency node not found for LSN: {}",
+                    dep_lsn
+                )));
             }
             dep_indices.insert(self.lsn_to_node[dep_lsn as usize]);
         }
@@ -189,11 +256,17 @@ impl SsaGraph {
 
     /// Get topological sort
     #[inline(always)]
-    pub fn topological_sort(&self) -> Result<Vec<NodeIndex>> {
-        let sorted_indices = toposort(&self.graph, None)
-            .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
-            
-        Ok(sorted_indices)
+    pub fn topological_sort(&self) -> Result<Vec<LsnType>> {
+        let sorted_indices = toposort(&self.graph, None).map_err(|_| {
+            ExecutionError::GraphError("Cycle detected in dependency graph".to_string())
+        })?;
+
+        let mut sorted_lsns = Vec::with_capacity(sorted_indices.len());
+        for idx in sorted_indices {
+            sorted_lsns.push(self.graph[idx].lsn);
+        }
+
+        Ok(sorted_lsns)
     }
 
     /// Get mutable node
@@ -201,9 +274,12 @@ impl SsaGraph {
     pub fn get_node_mut(&mut self, lsn: LsnType) -> Result<&mut SSALogEntry> {
         let lsn = lsn as usize;
         if lsn >= self.lsn_to_node.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                lsn
+            )));
         }
-        
+
         let node_idx = self.lsn_to_node[lsn];
         Ok(&mut self.graph[node_idx])
     }
@@ -213,18 +289,21 @@ impl SsaGraph {
     pub fn get_node(&self, lsn: LsnType) -> Result<&SSALogEntry> {
         let lsn = lsn as usize;
         if lsn >= self.lsn_to_node.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                lsn
+            )));
         }
-        
+
         let node_idx = self.lsn_to_node[lsn];
         Ok(&self.graph[node_idx])
     }
 
     /// Get all reachable nodes from a starting LSN in dependency order using BFS
-    /// 
+    ///
     /// # Arguments
     /// * `start_lsn` - The starting LSN to traverse from
-    /// 
+    ///
     /// # Returns
     /// * `Result<Vec<NodeIndex>>` - A vector of reachable node indices in dependency order
     #[inline(always)]
@@ -232,27 +311,30 @@ impl SsaGraph {
         let lsn = start_lsn as usize;
         // Get the starting node index
         if lsn >= self.lsn_to_node.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", start_lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                start_lsn
+            )));
         }
-        
+
         let start_idx = self.lsn_to_node[lsn];
-        
+
         // Collect all reachable node indices using BFS
         let mut bfs = petgraph::visit::Bfs::new(&self.graph, start_idx);
         let mut node_indices = Vec::new();
-        
+
         while let Some(nx) = bfs.next(&self.graph) {
             node_indices.push(nx);
         }
-        
+
         Ok(node_indices)
     }
 
     /// Get a mutable reference to a node by its index
-    /// 
+    ///
     /// # Arguments
     /// * `index` - The node index
-    /// 
+    ///
     /// # Returns
     /// * `&mut SSALogEntry` - A mutable reference to the node
     #[inline(always)]
@@ -261,7 +343,7 @@ impl SsaGraph {
     }
 
     /// Get all storage write outputs and their corresponding storage keys
-    /// 
+    ///
     /// # Returns
     /// * `Result<Vec<SSAOutput>>` - A vector of all storage write outputs
     #[inline(always)]
@@ -273,7 +355,8 @@ impl SsaGraph {
         for lsn in &self.storage_write {
             if let Some(outputs) = self.get_result(*lsn, |outputs| {
                 // Operate directly on iterator to avoid creating intermediate Vec
-                outputs.iter()
+                outputs
+                    .iter()
                     .filter_map(|o| {
                         if let SSAOutput::Storage { key, value } = o {
                             Some(SSAOutput::Storage {
@@ -295,11 +378,11 @@ impl SsaGraph {
     }
 
     /// Calculate the parallelism ratio of the graph
-    /// 
+    ///
     /// This function computes the ratio of critical path length to total nodes,
     /// which indicates the potential for parallelism. A lower ratio means higher
     /// potential for parallelization.
-    /// 
+    ///
     /// # Returns
     /// * `Result<f64>` - The ratio of critical path length to total nodes
     pub fn calculate_parallelism_ratio(&self) -> Result<f64> {
@@ -307,43 +390,51 @@ impl SsaGraph {
         if total_nodes == 0 {
             return Ok(0.0);
         }
-        
+
         let mut longest_paths: HashMap<NodeIndex, usize> = HashMap::default();
-        
-        let sorted_indices = toposort(&self.graph, None)
-            .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
-        
+
+        let sorted_indices = toposort(&self.graph, None).map_err(|_| {
+            ExecutionError::GraphError("Cycle detected in dependency graph".to_string())
+        })?;
+
         for &node_idx in &sorted_indices {
-            let incoming_count = self.graph.neighbors_directed(node_idx, petgraph::Direction::Incoming).count();
+            let incoming_count = self
+                .graph
+                .neighbors_directed(node_idx, petgraph::Direction::Incoming)
+                .count();
             if incoming_count == 0 {
                 longest_paths.insert(node_idx, 1);
             } else {
                 longest_paths.entry(node_idx).or_insert(1);
             }
         }
-        
+
         for &node_idx in &sorted_indices {
             let current_path_len = *longest_paths.get(&node_idx).unwrap();
-            
-            for succ in self.graph.neighbors_directed(node_idx, petgraph::Direction::Outgoing) {
+
+            for succ in self
+                .graph
+                .neighbors_directed(node_idx, petgraph::Direction::Outgoing)
+            {
                 let entry = longest_paths.entry(succ).or_insert(1);
                 *entry = (*entry).max(current_path_len + 1);
             }
         }
-        
+
         let critical_path_length = longest_paths.values().max().copied().unwrap_or(1);
         Ok(critical_path_length as f64 / total_nodes as f64)
     }
 
     /// Get nodes grouped by execution layers (topological levels)
-    /// 
+    ///
     /// # Returns
     /// * `Result<Vec<Vec<SSALogEntry>>>` - Nodes grouped by layers where each layer can be executed in parallel
     #[inline(always)]
     pub fn execution_layers(&self) -> Result<Vec<Vec<SSALogEntry>>> {
         // Get topologically sorted node indices
-        let sorted_indices = toposort(&self.graph, None)
-            .map_err(|_| ExecutionError::GraphError("Cycle detected in dependency graph".to_string()))?;
+        let sorted_indices = toposort(&self.graph, None).map_err(|_| {
+            ExecutionError::GraphError("Cycle detected in dependency graph".to_string())
+        })?;
 
         // Use array to store level information (more efficient than HashMap)
         let mut levels = vec![0; self.graph.node_count()];
@@ -352,7 +443,9 @@ impl SsaGraph {
         // First pass: calculate the level for each node
         for &node_idx in &sorted_indices {
             // Get the maximum level of all predecessor nodes
-            let pred_level = self.graph.neighbors_directed(node_idx, petgraph::Direction::Incoming)
+            let pred_level = self
+                .graph
+                .neighbors_directed(node_idx, petgraph::Direction::Incoming)
                 .map(|p| levels[p.index()])
                 .max()
                 .unwrap_or(0);
@@ -360,7 +453,7 @@ impl SsaGraph {
             // Current node level = max predecessor level + 1
             let current_level = pred_level + 1;
             levels[node_idx.index()] = current_level;
-            
+
             // Update the maximum level
             if current_level > max_level {
                 max_level = current_level;
@@ -377,12 +470,130 @@ impl SsaGraph {
         Ok(layers)
     }
 
-    /// Get successors for a given LSN
-    #[inline(always)]
-    pub fn get_successors(&self, lsn: LsnType) -> Result<&[LsnType]> {
-        if lsn as usize >= self.successors.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+    pub fn generate_result(
+        &self,
+        gas_limit: u64,
+        _tx_hash: FixedBytes<32>,
+    ) -> Result<ExecutionResult> {
+        // 1. Get the result node, handle error cases early
+        let result_node = self.get_node(self.last_return)?;
+        // eprintln!("result_node: {:?}", result_node);
+        let output = result_node
+            .outputs
+            .iter()
+            .find_map(|output| match output {
+                SSAOutput::CallOutcome(outcome) => Some(SSAOutput::CallOutcome(outcome.clone())),
+                SSAOutput::CreateOutcome(outcome) => {
+                    Some(SSAOutput::CreateOutcome(outcome.clone()))
+                }
+                SSAOutput::InterpreterResult(result) => {
+                    Some(SSAOutput::InterpreterResult(result.clone()))
+                }
+                _ => None,
+            })
+            .ok_or_else(|| {
+                ExecutionError::GraphError(
+                    "No interpreter result found in last return node".to_string(),
+                )
+            })?;
+        // assert_ne!(self.gas_calc, 0);
+        let gas_node = self.get_node(self.gas_calc)?;
+        let gas_remaining = match &gas_node.outputs[1] {
+            SSAOutput::Gas(gas) => *gas,
+            _ => {
+                return Err(ExecutionError::GraphError(
+                    "Expected Gas output".to_string(),
+                ))
+            }
+        };
+        let gas_refunded = match &gas_node.outputs[2] {
+            SSAOutput::GasRefund(refund) => *refund as u64,
+            _ => {
+                return Err(ExecutionError::GraphError(
+                    "Expected GasRefund output".to_string(),
+                ))
+            }
+        };
+
+        let gas_used = gas_limit - gas_remaining - gas_refunded;
+
+        // 2. Pre-allocate log capacity to avoid reallocation
+        let logs = self
+            .logs
+            .iter()
+            .filter_map(|lsn| {
+                self.get_node(*lsn).ok().and_then(|node| {
+                    if let SSAOutput::Log(log) = &node.outputs[0] {
+                        Some(*log.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        // 3. Handle CallOutcome and CreateOutcome separately
+        match output {
+            SSAOutput::CallOutcome(outcome) => {
+                let output = outcome.result.output.clone();
+                match outcome.result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Call(output),
+                    }),
+                    SSAInstructionResult::Revert => {
+                        Ok(ExecutionResult::Revert { gas_used, output })
+                    }
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    }),
+                }
+            }
+            SSAOutput::CreateOutcome(outcome) => {
+                let output = outcome.result.output.clone();
+                match outcome.result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Create(output, outcome.address),
+                    }),
+                    SSAInstructionResult::Revert => {
+                        Ok(ExecutionResult::Revert { gas_used, output })
+                    }
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    }),
+                }
+            }
+            SSAOutput::InterpreterResult(result) => {
+                let output = result.output.clone();
+                match result.result {
+                    SSAInstructionResult::Ok => Ok(ExecutionResult::Success {
+                        reason: SuccessReason::Return,
+                        gas_used,
+                        gas_refunded,
+                        logs,
+                        output: Output::Call(output),
+                    }),
+                    SSAInstructionResult::Revert => {
+                        Ok(ExecutionResult::Revert { gas_used, output })
+                    }
+                    SSAInstructionResult::Error => Ok(ExecutionResult::Halt {
+                        reason: HaltReason::NotActivated,
+                        gas_used,
+                    }),
+                }
+            }
+            _ => Err(ExecutionError::GraphError(
+                "Last return node is not a call or create outcome".to_string(),
+            )),
         }
-        Ok(&self.successors[lsn as usize])
     }
 }

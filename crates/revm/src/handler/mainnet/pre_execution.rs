@@ -3,12 +3,15 @@
 //! They handle initial setup of the EVM, call loop and the final return of the EVM
 
 use crate::{
-    journaled_state::AccessType, precompile::PrecompileSpecId, primitives::{
+    journaled_state::AccessType,
+    precompile::PrecompileSpecId,
+    primitives::{
         db::Database,
         eip7702, Account, Bytecode, EVMError, Env, Spec,
         SpecId::{CANCUN, PRAGUE, SHANGHAI},
         TxKind, BLOCKHASH_STORAGE_ADDRESS, KECCAK_EMPTY, U256,
-    }, Context, ContextPrecompiles
+    },
+    Context, ContextPrecompiles,
 };
 
 /// Main precompile load
@@ -95,7 +98,9 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
     let journaled_state = &mut context.evm.inner.journaled_state;
     // ! newly added logic
     // mark write caller's balance and nonce
-    journaled_state.read_write_set.add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
+    journaled_state
+        .read_write_set
+        .add_write(context.evm.inner.env.tx.caller, AccessType::AccountInfo);
 
     Ok(())
 }
@@ -118,8 +123,8 @@ pub fn apply_eip7702_auth_list<SPEC: Spec, EXT, DB: Database>(
     let mut refunded_accounts = 0;
     for authorization in authorization_list.recovered_iter() {
         // 1. Verify the chain id is either 0 or the chain's current ID.
-        let chain_id = authorization.chain_id();
-        if chain_id != 0 && chain_id != context.evm.inner.env.cfg.chain_id {
+        let chain_id = *authorization.chain_id();
+        if !chain_id.is_zero() && chain_id != U256::from(context.evm.inner.env.cfg.chain_id) {
             continue;
         }
 

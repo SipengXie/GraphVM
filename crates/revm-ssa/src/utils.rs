@@ -1,6 +1,5 @@
 use revm_primitives::U256;
 
-
 /// Convert usize type value to U256, return U256::MAX if overflow
 pub fn as_usize_saturated(value: U256) -> usize {
     let limbs = value.as_limbs();
@@ -10,7 +9,6 @@ pub fn as_usize_saturated(value: U256) -> usize {
         usize::MAX
     }
 }
-
 
 // pub fn pad_memory_to_word(data: Bytes) -> Bytes {
 //     let len = data.len();
@@ -29,4 +27,4 @@ pub fn as_usize_saturated(value: U256) -> usize {
 //     } else {
 //         data
 //     }
-// } 
+// }

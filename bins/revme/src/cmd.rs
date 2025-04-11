@@ -1,8 +1,8 @@
 pub mod bytecode;
 pub mod eofvalidation;
 pub mod evmrunner;
-pub mod statetest;
 pub mod parallel;
+pub mod statetest;
 
 use structopt::{clap::AppSettings, StructOpt};
 
@@ -50,8 +50,8 @@ impl MainCmd {
             Self::Bytecode(cmd) => {
                 cmd.run();
                 Ok(())
-            },
-            Self::ParallelTest(cmd) => cmd.run().map_err(Into::into)
+            }
+            Self::ParallelTest(cmd) => cmd.run().map_err(Into::into),
         }
     }
 }

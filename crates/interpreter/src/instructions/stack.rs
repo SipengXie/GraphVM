@@ -1,5 +1,8 @@
 use crate::{
-    gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
+    gas,
+    opcode::*,
+    primitives::{Spec, U256},
+    Host, Interpreter,
 };
 
 pub fn pop<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
@@ -30,10 +33,7 @@ pub fn push<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, _ho
     // without bounds checking.
     let ip = interpreter.instruction_pointer;
     let slice = unsafe { core::slice::from_raw_parts(ip, N) };
-    if let Err(result) = interpreter
-        .stack
-        .push_slice(slice)
-    {
+    if let Err(result) = interpreter.stack.push_slice(slice) {
         interpreter.instruction_result = result;
         return;
     }
@@ -41,7 +41,12 @@ pub fn push<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, _ho
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_push_operation(PUSH1 + N as u8 - 1, slice);
         if logger.stack_pool.last().unwrap().len() != interpreter.stack.len() {
-            panic!("Stack length mismatch: shadow_stack.len() = {}, stack.len() = {}, N = {}", logger.stack_pool.last().unwrap().len(), interpreter.stack.len(), N);
+            panic!(
+                "Stack length mismatch: shadow_stack.len() = {}, stack.len() = {}, N = {}",
+                logger.stack_pool.last().unwrap().len(),
+                interpreter.stack.len(),
+                N
+            );
         }
     }
 }
@@ -102,7 +107,6 @@ pub fn exchange<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) 
 
     interpreter.instruction_pointer = unsafe { interpreter.instruction_pointer.offset(1) };
 }
-
 
 #[cfg(test)]
 mod test {

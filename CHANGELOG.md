@@ -1,5 +1,60 @@
 Because this is workspace with multi libraries, tags will be simplified, and with this document you can match version of project with git tag.
 
+# v56 tag
+date: 11.02.2025
+
+Optimism fixes and improvements.
+
+* `revm`: 19.4.0 -> 19.5.0
+* `revm-interpreter`: 15.1.0 -> 15.2.0
+* `revm-primitives`: 15.1.0 -> 15.2.0
+* `revm-precompile`: 16.0.0 -> 16.1.0
+* `revme`: 2.4.0 -> 2.5.0
+
+# v55 tag
+
+date: 28.01.2025
+
+Small release for Prague devnet-6 network.
+
+* `revme`: 2.3.0 -> 2.4.0
+* `revm`: 19.3.0 -> 19.4.0
+
+# v54 tag
+
+date: 13.01.2025
+
+Changes for Prague devnet-5 network.
+
+* `revme`: 2.2.0 -> 2.3.0
+* `revm`: 19.2.0 -> 19.3.0
+
+# v53 tag
+
+date: 06.01.2025
+
+Fix for previous release related to Optimism.
+
+* `revm`: 19.1.0 -> 19.2.0
+
+# v52 tag
+
+date: 06.01.2025
+
+Optimism isthmus spec added.
+
+* `revm`: 19.0.0 -> 19.1.0
+
+# v51 tag
+date 26.12.2024
+devnet-5 release.
+
+* `revme`: 2.1.0 -> 2.2.0
+* `revm`: 18.0.0 -> 19.0.0
+* `revm-interpreter`: 14.0.0 -> 15.0.0
+* `revm-primitives`: 14.0.0 -> 15.1.0
+* `revm-precompile`: 15.0.0 -> 16.0.0
+
 # v50 tag
 date 06.11.2024
 Maintenance release. Bump alloy-primitives deps, few utilities.

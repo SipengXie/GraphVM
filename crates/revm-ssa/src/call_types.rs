@@ -2,13 +2,13 @@ use core::ops::Range;
 
 use revm_primitives::{Address, Bytes, U256};
 #[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Simplified Call input structure
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct SSACallInput {
-    /// Input data for the call
+pub struct FrameInput {
+    /// Input data for the call, init_code for the create
     pub input: Bytes,
     /// Bytecode address
     pub bytecode_address: Address,
@@ -16,10 +16,10 @@ pub struct SSACallInput {
     pub target_address: Address,
     /// Caller address
     pub caller: Address,
-    /// Call value
+    /// Transfer value
     pub transfer_value: U256,
-    /// Call scheme
-    pub scheme: SSACallScheme,
+    /// Tx scheme
+    pub scheme: TxScheme,
     /// Return range
     pub ret_range: Range<usize>,
     /// Gas limit
@@ -36,20 +36,6 @@ pub struct SSACallOutcome {
     pub ret_range: Range<usize>,
 }
 
-/// Simplified Create input structure
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct SSACreateInput {
-    /// Creator address
-    pub caller: Address,
-    /// Creation value
-    pub value: U256,
-    /// Initialization code
-    pub init_code: Bytes,
-    /// Creation scheme
-    pub scheme: SSACreateScheme,
-}
-
 /// Simplified Create output structure
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -61,27 +47,19 @@ pub struct SSACreateOutcome {
 }
 
 /// Simplified Call scheme enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum SSACallScheme {
+pub enum TxScheme {
+    #[default]
     Call,
     CallCode,
     DelegateCall,
     StaticCall,
-    ExtCall,
-    ExtStaticCall,
-    ExtDelegateCall,
-} 
-
-/// Simplified Create scheme enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum SSACreateScheme {
     Create,
     Create2 {
         salt: U256,
     },
-} 
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -118,4 +96,4 @@ impl SSAInstructionResult {
     pub fn is_error(&self) -> bool {
         matches!(self, SSAInstructionResult::Error)
     }
-} 
+}

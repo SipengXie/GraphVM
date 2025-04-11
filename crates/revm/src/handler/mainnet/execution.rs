@@ -10,8 +10,8 @@ use crate::{
 };
 use core::mem;
 use revm_interpreter::{
-    opcode::InstructionTables, CallOutcome, EOFCreateInputs, InterpreterAction, InterpreterResult,
-    EMPTY_SHARED_MEMORY,
+    interpreter_action::convert_interpreter_result, opcode::InstructionTables, CallOutcome,
+    EOFCreateInputs, InterpreterAction, InterpreterResult, EMPTY_SHARED_MEMORY,
 };
 use std::boxed::Box;
 
@@ -80,6 +80,15 @@ pub fn call_return<EXT, DB: Database>(
     context
         .evm
         .call_return(&interpreter_result, frame.frame_data.checkpoint);
+
+    // Log the call return, if SSA logger is present.
+    if context.evm.ssa_logger.is_some() {
+        context.evm.ssa_logger.as_mut().unwrap().log_call_return(
+            convert_interpreter_result(&interpreter_result),
+            frame.return_memory_range.clone(),
+        );
+    }
+
     Ok(CallOutcome::new(
         interpreter_result,
         frame.return_memory_range,

@@ -50,10 +50,12 @@ impl ExecutionTracer {
     /// Compare if two results are equal
     fn compare_results(original: &[SSAOutput], graph: &[SSAOutput]) -> bool {
         // Filter out MemorySize type outputs
-        let original_filtered: Vec<_> = original.iter()
+        let original_filtered: Vec<_> = original
+            .iter()
             .filter(|output| !matches!(output, SSAOutput::MemorySize(_)))
             .collect();
-        let graph_filtered: Vec<_> = graph.iter()
+        let graph_filtered: Vec<_> = graph
+            .iter()
             .filter(|output| !matches!(output, SSAOutput::MemorySize(_)))
             .collect();
 
@@ -61,7 +63,9 @@ impl ExecutionTracer {
             return false;
         }
 
-        original_filtered.iter().zip(graph_filtered.iter())
+        original_filtered
+            .iter()
+            .zip(graph_filtered.iter())
             .all(|(a, b)| Self::compare_output(a, b))
     }
 
@@ -70,76 +74,80 @@ impl ExecutionTracer {
         match (a, b) {
             // Compare stack outputs
             (SSAOutput::Stack(v1), SSAOutput::Stack(v2)) => v1 == v2,
-            
+
             // Compare memory outputs
             (SSAOutput::Memory(v1), SSAOutput::Memory(v2)) => v1 == v2,
-            
+
             // Compare storage outputs
-            (SSAOutput::Storage { key: k1, value: v1, .. }, SSAOutput::Storage { key: k2, value: v2, .. }) => {
-                k1 == k2 && v1 == v2
-            },
-            
+            (
+                SSAOutput::Storage {
+                    key: k1, value: v1, ..
+                },
+                SSAOutput::Storage {
+                    key: k2, value: v2, ..
+                },
+            ) => k1 == k2 && v1 == v2,
+
             // Compare return data
             (SSAOutput::ReturnDataBuffer(v1), SSAOutput::ReturnDataBuffer(v2)) => v1 == v2,
-            
+
             // Compare memory size
             (SSAOutput::MemorySize(s1), SSAOutput::MemorySize(s2)) => s1 == s2,
-            
+
             // Compare jumps
             (SSAOutput::Jump(o1), SSAOutput::Jump(o2)) => o1 == o2,
-            
+
             // Compare call frames
-            (SSAOutput::CallInput(f1), SSAOutput::CallInput(f2)) => {
-                f1.caller == f2.caller &&
-                f1.target_address == f2.target_address &&
-                f1.input == f2.input &&
-                f1.transfer_value == f2.transfer_value &&
-                f1.scheme == f2.scheme &&
-                f1.ret_range == f2.ret_range
-            },
-            
+            (SSAOutput::FrameInput(f1), SSAOutput::FrameInput(f2)) => {
+                f1.caller == f2.caller
+                    && f1.target_address == f2.target_address
+                    && f1.input == f2.input
+                    && f1.transfer_value == f2.transfer_value
+                    && f1.scheme == f2.scheme
+                    && f1.ret_range == f2.ret_range
+            }
+
             // Compare call outcomes
             (SSAOutput::CallOutcome(o1), SSAOutput::CallOutcome(o2)) => {
-                o1.result == o2.result &&
-                o1.ret_range == o2.ret_range
-            },
-            
-            // Compare create frames
-            (SSAOutput::CreateInput(f1), SSAOutput::CreateInput(f2)) => {
-                f1.caller == f2.caller &&
-                f1.value == f2.value &&
-                f1.init_code == f2.init_code &&
-                f1.scheme == f2.scheme
-            },
-            
+                o1.result == o2.result && o1.ret_range == o2.ret_range
+            }
+
             // Compare create outcomes
             (SSAOutput::CreateOutcome(o1), SSAOutput::CreateOutcome(o2)) => {
-                o1.result == o2.result &&
-                o1.address == o2.address
-            },
-            
+                o1.result == o2.result && o1.address == o2.address
+            }
+
             // Compare logs
             (SSAOutput::Log(l1), SSAOutput::Log(l2)) => l1 == l2,
-            
+
             // Compare interpreter results
             (SSAOutput::InterpreterResult(r1), SSAOutput::InterpreterResult(r2)) => {
                 r1.result == r2.result && r1.output == r2.output
-            },
-            
-            // 添加常量比较
+            }
+
+            // Compare constant values
             (SSAOutput::Constant(v1), SSAOutput::Constant(v2)) => v1 == v2,
-            
-            // 添加合约环境比较
+
+            // Compare contract environment
             (SSAOutput::ContractEnv(e1), SSAOutput::ContractEnv(e2)) => {
-                e1.target_address == e2.target_address &&
-                e1.caller == e2.caller &&
-                e1.call_value == e2.call_value &&
-                e1.input == e2.input &&
-                e1.bytecode == e2.bytecode &&
-                e1.hash == e2.hash &&
-                e1.bytecode_address == e2.bytecode_address
-            },
-            
+                e1.frame_input.target_address == e2.frame_input.target_address
+                    && e1.frame_input.caller == e2.frame_input.caller
+                    && e1.frame_input.transfer_value == e2.frame_input.transfer_value
+                    && e1.frame_input.input == e2.frame_input.input
+                    && e1.bytecode == e2.bytecode
+                    && e1.hash == e2.hash
+                    && e1.frame_input.bytecode_address == e2.frame_input.bytecode_address
+            }
+
+            // Compare gas refund
+            (SSAOutput::GasRefund(r1), SSAOutput::GasRefund(r2)) => r1 == r2,
+
+            // Compare gas cost
+            (SSAOutput::Gas(c1), SSAOutput::Gas(c2)) => c1 == c2,
+
+            // Compare transient values
+            (SSAOutput::Transient(v1), SSAOutput::Transient(v2)) => v1 == v2,
+
             // Different types of outputs are considered unequal
             _ => false,
         }
@@ -152,14 +160,17 @@ impl ExecutionTracer {
         } else {
             let mut report = String::new();
             report.push_str("Mismatches found:\n");
-            
+
             // Create a mutable clone for sorting
             let mut sorted_mismatches = self.mismatches.clone();
             // Sort by LSN
             sorted_mismatches.sort_by_key(|m| m.lsn);
-            
+
             for mismatch in &sorted_mismatches {
-                report.push_str(&format!("LSN {}: opcode 0x{:02x}\n", mismatch.lsn, mismatch.opcode));
+                report.push_str(&format!(
+                    "LSN {}: opcode 0x{:02x}\n",
+                    mismatch.lsn, mismatch.opcode
+                ));
                 report.push_str("Original:\n");
                 for output in &mismatch.original {
                     report.push_str(&format!("  {:?}\n", output));
@@ -170,8 +181,8 @@ impl ExecutionTracer {
                 }
                 report.push_str("\n");
             }
-            
+
             report
         }
     }
-} 
+}

@@ -1,4 +1,4 @@
-# OCCDA (Optimistic Concurrent Contract Deployment and Analysis)
+# OCCDA (Optimistic Concurrent Contract Deterministic Aborts)
 
 ## Overview
 OCCDA is an optimistic concurrency control system designed for parallel execution of Ethereum transactions. It aims to maximize throughput while maintaining sequential consistency.

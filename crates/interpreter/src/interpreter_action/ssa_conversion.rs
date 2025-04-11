@@ -1,25 +1,39 @@
+use super::{CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome};
+use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
 use revm_primitives::CreateScheme;
 use revm_ssa::{
-    ContractEnv, SSACallInput, SSACallOutcome, SSACallScheme, SSACreateInput, SSACreateOutcome, SSACreateScheme, SSAInstructionResult, SSAInterpreterResult};
-use crate::{return_ok, return_revert, Contract, InstructionResult, InterpreterResult};
-use super::{CallInputs, CallOutcome, CreateInputs, CreateOutcome, CallScheme};
+    ContractEnv, FrameInput, SSACallOutcome, SSACreateOutcome, SSAInstructionResult,
+    SSAInterpreterResult, TxScheme,
+};
 
 /// Convert interpreter's Contract to SSA's ContractEnv
-pub fn convert_contract_env(env: &Contract) -> ContractEnv {
+pub fn convert_contract_env(env: &Contract, frame_input: FrameInput) -> ContractEnv {
     ContractEnv {
-        target_address: env.target_address,
-        caller: env.caller,
-        call_value: env.call_value,
-        input: env.input.clone(),
         bytecode: env.bytecode.clone(),
         hash: env.hash,
-        bytecode_address: env.bytecode_address,
+        frame_input,
+    }
+}
+
+/// Convert interpreter's Contract to SSA's ContractEnv
+pub fn convert_contract_env_for_system(env: &Contract) -> ContractEnv {
+    ContractEnv {
+        bytecode: env.bytecode.clone(),
+        hash: env.hash,
+        frame_input: FrameInput {
+            input: env.input.clone(),
+            bytecode_address: env.bytecode_address.unwrap_or_default(),
+            target_address: env.target_address,
+            caller: env.caller,
+            transfer_value: env.call_value,
+            ..Default::default()
+        },
     }
 }
 
 /// Convert interpreter's CallInputs to SSA's CallInput
-pub fn convert_call_input(input: &CallInputs) -> SSACallInput {
-    SSACallInput {
+pub fn convert_call_input(input: &CallInputs) -> FrameInput {
+    FrameInput {
         input: input.input.clone(),
         target_address: input.target_address,
         bytecode_address: input.bytecode_address,
@@ -40,12 +54,13 @@ pub fn convert_call_outcome(outcome: &CallOutcome) -> SSACallOutcome {
 }
 
 /// Convert interpreter's CreateInputs to SSA's CreateInput
-pub fn convert_create_input(input: &CreateInputs) -> SSACreateInput {
-    SSACreateInput {
+pub fn convert_create_input(input: &CreateInputs) -> FrameInput {
+    FrameInput {
         caller: input.caller,
-        value: input.value,
-        init_code: input.init_code.clone(),
+        transfer_value: input.value,
+        input: input.init_code.clone(),
         scheme: convert_create_scheme(input.scheme),
+        ..Default::default()
     }
 }
 
@@ -58,26 +73,23 @@ pub fn convert_create_outcome(outcome: &CreateOutcome) -> SSACreateOutcome {
 }
 
 /// Convert interpreter's CallScheme to SSA's CallScheme
-fn convert_call_scheme(scheme: CallScheme) -> SSACallScheme {
+fn convert_call_scheme(scheme: CallScheme) -> TxScheme {
     match scheme {
-        CallScheme::Call => SSACallScheme::Call,
-        CallScheme::CallCode => SSACallScheme::CallCode,
-        CallScheme::DelegateCall => SSACallScheme::DelegateCall,
-        CallScheme::StaticCall => SSACallScheme::StaticCall,
-        CallScheme::ExtCall => SSACallScheme::ExtCall,
-        CallScheme::ExtStaticCall => SSACallScheme::ExtStaticCall,
-        CallScheme::ExtDelegateCall => SSACallScheme::ExtDelegateCall,
+        CallScheme::Call => TxScheme::Call,
+        CallScheme::CallCode => TxScheme::CallCode,
+        CallScheme::DelegateCall => TxScheme::DelegateCall,
+        CallScheme::StaticCall => TxScheme::StaticCall,
+        _ => unimplemented!(),
     }
-} 
+}
 
 /// Convert interpreter's CreateScheme to SSA's CreateScheme
-fn convert_create_scheme(scheme: CreateScheme) -> SSACreateScheme {
+fn convert_create_scheme(scheme: CreateScheme) -> TxScheme {
     match scheme {
-        CreateScheme::Create => SSACreateScheme::Create,
-        CreateScheme::Create2 { salt } => SSACreateScheme::Create2 { salt },
+        CreateScheme::Create => TxScheme::Create,
+        CreateScheme::Create2 { salt } => TxScheme::Create2 { salt },
     }
-} 
-
+}
 
 pub fn convert_interpreter_result(result: &InterpreterResult) -> SSAInterpreterResult {
     SSAInterpreterResult {

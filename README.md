@@ -105,6 +105,22 @@ Each file corresponds to a transaction in the block and is named as such: `<tx i
 cargo run -p revm --features std,serde-json,ethersdb --example generate_block_traces
 ```
 
+## Running parallel tests
+
+To run parallel tests with custom transaction data:
+
+1. Generate custom transaction data using [altius-benchtools](https://github.com/Altius-Labs/altius-benchtools?tab=readme-ov-file#2-transaction-generator). Follow the instructions in its README to generate JSON-formatted transaction data similar to `bins/revme/c-erc20-many-to-many.json`.
+
+2. Run the parallel tests using the generated data:
+```bash
+cargo run -p revme -- parallel-test ./bins/revme/c-erc20-many-to-many.json --parallel=true --num-of-threads 8
+
+# or custom test file
+cargo run -p revme -- parallel-test "$file_path" --parallel=true --num-of-threads 8
+```
+
+This will execute the tests in parallel using 8 threads. The `--parallel=true` flag enables parallel execution mode, and `--num-of-threads` specifies the number of threads to use.
+
 # Used by:
 
 * [Foundry](https://github.com/foundry-rs/foundry) is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.
