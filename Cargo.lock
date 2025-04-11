@@ -4033,6 +4033,7 @@ dependencies = [
  "revm-ssa-graph",
  "serde",
  "serde_json",
+ "typed-graph",
 ]
 
 [[package]]

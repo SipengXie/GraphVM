@@ -11,6 +11,7 @@ revm-interpreter = { path = "../interpreter" }
 revm-precompile = { path = "../precompile" }
 revm-ssa = { path = "../revm-ssa" }
 revm-ssa-graph = { path = "../revm-ssa-graph" }
+typed-graph = { path = "../typed-graph" }
 criterion = "0.5"
 rayon = "1.10.0"
 parking_lot = "0.12"

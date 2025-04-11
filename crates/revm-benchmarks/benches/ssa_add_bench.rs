@@ -5,6 +5,8 @@ use revm_ssa_graph::{instruction_table::InstructionTable, ExecutionContext, SsaG
 use revm::db::{EmptyDB, CacheDB};
 use rand::Rng;
 use std::{time::Duration, sync::Arc};
+use typed_graph::{instructions::arithmetic::AddNode, typed_graph::TypedNode};
+
 // Constants for the benchmark
 const NODE_COUNT: usize = 10_000;
 const OPCODE_ADD: u8 = 0x01; // ADD opcode in EVM
@@ -34,6 +36,36 @@ struct SSABenchData {
     graph: Arc<SsaGraph>,
     context: Arc<ExecutionContext<'static, CacheDB<EmptyDB>>>,
     nodes_to_execute: Vec<LsnType>,
+}
+
+// New struct for TypedGraph benchmark data
+struct TypedGraphBenchData {
+    nodes: Vec<AddNode>,
+}
+
+fn prepare_typed_graph(dependencies: &[usize], constants: &[U256]) -> TypedGraphBenchData {
+    let mut nodes = Vec::with_capacity(NODE_COUNT);
+    
+    // First node: add constant with itself
+    let first_node = AddNode::new(
+        &constants[0] as *const U256,
+        &constants[0] as *const U256
+    );
+    nodes.push(first_node);
+    
+    // Create remaining nodes
+    for i in 1..NODE_COUNT {
+        // Create node with dependency pointer and constant pointer
+        let node = AddNode::new(
+            nodes[dependencies[i]].get_u256_output(0).unwrap(),
+            &constants[i] as *const U256
+        );
+        nodes.push(node);
+    }
+
+    TypedGraphBenchData {
+        nodes,
+    }
 }
 
 fn prepare_ssa_graph(dependencies: &[usize], constants: &[U256]) -> SSABenchData {
@@ -106,6 +138,14 @@ fn execute_ssa_graph(data: &SSABenchData) -> Vec<U256> {
     results
 }
 
+// Execute TypedGraph nodes
+fn execute_typed_graph(data: &mut TypedGraphBenchData) {
+    // Execute nodes in order
+    for node in data.nodes.iter_mut() {
+        node.execute().unwrap();
+    }
+}
+
 // Benchmark traditional U256 calculation
 fn bench_traditional(dependencies: &[usize], constants: &[U256]) -> Vec<U256> {
     let mut results = vec![U256::ZERO; NODE_COUNT];
@@ -123,19 +163,27 @@ fn bench_traditional(dependencies: &[usize], constants: &[U256]) -> Vec<U256> {
 
 fn bench_ssa_vs_traditional(c: &mut Criterion) {
     let mut group = c.benchmark_group("ssa_add_comparison");
-    group.sample_size(10);
-    group.warm_up_time(Duration::from_secs(1));
-    group.measurement_time(Duration::from_secs(3));
+    group.sample_size(20);
+    group.warm_up_time(Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(5));
 
     // Generate test data
     let (dependencies, constants) = generate_test_data();
 
-    // Prepare SSA Graph data (only once, outside the benchmark)
-    let ssa_data = prepare_ssa_graph(&dependencies, &constants);
-
     // Benchmark SSA Graph execution
     group.bench_function("ssa_graph", |b| {
-        b.iter(|| execute_ssa_graph(&ssa_data))
+        b.iter_with_setup(
+            || prepare_ssa_graph(&dependencies, &constants),
+            |data| execute_ssa_graph(&data)
+        )
+    });
+
+    // Benchmark TypedGraph execution
+    group.bench_function("typed_graph", |b| {
+        b.iter_with_setup(
+            || prepare_typed_graph(&dependencies, &constants),
+            |mut data| execute_typed_graph(&mut data)
+        )
     });
 
     // Benchmark traditional implementation
