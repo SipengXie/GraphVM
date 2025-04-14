@@ -1,2 +1,9 @@
 pub mod arithmetic;
 pub mod bitwise;
+pub mod memory;
+pub mod host_env;
+pub mod host;
+pub mod system;
+pub mod control;
+pub mod contract;
+pub mod macros;

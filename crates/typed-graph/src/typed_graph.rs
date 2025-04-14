@@ -1,4 +1,7 @@
-use revm_primitives::U256;
+use revm_interpreter::InstructionResult;
+use revm_primitives::{AccountInfo, Bytes, U256};
+
+use crate::context::FrameInput;
 
 /// Core trait that all typed nodes must implement
 pub trait TypedNode {
@@ -10,6 +13,25 @@ pub trait TypedNode {
         None
     }
 
+    fn get_usize_output(&self) -> usize {
+        0
+    }
+
+    fn get_instruction_result_output(&self) -> InstructionResult {
+        InstructionResult::Continue
+    }
+
+    fn get_bytes_output(&self) -> Option<*const Bytes> {
+        None
+    }
+
+    fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
+        None
+    }
+
+    fn get_frame_input_output(&self) -> Option<*const FrameInput> {
+        None // Default implementation returns None
+    }
 }
 
 /// Trait for compile-time input type checking

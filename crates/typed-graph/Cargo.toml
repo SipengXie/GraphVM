@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 revm-primitives = { path = "../primitives" }
+revm-interpreter = { path = "../interpreter" }
+revm-ssa = { path = "../revm-ssa" }
+revm-precompile = { path = "../precompile" }

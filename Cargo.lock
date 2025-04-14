@@ -5417,7 +5417,10 @@ name = "typed-graph"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "revm-interpreter",
+ "revm-precompile",
  "revm-primitives",
+ "revm-ssa",
 ]
 
 [[package]]
