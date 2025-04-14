@@ -13,7 +13,7 @@ either = "1.9.0"
 
 
 # Basic dependencies
-hashbrown = "0.14"  # High performance hash table
+hashbrown = "0.15"  # High performance hash table
 dashmap = "6.1.0"
 petgraph = "0.6"    # Graph algorithm library
 thiserror = "1.0"   # Error handling
