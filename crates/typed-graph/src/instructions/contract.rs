@@ -635,9 +635,9 @@ impl TypedNode for MakeCallFrameNode {
     }
 
     fn get_account_info_output(&self, index: usize) -> Option<*const AccountInfo> {
-        match index {
-            2 => Some(&self.outputs.2 as *const AccountInfo),
-            3 => Some(&self.outputs.3 as *const AccountInfo),
+        match index { // 0: caller, 1: target, compatible with SsaGraph
+            0 => Some(&self.outputs.2 as *const AccountInfo),
+            1 => Some(&self.outputs.3 as *const AccountInfo),
             _ => None,
         }
     }
@@ -1011,11 +1011,12 @@ pub struct MakeCreateFrameNode {
         Option<Rc<RefCell<ExternalContext>>>,
     ),
     /// Outputs:
-    /// 0: FrameContext - Context for the create execution (if valid).
-    /// 1: AccountInfo - Updated caller info (balance transfer, nonce).
-    /// 2: AccountInfo - Contract account info.
-    /// 3: AccountStatus - Initial status for the *created* address.
-    outputs: (FrameContext, AccountInfo, AccountInfo, AccountStatus),
+    
+    /// 0: AccountInfo - Updated caller info (balance transfer, nonce).
+    /// 1: AccountInfo - Contract account info.
+    /// 2: AccountStatus - Initial status for the *created* address.
+    /// 3: FrameContext - Context for the create execution (if valid).
+    outputs: (AccountInfo, AccountInfo, AccountStatus, FrameContext),
 }
 // Define Input/Output types and impl Has... traits
 
@@ -1033,10 +1034,10 @@ impl MakeCreateFrameNode {
         Self {
             inputs: (frame_input_ptr, caller_info_ptr, context_ref_opt),
             outputs: (
-                FrameContext::default(),
                 AccountInfo::default(),
                 AccountInfo::default(),
                 AccountStatus::default(),
+                FrameContext::default(),
             ), // Initialize outputs
         }
     }
@@ -1091,35 +1092,37 @@ impl TypedNode for MakeCreateFrameNode {
             frame_context.frame_input.target_address = target_address;
 
             // 8. Output FrameContext, updated caller, initial created state.
-            self.outputs.0 = frame_context;
-            self.outputs.1 = caller_info;
-            self.outputs.2 = initial_created_info;
-            self.outputs.3 = initial_created_status;
+            self.outputs.0 = caller_info;
+            self.outputs.1 = initial_created_info;
+            self.outputs.2 = initial_created_status;
+            self.outputs.3 = frame_context;
         }
         Ok(())
     }
 
-    fn get_frame_context_output(&self) -> Option<*const FrameContext> {
-        Some(&self.outputs.0 as *const FrameContext)
-    }
-
     fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
         match _index {
-            1 => Some(&self.outputs.1 as *const AccountInfo),
-            2 => Some(&self.outputs.2 as *const AccountInfo),
+            1 => Some(&self.outputs.0 as *const AccountInfo),
+            2 => Some(&self.outputs.1 as *const AccountInfo),
             _ => None,
         }
     }
 
     fn get_account_status_output(&self) -> *const AccountStatus {
-        &self.outputs.3 as *const AccountStatus
+        &self.outputs.2 as *const AccountStatus
     }
+
+    fn get_frame_context_output(&self) -> Option<*const FrameContext> {
+        Some(&self.outputs.3 as *const FrameContext)
+    }
+
 
     fn print(&self) -> String {
         format!(
-            "MakeCreateFrameNode: Account 1=(Balance: {}, Nonce: {}), Account 2=(Balance: {}, Nonce: {}), Status={:?}",
+            "MakeCreateFrameNode: Account 1=(Balance: {}, Nonce: {}), Account 2=(Balance: {}, Nonce: {}), Status={:?}, FrameContext={:?}",
+            self.outputs.0.balance, self.outputs.0.nonce,
             self.outputs.1.balance, self.outputs.1.nonce,
-            self.outputs.2.balance, self.outputs.2.nonce,
+            self.outputs.2,
             self.outputs.3
         )
     }
@@ -1233,8 +1236,11 @@ impl TypedNode for CreateReturnNode {
         Some(&self.outputs.0 as *const CreateOutcome)
     }
 
-    fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
-        Some(&self.outputs.1 as *const AccountInfo)
+    fn get_account_info_output(&self, index: usize) -> Option<*const AccountInfo> {
+        match index {
+            1 => Some(&self.outputs.1 as *const AccountInfo),
+            _ => None,
+        }
     }
 
     fn print(&self) -> String {
