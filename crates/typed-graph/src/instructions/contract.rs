@@ -1,9 +1,9 @@
-use crate::{context::{get_account_context, CallOutcome, CreateOutcome, ExternalContext, FrameContext, FrameInput}, typed_graph::{HasInputType, HasOutputType, TypedNode}, u256_to_address};
+use crate::{context::{get_account_context, CallOutcome, CreateOutcome, ExternalContext, FrameContext}, typed_graph::{HasInputType, HasOutputType, TypedNode}, u256_to_address};
 use revm_interpreter::{analysis::to_analysed, as_u64_saturated, as_usize_saturated, return_ok, InstructionResult, SharedMemory};
 use revm_primitives::{
     keccak256, AccountInfo, AccountStatus, Address, Bytecode, Bytes, B256, U256, U256_ONE
 };
-use revm_ssa::TxScheme;
+use revm_ssa::{FrameInput, TxScheme};
 use std::{cell::RefCell, cmp::min, rc::Rc};
 
 use super::memory::calc_memory_size;
@@ -20,18 +20,18 @@ pub struct DeductCallerNode {
     /// 1: bool - True if the operation is CREATE/CREATE2 (prevents nonce increment).
     /// 2: *const U256 - Cost associated (e.g., gas cost, ignored for balance deduction now).
     /// 3: Rc<RefCell<ExternalContext>> - Reference to external context to get initial state.
-    inputs: (*const Address, bool, *const U256, Rc<RefCell<ExternalContext>>),
+    inputs: (*const U256, bool, *const U256, Rc<RefCell<ExternalContext>>),
     /// Output:
     /// 0: AccountInfo - Updated caller info (primarily nonce potentially incremented).
     outputs: (AccountInfo,),
 }
 
-impl HasInputType<(*const Address, bool, *const U256, Rc<RefCell<ExternalContext>>)> for DeductCallerNode {}
+impl HasInputType<(*const U256, bool, *const U256, Rc<RefCell<ExternalContext>>)> for DeductCallerNode {}
 impl HasOutputType<(AccountInfo,)> for DeductCallerNode {}
 
 impl DeductCallerNode {
     pub fn new(
-        caller_ptr: *const Address,
+        caller_ptr: *const U256,
         is_create: bool,
         cost_ptr: *const U256, // Added cost input, though unused for balance now
         context_ref: Rc<RefCell<ExternalContext>>
@@ -43,7 +43,7 @@ impl DeductCallerNode {
 impl TypedNode for DeductCallerNode {
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
-            let caller_address = *self.inputs.0;
+            let caller_address = Address::from_word(B256::from(*self.inputs.0)) ;
             let is_create = self.inputs.1;
             let cost = *self.inputs.2; // Read cost, but ignore it for balance modification for now
             let context_ref = &self.inputs.3;
@@ -170,7 +170,6 @@ fn execute_base_call(
             scheme,
             ret_range: out_offset..out_offset + out_len,
             gas_limit,
-            is_static: scheme == TxScheme::StaticCall, // TODO:Inherit static
         };
     }
     Ok(())
@@ -415,20 +414,20 @@ pub struct CallReturnNode {
     /// 0: InstructionResult - Result status from sub-execution.
     /// 1: *const Bytes - Return data buffer from sub-execution.
     /// 3: *const FrameContext - Context of the *completed* sub-frame.
-    inputs: (InstructionResult, *const Bytes, *const FrameContext),
+    inputs: (*const InstructionResult, *const Bytes, *const FrameContext),
     /// Outputs:
     /// 0: CallOutcome - Bundled result.
     outputs: (CallOutcome,),
 }
 // Define Input/Output types and impl Has... traits
-type CallReturnInputs = (InstructionResult, *const Bytes, *const FrameContext);
+type CallReturnInputs = (*const InstructionResult, *const Bytes, *const FrameContext);
 type CallReturnOutputs = (CallOutcome,);
 impl HasInputType<CallReturnInputs> for CallReturnNode {}
 impl HasOutputType<CallReturnOutputs> for CallReturnNode {}
 
 impl CallReturnNode {
     pub fn new(
-        result: InstructionResult,
+        result: *const InstructionResult,
         return_data_ptr: *const Bytes,
         frame_context_ptr: *const FrameContext
     ) -> Self {
@@ -442,7 +441,7 @@ impl CallReturnNode {
 impl TypedNode for CallReturnNode {
      fn execute(&mut self) -> anyhow::Result<()> {
          unsafe {
-             let result = self.inputs.0;
+             let result = *self.inputs.0;
              let return_data = (*self.inputs.1).clone();
              let frame_context = &*self.inputs.2;
              // FrameContext might be needed to know the original ret_range if not stored elsewhere
@@ -763,7 +762,7 @@ pub struct CreateReturnNode {
     /// 3: Option<Rc<RefCell<ExternalContext>>> - To deploy the code (update account info).
     /// 4: Option<*const AccountInfo> - Target account info.
     /// 5: Option<bool> Whether to analyze the code.
-    inputs: (InstructionResult, Option<*const Bytes>, Option<*const FrameContext>, Option<Rc<RefCell<ExternalContext>>>, Option<*const AccountInfo>, Option<bool>),
+    inputs: (*const InstructionResult, Option<*const Bytes>, Option<*const FrameContext>, Option<Rc<RefCell<ExternalContext>>>, Option<*const AccountInfo>, Option<bool>),
     /// Outputs:
     /// 0: CreateOutcome - Bundled result including the created address.
     /// 1: AccountInfo - Updated AccountInfo with deployed code (if successful).
@@ -773,15 +772,17 @@ pub struct CreateReturnNode {
 
 impl CreateReturnNode {
     pub fn new(
-        result: InstructionResult,
+        result: *const InstructionResult,
         output_ptr: Option<*const Bytes>,
         frame_context_ptr: Option<*const FrameContext>,
         ext_context_opt: Option<Rc<RefCell<ExternalContext>>>,
         target_info_ptr: Option<*const AccountInfo>,
         analyze_opt: Option<bool>,
     ) -> Self {
-        if matches!(result, return_ok!()) {
-            assert_ne!(target_info_ptr.is_some(), ext_context_opt.is_some(), "target_info_ptr and ext_context_opt must not both be Some");
+        unsafe {
+            if matches!(*result, return_ok!()) {
+                assert_ne!(target_info_ptr.is_some(), ext_context_opt.is_some(), "target_info_ptr and ext_context_opt must not both be Some");
+            }
         }
         Self {
             inputs: (result, output_ptr, frame_context_ptr, ext_context_opt, target_info_ptr, analyze_opt),
@@ -794,7 +795,7 @@ impl TypedNode for CreateReturnNode {
           unsafe {
                 // 1. Get result, deployment bytecode, gas used, frame context, initial state.
                 let result = self.inputs.0;
-                if !matches!(result, return_ok!()) {
+                if !matches!(*result, return_ok!()) {
                     return Err(anyhow::anyhow!("CreateReturnNode received non-return_ok! result"));
                 }
                 
@@ -812,7 +813,7 @@ impl TypedNode for CreateReturnNode {
                 );
 
                 let create_outcome = CreateOutcome {
-                    result,
+                    result: *result,
                     return_data: deployment_code_bytes.clone(),
                     created_address: Some(contract_address),
                 };

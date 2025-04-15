@@ -1,7 +1,8 @@
 use revm_interpreter::InstructionResult;
 use revm_primitives::{AccountInfo, AccountStatus, Bytes, U256};
+use revm_ssa::FrameInput;
 
-use crate::context::{CallOutcome, CreateOutcome, FrameContext, FrameInput};
+use crate::context::{CallOutcome, CreateOutcome, FrameContext};
 
 /// Core trait that all typed nodes must implement
 pub trait TypedNode {
@@ -48,7 +49,6 @@ pub trait TypedNode {
     fn get_call_outcome_output(&self) -> Option<*const CallOutcome> {
         None
     }
-
 }
 
 /// Trait for compile-time input type checking
@@ -85,5 +85,10 @@ impl TypedGraph {
         self.nodes.push(node);
         self.execution_order.push(idx);
         idx
+    }
+
+    /// Get a reference to a node
+    pub fn get_node(&self, idx: usize) -> &dyn TypedNode {
+        &*self.nodes[idx]
     }
 }

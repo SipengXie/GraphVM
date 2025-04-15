@@ -2,9 +2,9 @@ use core::ops::Range;
 
 use revm_interpreter::InstructionResult;
 // Add this struct definition, likely in host.rs or a shared types module
-use revm_primitives::{AccountInfo, AccountStatus, Address, Bytecode, Bytes, Env, HashMap, B256, U256, PrecompileErrors};
-use revm_ssa::TxScheme;
-use revm_precompile::Precompiles;
+use revm_primitives::{AccountInfo, AccountStatus, Address, Bytes, Env, HashMap, PrecompileErrors, SpecId, B256, U256};
+use revm_ssa::ContractEnv;
+use revm_precompile::{PrecompileSpecId, Precompiles};
 
 // --- External State Context ---
 
@@ -26,6 +26,22 @@ pub struct ExternalContext {
 }
 
 impl ExternalContext {
+    /// Create a new ExternalContext with the given parameters
+    pub fn new(
+        env: Env,
+        accounts: HashMap<Address, (AccountInfo, AccountStatus)>,
+        storage: HashMap<(Address, U256), U256>,
+        block_hashes: HashMap<u64, B256>,
+    ) -> Self {
+        Self {
+            accounts,
+            storage,
+            block_hashes,
+            env,
+            precompiles:  Precompiles::new(PrecompileSpecId::from_spec_id(SpecId::LATEST))
+        }
+    }
+
     // Method to check if an address is a precompile
     pub fn is_precompile(&self, address: &Address) -> bool {
         self.precompiles.contains(address)
@@ -70,48 +86,7 @@ pub fn get_storage_slot_context(context: &ExternalContext, address: Address, ind
     context.storage.get(&(address, index)).cloned().unwrap_or(U256::ZERO)
 }
 
-
-#[derive(Clone, Debug, Default)]
-pub struct FrameContext {
-    /// Bytecode contains contract code, size of original code, analysis with gas block and jump table.
-    /// Note that current code is extended with push padding and STOP at end.
-    pub bytecode: Bytecode,
-    /// Bytecode hash for legacy. For EOF this would be None.
-    pub hash: Option<B256>,
-    /// FrameInput of this contractEnv
-    pub frame_input: FrameInput,
-}
-
-/// Represents the input parameters for a new execution frame (CALL, CREATE, etc.).
-/// This is produced by CALL/CREATE type nodes.
-#[derive(Clone, Debug)]
-pub struct FrameInput {
-    pub target_address: Address, // Address being called or created address
-    pub caller: Address,         // Address initiating the call/create
-    pub transfer_value: U256,    // Value transferred
-    pub input: Bytes,            // Input data (calldata or init code)
-    pub gas_limit: u64,          // Gas limit for the sub-call/create
-    pub scheme: TxScheme,        // Call, Create, Create2, etc.
-    pub ret_range: Range<usize>, // Expected return memory range (for CALLs)
-    pub bytecode_address: Address, // Address whose code to execute (differs for CALLCODE/DELEGATECALL)
-    pub is_static: bool,         // Is this a static call?
-}
-
-impl Default for FrameInput {
-    fn default() -> Self {
-        Self {
-            target_address: Address::ZERO,
-            caller: Address::ZERO,
-            transfer_value: U256::ZERO,
-            input: Bytes::new(),
-            gas_limit: 0,
-            scheme: TxScheme::Call, // Default, should be set properly
-            ret_range: 0..0,
-            bytecode_address: Address::ZERO,
-            is_static: false,
-        }
-    }
-}
+pub type FrameContext = ContractEnv;
 
 /// Outcome of a CALL-like operation.
 #[derive(Clone, Debug)]

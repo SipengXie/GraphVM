@@ -62,7 +62,7 @@ pub struct MemoryDep {
     pub length: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ContractEnv {
     /// Bytecode contains contract code, size of original code, analysis with gas block and jump table.
