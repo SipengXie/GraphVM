@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use revm_primitives::{U256, Env, LatestSpec};
+use rand::Rng;
+use revm::db::{CacheDB, EmptyDB};
+use revm_primitives::{Env, LatestSpec, U256};
 use revm_ssa::{logger::LsnType, SSAInput, SSALogEntry, SSAOutput};
 use revm_ssa_graph::{instruction_table::InstructionTable, ExecutionContext, SsaGraph};
-use revm::db::{EmptyDB, CacheDB};
-use rand::Rng;
-use std::{time::Duration, sync::Arc};
+use std::{sync::Arc, time::Duration};
 use typed_graph::{instructions::arithmetic::AddNode, typed_graph::TypedNode};
 
 // Constants for the benchmark
@@ -45,27 +45,22 @@ struct TypedGraphBenchData {
 
 fn prepare_typed_graph(dependencies: &[usize], constants: &[U256]) -> TypedGraphBenchData {
     let mut nodes = Vec::with_capacity(NODE_COUNT);
-    
+
     // First node: add constant with itself
-    let first_node = AddNode::new(
-        &constants[0] as *const U256,
-        &constants[0] as *const U256
-    );
+    let first_node = AddNode::new(&constants[0] as *const U256, &constants[0] as *const U256);
     nodes.push(first_node);
-    
+
     // Create remaining nodes
     for i in 1..NODE_COUNT {
         // Create node with dependency pointer and constant pointer
         let node = AddNode::new(
             nodes[dependencies[i]].get_u256_output(),
-            &constants[i] as *const U256
+            &constants[i] as *const U256,
         );
         nodes.push(node);
     }
 
-    TypedGraphBenchData {
-        nodes,
-    }
+    TypedGraphBenchData { nodes }
 }
 
 fn prepare_ssa_graph(dependencies: &[usize], constants: &[U256]) -> SSABenchData {
@@ -98,11 +93,9 @@ fn prepare_ssa_graph(dependencies: &[usize], constants: &[U256]) -> SSABenchData
     // Create execution context with static env
     let env = Box::leak(Box::new(Env::default()));
     let cache = CacheDB::new(EmptyDB::default());
-    let context = Arc::new(ExecutionContext::<'static, CacheDB<EmptyDB>>::new::<LatestSpec>(
-        env,
-        cache,
-        None,
-    ));
+    let context = Arc::new(ExecutionContext::<'static, CacheDB<EmptyDB>>::new::<
+        LatestSpec,
+    >(env, cache, None));
 
     // Get topological sort and create Arc for graph
     let nodes_to_execute = graph.topological_sort().unwrap();
@@ -118,17 +111,18 @@ fn prepare_ssa_graph(dependencies: &[usize], constants: &[U256]) -> SSABenchData
 // Execute SSA Graph nodes and collect results
 fn execute_ssa_graph(data: &SSABenchData) -> Vec<U256> {
     let mut results = vec![U256::ZERO; NODE_COUNT];
-    
+
     // Get mutable reference to graph (unsafe but necessary for benchmark)
     let mut_graph = unsafe { &mut *(Arc::as_ptr(&data.graph) as *mut SsaGraph) };
     let table = InstructionTable::create_instruction_table::<LatestSpec>();
-    let mut_context = unsafe { &mut *(Arc::as_ptr(&data.context) as *mut ExecutionContext<CacheDB<EmptyDB>>) };
-    
+    let mut_context =
+        unsafe { &mut *(Arc::as_ptr(&data.context) as *mut ExecutionContext<CacheDB<EmptyDB>>) };
+
     // Execute nodes using SSAExecutor
     for node_index in &data.nodes_to_execute {
         let node = mut_graph.get_node_mut(*node_index).unwrap();
         table.instructions[node.opcode as usize](mut_context, node, &data.graph).unwrap();
-        
+
         // Store result
         if let SSAOutput::Stack(value) = node.outputs[0] {
             results[node.lsn as usize] = value;
@@ -149,7 +143,7 @@ fn execute_typed_graph(data: &mut TypedGraphBenchData) {
 // Benchmark traditional U256 calculation
 fn bench_traditional(dependencies: &[usize], constants: &[U256]) -> Vec<U256> {
     let mut results = vec![U256::ZERO; NODE_COUNT];
-    
+
     // First node just takes its constant
     results[0] = constants[0];
 
@@ -174,7 +168,7 @@ fn bench_ssa_vs_traditional(c: &mut Criterion) {
     group.bench_function("ssa_graph", |b| {
         b.iter_with_setup(
             || prepare_ssa_graph(&dependencies, &constants),
-            |data| execute_ssa_graph(&data)
+            |data| execute_ssa_graph(&data),
         )
     });
 
@@ -182,7 +176,7 @@ fn bench_ssa_vs_traditional(c: &mut Criterion) {
     group.bench_function("typed_graph", |b| {
         b.iter_with_setup(
             || prepare_typed_graph(&dependencies, &constants),
-            |mut data| execute_typed_graph(&mut data)
+            |mut data| execute_typed_graph(&mut data),
         )
     });
 
@@ -194,8 +188,5 @@ fn bench_ssa_vs_traditional(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_ssa_vs_traditional
-);
-criterion_main!(benches); 
+criterion_group!(benches, bench_ssa_vs_traditional);
+criterion_main!(benches);

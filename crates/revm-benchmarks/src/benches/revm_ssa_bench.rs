@@ -5,7 +5,7 @@ pub struct BenchCase {
     pub name: &'static str,
     pub bytecode: Vec<u8>,
     pub calldata: Vec<u8>,
-    pub pre_determined_slots: Vec<(U256,U256)>,
+    pub pre_determined_slots: Vec<(U256, U256)>,
 }
 
 impl BenchCase {
@@ -25,7 +25,12 @@ impl BenchCase {
         }
     }
 
-    pub fn new_with_pre_determined_slots(name: &'static str, bytecode: &str, calldata: &str, pre_determined_slots: Vec<(U256,U256)>) -> Self {
+    pub fn new_with_pre_determined_slots(
+        name: &'static str,
+        bytecode: &str,
+        calldata: &str,
+        pre_determined_slots: Vec<(U256, U256)>,
+    ) -> Self {
         let bytecode = hex::decode(&bytecode).unwrap_or_default();
         let calldata = if calldata.is_empty() {
             vec![]
@@ -103,4 +108,4 @@ pub fn get_bench_cases() -> Vec<BenchCase> {
             "0xdfa5235e"
         ),
     ]
-} 
+}

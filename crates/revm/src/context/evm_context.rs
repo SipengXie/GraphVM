@@ -666,8 +666,8 @@ mod tests {
         primitives::{address, Bytecode},
         Frame, JournalEntry,
     };
-    use std::boxed::Box;
     use revm_primitives::U256_ONE;
+    use std::boxed::Box;
     use test_utils::*;
 
     // Tests that the `EVMContext::make_call_frame` function returns an error if the

@@ -1,10 +1,9 @@
+use crate::instructions::memory::calc_memory_size;
+use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use revm_interpreter::{as_usize_saturated, InstructionResult, SharedMemory}; // Use InstructionResult
 use revm_primitives::{Bytes, U256};
-use revm_interpreter::{SharedMemory, as_usize_saturated, InstructionResult}; // Use InstructionResult
 use std::cell::RefCell;
-use std::rc::Rc;
-use crate::typed_graph::{TypedNode, HasInputType, HasOutputType};
-use crate::instructions::memory::calc_memory_size; // Assuming path
-
+use std::rc::Rc; // Assuming path
 
 // --- JUMP Node (0x56) ---
 
@@ -24,7 +23,10 @@ impl HasOutputType<(usize,)> for JumpNode {}
 
 impl JumpNode {
     pub fn new(target_pc_ptr: *const U256) -> Self {
-        Self { inputs: (target_pc_ptr,), outputs: (0,) } // Initialize with 0
+        Self {
+            inputs: (target_pc_ptr,),
+            outputs: (0,),
+        } // Initialize with 0
     }
 }
 
@@ -44,7 +46,6 @@ impl TypedNode for JumpNode {
         &self.outputs.0 as *const usize
     }
 }
-
 
 // --- JUMPI Node (0x57) ---
 
@@ -66,7 +67,10 @@ impl HasOutputType<(usize,)> for JumpiNode {}
 
 impl JumpiNode {
     pub fn new(target_pc_ptr: *const U256, condition_ptr: *const U256) -> Self {
-        Self { inputs: (target_pc_ptr, condition_ptr), outputs: (0,) } // Initialize
+        Self {
+            inputs: (target_pc_ptr, condition_ptr),
+            outputs: (0,),
+        } // Initialize
     }
 }
 
@@ -82,13 +86,10 @@ impl TypedNode for JumpiNode {
         Ok(())
     }
 
-
     fn get_usize_output(&self) -> *const usize {
         &self.outputs.0 as *const usize
     }
-
 }
-
 
 // --- RETURN Node (0xf3) / REVERT Node (0xfd) ---
 // These mark the end of execution for the current frame.
@@ -100,7 +101,12 @@ pub struct ReturnRevertNode {
     /// 1: *const U256 - Length of return/revert data.
     /// 2: Rc<RefCell<SharedMemory>> - Shared memory reference.
     /// 3: InstructionResult - Indicates if it's RETURN (Ok) or REVERT (Revert).
-    inputs: (*const U256, *const U256, Rc<RefCell<SharedMemory>>, InstructionResult),
+    inputs: (
+        *const U256,
+        *const U256,
+        Rc<RefCell<SharedMemory>>,
+        InstructionResult,
+    ),
     /// Output:
     /// 0: InstructionResult - The final execution status for this frame.
     /// 1: Bytes - The data returned or reverted with.
@@ -108,7 +114,12 @@ pub struct ReturnRevertNode {
 }
 
 // Define the specific input type tuple
-type ReturnRevertInput = (*const U256, *const U256, Rc<RefCell<SharedMemory>>, InstructionResult);
+type ReturnRevertInput = (
+    *const U256,
+    *const U256,
+    Rc<RefCell<SharedMemory>>,
+    InstructionResult,
+);
 
 impl HasInputType<ReturnRevertInput> for ReturnRevertNode {}
 impl HasOutputType<(InstructionResult, Bytes)> for ReturnRevertNode {}
@@ -118,7 +129,7 @@ impl ReturnRevertNode {
         offset_ptr: *const U256,
         len_ptr: *const U256,
         memory: Rc<RefCell<SharedMemory>>,
-        result: InstructionResult // Pass Ok for RETURN, Revert for REVERT
+        result: InstructionResult, // Pass Ok for RETURN, Revert for REVERT
     ) -> Self {
         Self {
             inputs: (offset_ptr, len_ptr, memory, result),
@@ -139,7 +150,7 @@ impl TypedNode for ReturnRevertNode {
 
             // Ensure memory is large enough (mimics EVM memory expansion on read for RETURN/REVERT)
             let required_size = calc_memory_size(offset, len);
-             if required_size > memory.len() {
+            if required_size > memory.len() {
                 // EVM would revert with OutOfGas here if resize fails.
                 // For TypedGraph, we might need a way to signal this.
                 // For now, resize or handle error. Let's assume resize works.
@@ -151,7 +162,7 @@ impl TypedNode for ReturnRevertNode {
                 Bytes::new()
             } else {
                 // Read the slice safely after potential resize
-                 Bytes::copy_from_slice(memory.slice(offset, len))
+                Bytes::copy_from_slice(memory.slice(offset, len))
             };
 
             // Set the outputs
@@ -161,7 +172,6 @@ impl TypedNode for ReturnRevertNode {
         Ok(())
     }
 
-    
     fn get_instruction_result_output(&self) -> *const InstructionResult {
         &self.outputs.0 as *const InstructionResult
     }
@@ -170,7 +180,6 @@ impl TypedNode for ReturnRevertNode {
         Some(&self.outputs.1 as *const Bytes) // Return pointer TO the Bytes struct
     }
 }
-
 
 // --- STOP Node (0x00) / INVALID Node (0xfe) ---
 // These also mark the end of execution, similar to RETURN/REVERT but without data.
@@ -187,7 +196,7 @@ impl HasInputType<(InstructionResult,)> for StopInvalidNode {}
 impl HasOutputType<(InstructionResult, Bytes)> for StopInvalidNode {}
 
 impl StopInvalidNode {
-     pub fn new(result: InstructionResult) -> Self {
+    pub fn new(result: InstructionResult) -> Self {
         assert!(result == InstructionResult::Stop || result.is_revert() || result.is_error()); // Ensure valid type
         Self {
             _inputs: (result,),
@@ -201,7 +210,7 @@ impl TypedNode for StopInvalidNode {
         // No actual execution needed, outputs are set in new()
         Ok(())
     }
-     // Custom getters for output
+    // Custom getters for output
     fn get_instruction_result_output(&self) -> *const InstructionResult {
         &self.outputs.0 as *const InstructionResult
     }

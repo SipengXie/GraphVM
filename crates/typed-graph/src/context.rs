@@ -2,9 +2,11 @@ use core::ops::Range;
 
 use revm_interpreter::InstructionResult;
 // Add this struct definition, likely in host.rs or a shared types module
-use revm_primitives::{AccountInfo, AccountStatus, Address, Bytes, Env, HashMap, PrecompileErrors, SpecId, B256, U256};
-use revm_ssa::ContractEnv;
 use revm_precompile::{PrecompileSpecId, Precompiles};
+use revm_primitives::{
+    AccountInfo, AccountStatus, Address, Bytes, Env, HashMap, PrecompileErrors, SpecId, B256, U256,
+};
+use revm_ssa::ContractEnv;
 
 // --- External State Context ---
 
@@ -38,7 +40,7 @@ impl ExternalContext {
             storage,
             block_hashes,
             env,
-            precompiles:  Precompiles::new(PrecompileSpecId::from_spec_id(SpecId::LATEST))
+            precompiles: Precompiles::new(PrecompileSpecId::from_spec_id(SpecId::LATEST)),
         }
     }
 
@@ -53,28 +55,28 @@ impl ExternalContext {
         address: &Address,
         input: &Bytes,
         gas_limit: u64, // Gas ignored for now
-    ) -> (InstructionResult, Bytes) { // Returning CallOutcome directly
+    ) -> (InstructionResult, Bytes) {
+        // Returning CallOutcome directly
         let precompile = self.precompiles.get(address);
-        let outcome = precompile
-            .unwrap()
-            .call_ref(input, gas_limit, &self.env);
+        let outcome = precompile.unwrap().call_ref(input, gas_limit, &self.env);
         match outcome {
-            Ok(output) => {
-                (InstructionResult::Return, output.bytes)
-            }
+            Ok(output) => (InstructionResult::Return, output.bytes),
             Err(e) => {
                 let result = match e {
                     PrecompileErrors::Error(_) => InstructionResult::Revert,
                     PrecompileErrors::Fatal { msg: _ } => InstructionResult::PrecompileError,
                 };
                 (result, Bytes::default())
-            },
+            }
         }
     }
 }
 
 // Helper to get account info and status, returning default if not found
-pub fn get_account_context(context: &ExternalContext, address: Address) -> (AccountInfo, AccountStatus) {
+pub fn get_account_context(
+    context: &ExternalContext,
+    address: Address,
+) -> (AccountInfo, AccountStatus) {
     context.accounts.get(&address).cloned().unwrap_or_else(|| {
         // Return default info and treat as ColdLoaded if not present
         (AccountInfo::default(), AccountStatus::Loaded)
@@ -83,18 +85,22 @@ pub fn get_account_context(context: &ExternalContext, address: Address) -> (Acco
 
 // Helper to get storage slot, returning zero if not found
 pub fn get_storage_slot_context(context: &ExternalContext, address: Address, index: U256) -> U256 {
-    context.storage.get(&(address, index)).cloned().unwrap_or(U256::ZERO)
+    context
+        .storage
+        .get(&(address, index))
+        .cloned()
+        .unwrap_or(U256::ZERO)
 }
 
 pub type FrameContext = ContractEnv;
 
 /// Outcome of a CALL-like operation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CallOutcome {
     pub result: InstructionResult, // Final status (Ok, Revert, Error)
     pub return_data: Bytes,        // Data returned by the sub-call
     pub ret_range: Range<usize>,   // Expected return memory range (for CALLs)
-    // pub gas_used: u64,             // Gas used by the sub-call (optional for now)
+                                   // pub gas_used: u64,             // Gas used by the sub-call (optional for now)
 }
 
 /// Outcome of a CREATE-like operation.
@@ -103,7 +109,5 @@ pub struct CreateOutcome {
     pub result: InstructionResult, // Final status (Ok, Revert, Error)
     pub return_data: Bytes,        // Data returned on revert, or deployment bytecode on success
     pub created_address: Option<Address>, // Address of the created contract (if successful)
-    // pub gas_used: u64,             // Gas used by the create operation (optional for now)
+                                   // pub gas_used: u64,             // Gas used by the create operation (optional for now)
 }
-
-

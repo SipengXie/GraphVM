@@ -58,4 +58,4 @@ pub const VERSIONED_HASH_VERSION_KZG: u8 = 0x01;
 /// # Note
 ///
 /// This is a convenience constant for the commonly used value of 1 in U256 format.
-pub const U256_ONE: U256 = U256::from_limbs([1,0,0,0]);
+pub const U256_ONE: U256 = U256::from_limbs([1, 0, 0, 0]);

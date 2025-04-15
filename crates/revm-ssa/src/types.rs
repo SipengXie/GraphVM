@@ -192,7 +192,7 @@ pub struct SSALogEntry {
     pub outputs: Vec<SSAOutput>, // 24 bytes
     // The LSN of the log entry
     pub lsn: LsnType, // 4 bytes
-    // The opcode of the instruction 
+    // The opcode of the instruction
     pub opcode: u8, // 1 byte
 
     _padding: [u8; 11], // 11 bytes

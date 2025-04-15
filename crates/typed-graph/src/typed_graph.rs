@@ -8,7 +8,7 @@ use crate::context::{CallOutcome, CreateOutcome, FrameContext};
 pub trait TypedNode {
     /// Execute the node's operation
     fn execute(&mut self) -> anyhow::Result<()>;
-    
+
     /// Get U256 output at specified index if available
     fn get_u256_output(&self) -> *const U256 {
         &U256::ZERO
@@ -29,11 +29,11 @@ pub trait TypedNode {
     fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
         None
     }
-    
+
     fn get_account_status_output(&self) -> *const AccountStatus {
         &AccountStatus::default()
     }
-    
+
     fn get_create_outcome_output(&self) -> Option<*const CreateOutcome> {
         None
     }

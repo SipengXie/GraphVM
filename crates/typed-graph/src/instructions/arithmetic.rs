@@ -1,5 +1,5 @@
+use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
 use revm_primitives::U256;
-use crate::typed_graph::{TypedNode, HasInputType, HasOutputType};
 
 /// Node for performing addition operation
 pub struct AddNode {
@@ -26,7 +26,7 @@ impl TypedNode for AddNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -57,7 +57,7 @@ impl TypedNode for MulNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -88,7 +88,7 @@ impl TypedNode for SubNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -124,7 +124,7 @@ impl TypedNode for DivNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -160,7 +160,7 @@ impl TypedNode for ModNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -196,7 +196,7 @@ impl TypedNode for AddModNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -232,7 +232,7 @@ impl TypedNode for MulModNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -263,7 +263,7 @@ impl TypedNode for ExpNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -299,8 +299,8 @@ impl TypedNode for SignExtendNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
-} 
+}

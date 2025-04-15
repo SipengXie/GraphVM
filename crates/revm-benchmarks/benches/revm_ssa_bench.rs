@@ -1,11 +1,11 @@
 use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, Criterion,
 };
+use revm::db::{CacheDB, EmptyDB};
 use revm::Evm;
 use revm_primitives::{
-    b256, hex, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256
+    b256, hex, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256,
 };
-use revm::db::{CacheDB, EmptyDB};
 use revm_ssa::logger::LsnType;
 use revm_ssa_graph::instruction_table::InstructionTable;
 use revm_ssa_graph::{ExecutionContext, SsaGraph};
@@ -17,7 +17,7 @@ struct BenchCase {
     name: &'static str,
     bytecode: Vec<u8>,
     calldata: Vec<u8>,
-    pre_determined_slots: Vec<(U256,U256)>,
+    pre_determined_slots: Vec<(U256, U256)>,
 }
 
 impl BenchCase {
@@ -37,7 +37,12 @@ impl BenchCase {
         }
     }
 
-    fn new_with_pre_determined_slots(name: &'static str, bytecode: &str, calldata: &str, pre_determined_slots: Vec<(U256,U256)>) -> Self {
+    fn new_with_pre_determined_slots(
+        name: &'static str,
+        bytecode: &str,
+        calldata: &str,
+        pre_determined_slots: Vec<(U256, U256)>,
+    ) -> Self {
         let bytecode = hex::decode(&bytecode).unwrap_or_default();
         let calldata = if calldata.is_empty() {
             vec![]
@@ -126,7 +131,7 @@ fn mk_group<'a>(c: &'a mut Criterion, name: &str) -> BenchmarkGroup<'a, WallTime
 
 fn bench_ssa_vs_nonssa(c: &mut Criterion) {
     let cases = get_bench_cases();
-    
+
     for case in cases {
         // 准备测试环境和数据
         let bytecode = Bytes::from(case.bytecode.clone());
@@ -142,10 +147,11 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         env.tx.transact_to = TxKind::Call(contract_addr);
         env.tx.data = input.clone().into();
         env.tx.gas_limit = gas_limit;
-        
+
         // 准备合约和主机环境
-        let bytecode = revm_interpreter::analysis::to_analysed(revm_primitives::Bytecode::new_raw(bytecode));
-        
+        let bytecode =
+            revm_interpreter::analysis::to_analysed(revm_primitives::Bytecode::new_raw(bytecode));
+
         // 准备缓存数据库
         let mut cache = CacheDB::new(EmptyDB::default());
         cache.insert_account_info(
@@ -156,12 +162,12 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
                 ..Default::default()
             },
         );
-    
+
         // 添加存储数据
         for (slot, value) in pre_determined_slots {
             let _ = cache.insert_account_storage(contract_addr, slot, value);
         }
-        
+
         // 创建基准测试组
         let mut group = mk_group(c, &format!("revm_ssa/{}", case.name));
 
@@ -169,10 +175,10 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         group.bench_function("original", |b| {
             b.iter(|| {
                 let mut evm = Evm::builder()
-                .with_spec_id(SpecId::LATEST)
-                .with_ref_db(cache.clone())
-                .with_env(Box::new(env.clone()))
-                .build();
+                    .with_spec_id(SpecId::LATEST)
+                    .with_ref_db(cache.clone())
+                    .with_env(Box::new(env.clone()))
+                    .build();
                 evm.transact_preverified()
             })
         });
@@ -181,11 +187,11 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         group.bench_function("ssa-logger", |b| {
             b.iter(|| {
                 let mut evm = Evm::builder()
-                .with_spec_id(SpecId::LATEST)
-                .with_ref_db(cache.clone())
-                .with_env(Box::new(env.clone()))
-                .with_ssa_logger()
-                .build_with_ssa_logger();
+                    .with_spec_id(SpecId::LATEST)
+                    .with_ref_db(cache.clone())
+                    .with_env(Box::new(env.clone()))
+                    .with_ssa_logger()
+                    .build_with_ssa_logger();
                 evm.transact_preverified()
             })
         });
@@ -194,11 +200,11 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
 
         // 执行一次以收集日志
         let mut evm = Evm::builder()
-        .with_spec_id(SpecId::LATEST)
-        .with_ref_db(cache.clone())
-        .with_env(Box::new(env.clone()))
-        .with_ssa_logger()
-        .build_with_ssa_logger();
+            .with_spec_id(SpecId::LATEST)
+            .with_ref_db(cache.clone())
+            .with_env(Box::new(env.clone()))
+            .with_ssa_logger()
+            .build_with_ssa_logger();
         let _ = evm.transact_preverified();
 
         // 获取日志和调用信息
@@ -218,19 +224,19 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         for lsn in lsns {
             graph.add_edges(lsn).unwrap();
         }
-        
+
         // 创建执行上下文
         let env_clone = env.clone();
         let mut context = ExecutionContext::<'_, CacheDB<EmptyDB>>::new::<LatestSpec>(
-            &env_clone, 
-            cache, 
-            first_frame_input
+            &env_clone,
+            cache,
+            first_frame_input,
         );
         let table = InstructionTable::create_instruction_table::<LatestSpec>();
-        
+
         // 获取拓扑排序的节点
         let nodes_to_execute = graph.topological_sort().unwrap();
-        
+
         // 不安全地获取图的可变引用（用于基准测试）
         let arc_graph = Arc::new(graph);
         let mut_graph = unsafe { &mut *(Arc::as_ptr(&arc_graph) as *mut SsaGraph) };
@@ -240,15 +246,13 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
             b.iter(|| {
                 for node_index in nodes_to_execute.clone() {
                     let node = mut_graph.get_node_mut(node_index).unwrap();
-                    table.instructions[node.opcode as usize](&mut context, node, &arc_graph).unwrap();
+                    table.instructions[node.opcode as usize](&mut context, node, &arc_graph)
+                        .unwrap();
                 }
             });
         });
     }
 }
 
-criterion_group!(
-    benches, 
-    bench_ssa_vs_nonssa
-);
-criterion_main!(benches); 
+criterion_group!(benches, bench_ssa_vs_nonssa);
+criterion_main!(benches);

@@ -1,18 +1,18 @@
+use crate::context::{ExternalContext, FrameContext};
+use crate::instructions::arithmetic::{AddNode, DivNode, MulNode, SubNode};
+use crate::instructions::contract::*;
+use crate::instructions::control::StopInvalidNode;
+use crate::instructions::host_env::{ChainIdNode, CoinbaseNode, TimestampNode};
+use crate::instructions::memory::{MloadNode, MstoreNode};
+use crate::typed_graph::TypedGraph;
+use core::panic;
 use revm_interpreter::{InstructionResult, SharedMemory};
 use revm_primitives::{AccountInfo, Bytes, Env, U256, U256_ONE};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAInput, SSALogEntry};
-use crate::context::{ExternalContext, FrameContext};
-use crate::instructions::control::StopInvalidNode;
-use crate::typed_graph::TypedGraph;
-use crate::instructions::arithmetic::{AddNode, SubNode, MulNode, DivNode};
-use crate::instructions::host_env::{ChainIdNode, CoinbaseNode, TimestampNode};
-use crate::instructions::memory::{MloadNode, MstoreNode};
-use crate::instructions::contract::*;
-use core::panic;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 /// Constant pool for storing constant values used in TypedNodes
 pub struct ConstantPool {
@@ -54,7 +54,12 @@ pub struct SsaConverter {
 
 impl SsaConverter {
     /// Create a new SsaConverter with execution context
-    pub fn new(context: Rc<RefCell<ExternalContext>>, shared_memory: Rc<RefCell<SharedMemory>>, env: *const Env, first_frame_input: *const FrameInput) -> Self {
+    pub fn new(
+        context: Rc<RefCell<ExternalContext>>,
+        shared_memory: Rc<RefCell<SharedMemory>>,
+        env: *const Env,
+        first_frame_input: *const FrameInput,
+    ) -> Self {
         Self {
             graph: TypedGraph::new(),
             lsn_to_node: HashMap::new(),
@@ -62,7 +67,7 @@ impl SsaConverter {
             context,
             shared_memory,
             env,
-            first_frame_input
+            first_frame_input,
         }
     }
 
@@ -96,91 +101,100 @@ impl SsaConverter {
         // Take ownership of graph and constant pool
         (
             std::mem::replace(&mut self.graph, TypedGraph::new()),
-            std::mem::replace(&mut self.constant_pool, ConstantPool::new())
+            std::mem::replace(&mut self.constant_pool, ConstantPool::new()),
         )
     }
 
     /// Create a TypedNode based on the SSA log entry's opcode
     fn create_node_for_entry(&mut self, entry: &SSALogEntry) -> usize {
         match entry.opcode {
-            0x00 => {// STOP
+            0x00 => {
+                // STOP
                 let result = InstructionResult::Stop;
                 let node = StopInvalidNode::new(result);
-                self.graph.add_node(Box::new(node))    
+                self.graph.add_node(Box::new(node))
             }
             // Arithmetic operations
-            0x01 => { // ADD
+            0x01 => {
+                // ADD
                 let node = AddNode::new(
                     self.get_u256_ptr(&entry.inputs[0]),
                     self.get_u256_ptr(&entry.inputs[1]),
                 );
                 self.graph.add_node(Box::new(node))
-            },
-            0x03 => { // SUB
+            }
+            0x03 => {
+                // SUB
                 let node = SubNode::new(
                     self.get_u256_ptr(&entry.inputs[0]),
                     self.get_u256_ptr(&entry.inputs[1]),
                 );
                 self.graph.add_node(Box::new(node))
-            },
-            0x02 => { // MUL
+            }
+            0x02 => {
+                // MUL
                 let node = MulNode::new(
                     self.get_u256_ptr(&entry.inputs[0]),
                     self.get_u256_ptr(&entry.inputs[1]),
                 );
                 self.graph.add_node(Box::new(node))
-            },
-            0x04 => { // DIV
+            }
+            0x04 => {
+                // DIV
                 let node = DivNode::new(
                     self.get_u256_ptr(&entry.inputs[0]),
                     self.get_u256_ptr(&entry.inputs[1]),
                 );
                 self.graph.add_node(Box::new(node))
-            },
+            }
 
             // Memory operations
-            0x51 => { // MLOAD
+            0x51 => {
+                // MLOAD
                 let node = MloadNode::new(
                     self.get_u256_ptr(&entry.inputs[0]),
                     self.shared_memory.clone(),
                 );
                 self.graph.add_node(Box::new(node))
-            },
-            0x52 => { // MSTORE
+            }
+            0x52 => {
+                // MSTORE
                 let node = MstoreNode::new(
                     self.get_u256_ptr(&entry.inputs[0]),
                     self.get_u256_ptr(&entry.inputs[1]),
                     self.shared_memory.clone(),
                 );
                 self.graph.add_node(Box::new(node))
-            },
+            }
 
             // Host environment operations
-            0x46 => { // CHAINID
+            0x46 => {
+                // CHAINID
                 let node = ChainIdNode::new(self.env);
                 self.graph.add_node(Box::new(node))
-            },
-            0x41 => { // COINBASE
+            }
+            0x41 => {
+                // COINBASE
                 let node = CoinbaseNode::new(self.env);
                 self.graph.add_node(Box::new(node))
-            },
-            0x42 => { // TIMESTAMP
+            }
+            0x42 => {
+                // TIMESTAMP
                 let node = TimestampNode::new(self.env);
                 self.graph.add_node(Box::new(node))
-            },
+            }
 
             // Create operations
-            0xD4 => { // MAKE_CREATE_FRAME
+            0xD4 => {
+                // MAKE_CREATE_FRAME
                 let frame_input = self.get_frame_input_ptr(&entry.inputs[0]);
                 let account_info = self.get_account_info_ptr(&entry.inputs[1]);
-                let node = MakeCreateFrameNode::new(
-                    frame_input,
-                    account_info,
-                    Some(self.context.clone()),
-                );
+                let node =
+                    MakeCreateFrameNode::new(frame_input, account_info, Some(self.context.clone()));
                 self.graph.add_node(Box::new(node))
-            },
-            0xD5 => { // CREATE_RETURN
+            }
+            0xD5 => {
+                // CREATE_RETURN
 
                 // In the SsaGraph implementation, result and return_data are placed together, so they are within the same node
                 let result = self.get_instruction_result(&entry.inputs[0]);
@@ -188,9 +202,9 @@ impl SsaConverter {
 
                 let frame_context = self.get_frame_context_ptr(&entry.inputs[1]);
                 let account_info = self.get_account_info_ptr(&entry.inputs[2]);
-                
+
                 let analyze_code = self.get_bool(&entry.inputs[3]);
-                
+
                 let node = CreateReturnNode::new(
                     result,
                     return_data,
@@ -200,9 +214,10 @@ impl SsaConverter {
                     Some(analyze_code),
                 );
                 self.graph.add_node(Box::new(node))
-            },
+            }
 
-            0xD7 => { // MAKE_CALL_FRAME
+            0xD7 => {
+                // MAKE_CALL_FRAME
                 // Based on revm-ssa-graph's execute_make_call_frame inputs:
                 // inputs[0]: FrameInput
                 // inputs[1]: Storage(caller_info)
@@ -222,34 +237,37 @@ impl SsaConverter {
                     self.context.clone(),
                 );
                 self.graph.add_node(Box::new(node))
-
-            },
-
-            0xD8 => { // CALL_RETURN
-                 // Based on revm-ssa-graph's execute_call_return inputs:
-                 // inputs[0]: InterpreterResult
-                 // inputs[1]: ContractEnv
-
-                 // Get InstructionResult value from the source node's output
-                 let result_value = self.get_instruction_result(&entry.inputs[0]);
-
-                 // Get Bytes pointer from the *same* source node's output
-                 let return_data_ptr = self.get_bytes_ptr(&entry.inputs[0])
-                     .expect("Failed to get bytes pointer for CALL_RETURN"); // Expect Some
-
-                 // Get FrameContext pointer from ContractEnv input
-                 let frame_context_ptr = self.get_frame_context_ptr(&entry.inputs[1])
-                     .expect("Failed to get frame context pointer for CALL_RETURN"); // Expect Some
-
-                 let node = CallReturnNode::new(
-                     result_value, // Pass the actual value
-                     return_data_ptr,
-                     frame_context_ptr,
-                 );
-                 self.graph.add_node(Box::new(node))
             }
 
-            0xDA => { // DEDUCT_CALLER
+            0xD8 => {
+                // CALL_RETURN
+                // Based on revm-ssa-graph's execute_call_return inputs:
+                // inputs[0]: InterpreterResult
+                // inputs[1]: ContractEnv
+
+                // Get InstructionResult value from the source node's output
+                let result_value = self.get_instruction_result(&entry.inputs[0]);
+
+                // Get Bytes pointer from the *same* source node's output
+                let return_data_ptr = self
+                    .get_bytes_ptr(&entry.inputs[0])
+                    .expect("Failed to get bytes pointer for CALL_RETURN"); // Expect Some
+
+                // Get FrameContext pointer from ContractEnv input
+                let frame_context_ptr = self
+                    .get_frame_context_ptr(&entry.inputs[1])
+                    .expect("Failed to get frame context pointer for CALL_RETURN"); // Expect Some
+
+                let node = CallReturnNode::new(
+                    result_value, // Pass the actual value
+                    return_data_ptr,
+                    frame_context_ptr,
+                );
+                self.graph.add_node(Box::new(node))
+            }
+
+            0xDA => {
+                // DEDUCT_CALLER
                 // Input 0: Caller Address (as U256) - Node needs to handle conversion
                 let caller_u256_ptr = self.get_u256_ptr(&entry.inputs[0]);
 
@@ -268,12 +286,12 @@ impl SsaConverter {
                     self.context.clone(),
                 );
                 self.graph.add_node(Box::new(node))
-            }, 
+            }
 
             0xDB => {
                 let node = RefundGasNode::new();
                 self.graph.add_node(Box::new(node))
-            }, 
+            }
             // TODO: Add more opcodes...
             _ => {
                 panic!("Unimplemented opcode: 0x{:02x}", entry.opcode);
@@ -298,10 +316,15 @@ impl SsaConverter {
                 } else {
                     let node_index = self.lsn_to_node[&lsn_with_index.0];
                     let node = self.graph.get_node(node_index);
-                    node.get_frame_input_output().unwrap_or_else(|| panic!("Node {} does not provide FrameInput output", node_index))
+                    node.get_frame_input_output().unwrap_or_else(|| {
+                        panic!("Node {} does not provide FrameInput output", node_index)
+                    })
                 }
             }
-            _ => panic!("Expected FrameInput SSAInput for frame_input, got {:?}", input),
+            _ => panic!(
+                "Expected FrameInput SSAInput for frame_input, got {:?}",
+                input
+            ),
         }
     }
 
@@ -315,7 +338,7 @@ impl SsaConverter {
                     let node = self.graph.get_node(node_index);
                     node.get_account_info_output(lsn_with_index.1 as usize)
                 }
-            },
+            }
             _ => panic!("Expected Storage input for account_info, got {:?}", input),
         }
     }
@@ -327,7 +350,10 @@ impl SsaConverter {
                 let node = self.graph.get_node(node_index);
                 node.get_instruction_result_output()
             }
-            _ => panic!("Expected InterpreterResult input for instruction_result, got {:?}", input),
+            _ => panic!(
+                "Expected InterpreterResult input for instruction_result, got {:?}",
+                input
+            ),
         }
     }
 
@@ -337,12 +363,12 @@ impl SsaConverter {
                 let node_index = self.lsn_to_node[&lsn_with_index.0];
                 let node = self.graph.get_node(node_index);
                 node.get_bytes_output()
-            },
+            }
             SSAInput::InterpreterResult(lsn_with_index) => {
                 let node_index = self.lsn_to_node[&lsn_with_index.0];
                 let node = self.graph.get_node(node_index);
                 node.get_bytes_output()
-            },
+            }
             _ => panic!("Expected ReturnDataBuffer input for bytes, got {:?}", input),
         }
     }
@@ -357,5 +383,4 @@ impl SsaConverter {
             _ => panic!("Expected Stack input for frame_context, got {:?}", input),
         }
     }
-
 }

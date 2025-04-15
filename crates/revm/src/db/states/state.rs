@@ -683,10 +683,7 @@ mod tests {
                     previous_status: AccountStatus::Loaded,
                     previous_info: Some(existing_account_with_storage_info.clone()),
                     storage: HashMap::from_iter([
-                        (
-                            slot1,
-                            StorageSlot::new_changed(U256_ONE, U256::from(10)),
-                        ),
+                        (slot1, StorageSlot::new_changed(U256_ONE, U256::from(10))),
                         (slot2, StorageSlot::new_changed(U256::ZERO, U256::from(20))),
                     ]),
                     storage_was_destroyed: false,
@@ -724,10 +721,7 @@ mod tests {
                     previous_status: AccountStatus::Changed,
                     previous_info: Some(existing_account_with_storage_info.clone()),
                     storage: HashMap::from_iter([
-                        (
-                            slot1,
-                            StorageSlot::new_changed(U256::from(10), U256_ONE),
-                        ),
+                        (slot1, StorageSlot::new_changed(U256::from(10), U256_ONE)),
                         (slot2, StorageSlot::new_changed(U256::from(20), U256::ZERO)),
                     ]),
                     storage_was_destroyed: false,

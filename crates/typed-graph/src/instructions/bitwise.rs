@@ -1,5 +1,5 @@
+use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
 use revm_primitives::U256;
-use crate::typed_graph::{TypedNode, HasInputType, HasOutputType};
 
 /// Node for performing less than operation
 pub struct LtNode {
@@ -30,7 +30,7 @@ impl TypedNode for LtNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -65,7 +65,7 @@ impl TypedNode for GtNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -100,7 +100,7 @@ impl TypedNode for EqNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -135,7 +135,7 @@ impl TypedNode for IsZeroNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -166,7 +166,7 @@ impl TypedNode for AndNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -197,7 +197,7 @@ impl TypedNode for OrNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -228,7 +228,7 @@ impl TypedNode for XorNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -259,7 +259,7 @@ impl TypedNode for NotNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -288,7 +288,7 @@ impl TypedNode for ByteNode {
         unsafe {
             let index = (*self.inputs.0).as_limbs()[0] as usize;
             let word = *self.inputs.1;
-            
+
             self.outputs.0 = if index < 32 {
                 U256::from(word.byte(31 - index))
             } else {
@@ -297,7 +297,7 @@ impl TypedNode for ByteNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -326,7 +326,7 @@ impl TypedNode for ShlNode {
         unsafe {
             let shift = *self.inputs.0;
             let value = *self.inputs.1;
-            
+
             self.outputs.0 = if shift >= U256::from(256) {
                 U256::ZERO
             } else {
@@ -335,7 +335,7 @@ impl TypedNode for ShlNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -364,7 +364,7 @@ impl TypedNode for ShrNode {
         unsafe {
             let shift = *self.inputs.0;
             let value = *self.inputs.1;
-            
+
             self.outputs.0 = if shift >= U256::from(256) {
                 U256::ZERO
             } else {
@@ -373,7 +373,7 @@ impl TypedNode for ShrNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
@@ -403,7 +403,7 @@ impl TypedNode for SarNode {
             let shift = *self.inputs.0;
             let value = *self.inputs.1;
             let shift_amount = shift.as_limbs()[0] as usize;
-            
+
             self.outputs.0 = if shift_amount < 256 {
                 value.arithmetic_shr(shift_amount)
             } else if value.bit(255) {
@@ -414,7 +414,7 @@ impl TypedNode for SarNode {
         }
         Ok(())
     }
-    
+
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }

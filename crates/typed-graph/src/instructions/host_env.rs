@@ -1,6 +1,6 @@
-use revm_primitives::{Env, U256};
-use crate::typed_graph::{TypedNode, HasInputType, HasOutputType};
-use revm_interpreter::as_usize_saturated; // Reusing this helper macro
+use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use revm_interpreter::as_usize_saturated;
+use revm_primitives::{Env, U256}; // Reusing this helper macro
 
 // --- Common Input Type for Env Nodes ---
 
@@ -35,7 +35,6 @@ impl HasOutputType<U256Output> for OriginNode {}
 impl HasOutputType<U256Output> for BlobBaseFeeNode {}
 impl HasOutputType<U256Output> for BlobHashNode {} // Also outputs U256
 
-
 // --- CHAINID Node (0x46) ---
 
 /// Node for CHAINID operation: gets the chain ID.
@@ -46,7 +45,10 @@ pub struct ChainIdNode {
 
 impl ChainIdNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -72,7 +74,10 @@ pub struct CoinbaseNode {
 
 impl CoinbaseNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -80,7 +85,8 @@ impl TypedNode for CoinbaseNode {
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // Convert Address (B160) to U256
-            self.outputs.0 = U256::from_be_bytes((*self.inputs.0).block.coinbase.into_word().into());
+            self.outputs.0 =
+                U256::from_be_bytes((*self.inputs.0).block.coinbase.into_word().into());
         }
         Ok(())
     }
@@ -99,7 +105,10 @@ pub struct TimestampNode {
 
 impl TimestampNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -125,7 +134,10 @@ pub struct NumberNode {
 
 impl NumberNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -151,7 +163,10 @@ pub struct DifficultyNode {
 
 impl DifficultyNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -184,7 +199,10 @@ pub struct GasLimitNode {
 
 impl GasLimitNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -210,7 +228,10 @@ pub struct GasPriceNode {
 
 impl GasPriceNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -236,7 +257,10 @@ pub struct BaseFeeNode {
 
 impl BaseFeeNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -262,7 +286,10 @@ pub struct OriginNode {
 
 impl OriginNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -270,7 +297,7 @@ impl TypedNode for OriginNode {
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // Convert Address (B160) to U256
-             self.outputs.0 = U256::from_be_bytes((*self.inputs.0).tx.caller.into_word().into());
+            self.outputs.0 = U256::from_be_bytes((*self.inputs.0).tx.caller.into_word().into());
         }
         Ok(())
     }
@@ -289,7 +316,10 @@ pub struct BlobBaseFeeNode {
 
 impl BlobBaseFeeNode {
     pub fn new(env_ptr: *const Env) -> Self {
-        Self { inputs: (env_ptr,), outputs: (U256::ZERO,) }
+        Self {
+            inputs: (env_ptr,),
+            outputs: (U256::ZERO,),
+        }
     }
 }
 
@@ -297,7 +327,12 @@ impl TypedNode for BlobBaseFeeNode {
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // .block.get_blob_gasprice() returns Option<u128>
-            self.outputs.0 = U256::from((*self.inputs.0).block.get_blob_gasprice().unwrap_or_default());
+            self.outputs.0 = U256::from(
+                (*self.inputs.0)
+                    .block
+                    .get_blob_gasprice()
+                    .unwrap_or_default(),
+            );
         }
         Ok(())
     }
@@ -305,7 +340,6 @@ impl TypedNode for BlobBaseFeeNode {
         &self.outputs.0
     }
 }
-
 
 // --- BLOBHASH Node (0x4f) --- Requires EIP-4844
 

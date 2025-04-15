@@ -1,8 +1,8 @@
+use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use revm_interpreter::{as_usize_saturated, SharedMemory};
 use revm_primitives::U256;
-use revm_interpreter::{SharedMemory, as_usize_saturated};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::typed_graph::{TypedNode, HasInputType, HasOutputType};
 
 /// Calculates the required memory size rounded up to the nearest 32-byte word.
 /// This function mimics the memory expansion logic in EVM.
@@ -81,7 +81,11 @@ impl HasInputType<(*const U256, *const U256, Rc<RefCell<SharedMemory>>)> for Mst
 impl HasOutputType<()> for MstoreNode {}
 
 impl MstoreNode {
-    pub fn new(offset_ptr: *const U256, value_ptr: *const U256, memory: Rc<RefCell<SharedMemory>>) -> Self {
+    pub fn new(
+        offset_ptr: *const U256,
+        value_ptr: *const U256,
+        memory: Rc<RefCell<SharedMemory>>,
+    ) -> Self {
         Self {
             inputs: (offset_ptr, value_ptr, memory),
             _outputs: (),
@@ -124,7 +128,11 @@ impl HasInputType<(*const U256, *const U256, Rc<RefCell<SharedMemory>>)> for Mst
 impl HasOutputType<()> for Mstore8Node {}
 
 impl Mstore8Node {
-    pub fn new(offset_ptr: *const U256, value_ptr: *const U256, memory: Rc<RefCell<SharedMemory>>) -> Self {
+    pub fn new(
+        offset_ptr: *const U256,
+        value_ptr: *const U256,
+        memory: Rc<RefCell<SharedMemory>>,
+    ) -> Self {
         Self {
             inputs: (offset_ptr, value_ptr, memory),
             _outputs: (),
@@ -196,16 +204,34 @@ pub struct McopyNode {
     /// 1: *const U256 - Source offset.
     /// 2: *const U256 - Length of data to copy in bytes.
     /// 3: Rc<RefCell<SharedMemory>> - Reference to the shared memory.
-    inputs: (*const U256, *const U256, *const U256, Rc<RefCell<SharedMemory>>),
+    inputs: (
+        *const U256,
+        *const U256,
+        *const U256,
+        Rc<RefCell<SharedMemory>>,
+    ),
     /// Outputs: None. Modifies shared memory state directly.
     _outputs: (),
 }
 
-impl HasInputType<(*const U256, *const U256, *const U256, Rc<RefCell<SharedMemory>>)> for McopyNode {}
+impl
+    HasInputType<(
+        *const U256,
+        *const U256,
+        *const U256,
+        Rc<RefCell<SharedMemory>>,
+    )> for McopyNode
+{
+}
 impl HasOutputType<()> for McopyNode {}
 
 impl McopyNode {
-    pub fn new(dst_ptr: *const U256, src_ptr: *const U256, len_ptr: *const U256, memory: Rc<RefCell<SharedMemory>>) -> Self {
+    pub fn new(
+        dst_ptr: *const U256,
+        src_ptr: *const U256,
+        len_ptr: *const U256,
+        memory: Rc<RefCell<SharedMemory>>,
+    ) -> Self {
         Self {
             inputs: (dst_ptr, src_ptr, len_ptr, memory),
             _outputs: (),
@@ -228,9 +254,9 @@ impl TypedNode for McopyNode {
 
             let highest_byte_accessed = dst.saturating_add(len).max(src.saturating_add(len));
             let required_size = if highest_byte_accessed > 0 {
-                 calc_memory_size(highest_byte_accessed - 1, 1)
+                calc_memory_size(highest_byte_accessed - 1, 1)
             } else {
-                 0
+                0
             };
 
             if required_size > memory.len() {

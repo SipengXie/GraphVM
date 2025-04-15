@@ -157,16 +157,19 @@ impl SsaGraph {
     }
 
     /// Get all predecessors (dependencies) for a given LSN
-    /// 
+    ///
     /// # Arguments
     /// * `lsn` - Logical sequence number
-    /// 
+    ///
     /// # Returns
     /// * `Result<&[LsnType]>` - Slice of LSNs that are dependencies of the given LSN
     #[inline(always)]
     pub fn get_predecessors(&self, lsn: LsnType) -> Result<&[LsnType]> {
         if lsn as usize >= self.predecessors.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                lsn
+            )));
         }
         Ok(&self.predecessors[lsn as usize])
     }
@@ -175,7 +178,10 @@ impl SsaGraph {
     #[inline(always)]
     pub fn get_successors(&self, lsn: LsnType) -> Result<&[LsnType]> {
         if lsn as usize >= self.successors.len() {
-            return Err(ExecutionError::GraphError(format!("Node not found for LSN: {}", lsn)));
+            return Err(ExecutionError::GraphError(format!(
+                "Node not found for LSN: {}",
+                lsn
+            )));
         }
         Ok(&self.successors[lsn as usize])
     }
