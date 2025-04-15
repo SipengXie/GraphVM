@@ -40,8 +40,8 @@ impl TypedNode for JumpNode {
     }
 
     // Custom output getter for usize
-    fn get_usize_output(&self) -> usize {
-        self.outputs.0
+    fn get_usize_output(&self) -> *const usize {
+        &self.outputs.0 as *const usize
     }
 }
 
@@ -83,8 +83,8 @@ impl TypedNode for JumpiNode {
     }
 
 
-    fn get_usize_output(&self) -> usize {
-        self.outputs.0
+    fn get_usize_output(&self) -> *const usize {
+        &self.outputs.0 as *const usize
     }
 
 }
@@ -162,8 +162,8 @@ impl TypedNode for ReturnRevertNode {
     }
 
     
-    fn get_instruction_result_output(&self) -> InstructionResult {
-        self.outputs.0
+    fn get_instruction_result_output(&self) -> *const InstructionResult {
+        &self.outputs.0 as *const InstructionResult
     }
 
     fn get_bytes_output(&self) -> Option<*const Bytes> {
@@ -202,8 +202,8 @@ impl TypedNode for StopInvalidNode {
         Ok(())
     }
      // Custom getters for output
-    fn get_instruction_result_output(&self) -> InstructionResult {
-        self.outputs.0
+    fn get_instruction_result_output(&self) -> *const InstructionResult {
+        &self.outputs.0 as *const InstructionResult
     }
     fn get_bytes_output(&self) -> Option<*const Bytes> {
         Some(&self.outputs.1 as *const Bytes)

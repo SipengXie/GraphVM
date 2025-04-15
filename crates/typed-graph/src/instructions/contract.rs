@@ -388,6 +388,22 @@ impl TypedNode for MakeCallFrameNode {
         }
         Ok(())
      }
+
+     fn get_frame_context_output(&self) -> Option<*const FrameContext> {
+         self.outputs.0.as_ref().map(|fc| fc as *const FrameContext)
+     }
+
+     fn get_call_outcome_output(&self) -> Option<*const CallOutcome> {
+         self.outputs.1.as_ref().map(|co| co as *const CallOutcome)
+     }
+
+     fn get_account_info_output(&self, index: usize) -> Option<*const AccountInfo> {
+         match index {
+            2 => self.outputs.2.as_ref().map(|ai| ai as *const AccountInfo),
+            3 => self.outputs.3.as_ref().map(|ai| ai as *const AccountInfo),
+            _ => None,
+         }
+     }
 }
 
 
@@ -434,6 +450,10 @@ impl TypedNode for CallReturnNode {
          }
          Ok(())
      }
+
+     fn get_call_outcome_output(&self) -> Option<*const CallOutcome> {
+        Some(&self.outputs.0 as *const CallOutcome)
+     }
 }
 
 
@@ -447,9 +467,9 @@ pub struct InsertCallOutcomeNode {
     /// 2: *const FrameContext - The *original* frame context that initiated the call (needed for ret_range).
     inputs: (*const CallOutcome, Rc<RefCell<SharedMemory>>, *const FrameContext),
     /// Outputs:
-    /// 0: U256 - Success status (1 for Ok, 0 for Revert/Error).
-    /// 1: Bytes - The return data buffer (for RETURNDATASIZE/COPY).
-    outputs: (U256, Bytes),
+    /// 0: Bytes - The return data buffer (for RETURNDATASIZE/COPY).
+    /// 1: U256 - Success status (1 for Ok, 0 for Revert/Error).
+    outputs: (Bytes, U256),
 }
 // Define Input/Output types and impl Has... traits
 type InsertCallOutcomeInputs = (*const CallOutcome, Rc<RefCell<SharedMemory>>, *const FrameContext);
@@ -465,7 +485,7 @@ impl InsertCallOutcomeNode {
     ) -> Self {
         Self {
             inputs: (outcome_ptr, memory_ref, original_frame_ptr),
-            outputs: (U256::ZERO, Bytes::default()), // Initialize outputs
+            outputs: (Bytes::default(), U256::ZERO), // Initialize outputs
         }
     }
 }
@@ -476,7 +496,7 @@ impl TypedNode for InsertCallOutcomeNode {
              let mut memory = self.inputs.1.borrow_mut();
              let original_frame = &*self.inputs.2; // Frame that made the call
 
-             let success = outcome.result == InstructionResult::Return || outcome.result == InstructionResult::Stop;
+             let success = matches!(outcome.result, return_ok!());
              let return_data = &outcome.return_data;
              let ret_range = original_frame.frame_input.ret_range.clone(); // Get range from original frame
 
@@ -488,12 +508,20 @@ impl TypedNode for InsertCallOutcomeNode {
                  memory.set(mem_offset, &return_data[..write_len]);
              }
 
-             self.outputs.0 = if success { U256_ONE } else { U256::ZERO };
-             self.outputs.1 = return_data.clone(); // Store for RETURNDATA ops
+             self.outputs.0 = return_data.clone(); // Store for RETURNDATA ops
+             self.outputs.1 = if success { U256_ONE } else { U256::ZERO };
          }
          Ok(())
     }
-     // Add getters for outputs
+
+    fn get_bytes_output(&self) -> Option<*const Bytes> {
+        Some(&self.outputs.0 as *const Bytes)
+    }
+
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.1 as *const U256
+    }
+    
 }
 
 
@@ -705,6 +733,22 @@ impl TypedNode for MakeCreateFrameNode {
             }
             Ok(())
       }
+      
+      fn get_frame_context_output(&self) -> Option<*const FrameContext> {
+          Some(&self.outputs.0 as *const FrameContext)
+      }
+
+      fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
+          match _index {
+            1 => Some(&self.outputs.1 as *const AccountInfo),
+            2 => Some(&self.outputs.2 as *const AccountInfo),
+            _ => None,
+          }
+      }
+
+      fn get_account_status_output(&self) -> *const AccountStatus {
+          &self.outputs.3 as *const AccountStatus
+      }
 }
 
 
@@ -790,6 +834,14 @@ impl TypedNode for CreateReturnNode {
                 Ok(())
         }
       }
+
+      fn get_create_outcome_output(&self) -> Option<*const CreateOutcome> {
+          Some(&self.outputs.0 as *const CreateOutcome)
+      }
+
+      fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
+          Some(&self.outputs.1 as *const AccountInfo)
+      }
 }
 
 // --- Insert Create Outcome Node ---
@@ -834,5 +886,12 @@ impl TypedNode for InsertCreateOutcomeNode {
           }
           Ok(())
       }
-      // Add getters for outputs
+    
+    fn get_bytes_output(&self) -> Option<*const Bytes> {
+        Some(&self.outputs.0 as *const Bytes)
+    }
+
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.1 as *const U256
+    }
 }

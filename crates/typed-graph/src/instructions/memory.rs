@@ -59,11 +59,8 @@ impl TypedNode for MloadNode {
         Ok(())
     }
 
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -185,11 +182,8 @@ impl TypedNode for MsizeNode {
         Ok(())
     }
 
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 

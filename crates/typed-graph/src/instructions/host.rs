@@ -61,8 +61,8 @@ impl TypedNode for SloadNode {
         Ok(())
     }
 
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -133,8 +133,8 @@ impl TypedNode for SstoreNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+     fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -183,8 +183,8 @@ impl TypedNode for BalanceNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+     fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -229,8 +229,8 @@ impl TypedNode for ExtcodesizeNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+     fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -284,8 +284,8 @@ impl TypedNode for ExtcodehashNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+     fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -344,8 +344,8 @@ impl TypedNode for BlockhashNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+     fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 

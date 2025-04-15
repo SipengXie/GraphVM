@@ -57,7 +57,7 @@ fn prepare_typed_graph(dependencies: &[usize], constants: &[U256]) -> TypedGraph
     for i in 1..NODE_COUNT {
         // Create node with dependency pointer and constant pointer
         let node = AddNode::new(
-            nodes[dependencies[i]].get_u256_output(0).unwrap(),
+            nodes[dependencies[i]].get_u256_output(),
             &constants[i] as *const U256
         );
         nodes.push(node);

@@ -27,11 +27,8 @@ impl TypedNode for AddNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -61,11 +58,8 @@ impl TypedNode for MulNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -95,11 +89,8 @@ impl TypedNode for SubNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -134,11 +125,8 @@ impl TypedNode for DivNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -173,11 +161,8 @@ impl TypedNode for ModNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -212,11 +197,8 @@ impl TypedNode for AddModNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -251,11 +233,8 @@ impl TypedNode for MulModNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -285,11 +264,8 @@ impl TypedNode for ExpNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -324,10 +300,7 @@ impl TypedNode for SignExtendNode {
         Ok(())
     }
     
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index {
-            0 => Some(&self.outputs.0),
-            _ => None,
-        }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 } 

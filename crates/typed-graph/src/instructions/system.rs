@@ -1,4 +1,3 @@
-
 use revm_primitives::{Bytes, U256, KECCAK_EMPTY};
 use revm_interpreter::{SharedMemory, as_usize_saturated};
 use std::cell::RefCell;
@@ -37,8 +36,8 @@ impl TypedNode for GasNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -70,8 +69,8 @@ impl TypedNode for AddressNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -102,8 +101,8 @@ impl TypedNode for CallerNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -134,8 +133,8 @@ impl TypedNode for CodesizeNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -243,8 +242,8 @@ impl TypedNode for CalldataloadNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -275,8 +274,8 @@ impl TypedNode for CalldatasizeNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -306,8 +305,8 @@ impl TypedNode for CallvalueNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -403,8 +402,8 @@ impl TypedNode for ReturndatasizeNode {
         }
         Ok(())
     }
-     fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -536,7 +535,7 @@ impl TypedNode for Keccak256Node {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }

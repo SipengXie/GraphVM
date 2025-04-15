@@ -5,18 +5,18 @@ use revm_interpreter::as_usize_saturated; // Reusing this helper macro
 // --- Common Input Type for Env Nodes ---
 
 /// Type alias for Env pointer input
-type EnvInput<'a> = (*const Env,);
+type EnvInput = (*const Env,);
 /// Trait implementation for Env pointer input
-impl<'a> HasInputType<EnvInput<'a>> for ChainIdNode {}
-impl<'a> HasInputType<EnvInput<'a>> for CoinbaseNode {}
-impl<'a> HasInputType<EnvInput<'a>> for TimestampNode {}
-impl<'a> HasInputType<EnvInput<'a>> for NumberNode {}
-impl<'a> HasInputType<EnvInput<'a>> for DifficultyNode {} // PREVRANDAO is handled internally
-impl<'a> HasInputType<EnvInput<'a>> for GasLimitNode {}
-impl<'a> HasInputType<EnvInput<'a>> for GasPriceNode {}
-impl<'a> HasInputType<EnvInput<'a>> for BaseFeeNode {}
-impl<'a> HasInputType<EnvInput<'a>> for OriginNode {}
-impl<'a> HasInputType<EnvInput<'a>> for BlobBaseFeeNode {}
+impl HasInputType<EnvInput> for ChainIdNode {}
+impl HasInputType<EnvInput> for CoinbaseNode {}
+impl HasInputType<EnvInput> for TimestampNode {}
+impl HasInputType<EnvInput> for NumberNode {}
+impl HasInputType<EnvInput> for DifficultyNode {} // PREVRANDAO is handled internally
+impl HasInputType<EnvInput> for GasLimitNode {}
+impl HasInputType<EnvInput> for GasPriceNode {}
+impl HasInputType<EnvInput> for BaseFeeNode {}
+impl HasInputType<EnvInput> for OriginNode {}
+impl HasInputType<EnvInput> for BlobBaseFeeNode {}
 
 // --- Common Output Type ---
 
@@ -40,7 +40,7 @@ impl HasOutputType<U256Output> for BlobHashNode {} // Also outputs U256
 
 /// Node for CHAINID operation: gets the chain ID.
 pub struct ChainIdNode {
-    inputs: EnvInput<'static>, // Use 'static lifetime for pointer type simplicity
+    inputs: EnvInput, // Use 'static lifetime for pointer type simplicity
     outputs: U256Output,
 }
 
@@ -57,8 +57,8 @@ impl TypedNode for ChainIdNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -66,7 +66,7 @@ impl TypedNode for ChainIdNode {
 
 /// Node for COINBASE operation: gets the beneficiary address.
 pub struct CoinbaseNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -84,8 +84,8 @@ impl TypedNode for CoinbaseNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -93,7 +93,7 @@ impl TypedNode for CoinbaseNode {
 
 /// Node for TIMESTAMP operation: gets the block timestamp.
 pub struct TimestampNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -110,8 +110,8 @@ impl TypedNode for TimestampNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -119,7 +119,7 @@ impl TypedNode for TimestampNode {
 
 /// Node for NUMBER operation: gets the block number.
 pub struct NumberNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -136,8 +136,8 @@ impl TypedNode for NumberNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -145,7 +145,7 @@ impl TypedNode for NumberNode {
 
 /// Node for DIFFICULTY/PREVRANDAO operation.
 pub struct DifficultyNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -169,8 +169,8 @@ impl TypedNode for DifficultyNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -178,7 +178,7 @@ impl TypedNode for DifficultyNode {
 
 /// Node for GASLIMIT operation: gets the block gas limit.
 pub struct GasLimitNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -195,8 +195,8 @@ impl TypedNode for GasLimitNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -204,7 +204,7 @@ impl TypedNode for GasLimitNode {
 
 /// Node for GASPRICE operation: gets the effective gas price of the transaction.
 pub struct GasPriceNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -221,8 +221,8 @@ impl TypedNode for GasPriceNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -230,7 +230,7 @@ impl TypedNode for GasPriceNode {
 
 /// Node for BASEFEE operation: gets the block base fee.
 pub struct BaseFeeNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -247,8 +247,8 @@ impl TypedNode for BaseFeeNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -256,7 +256,7 @@ impl TypedNode for BaseFeeNode {
 
 /// Node for ORIGIN operation: gets the transaction originator address.
 pub struct OriginNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -274,8 +274,8 @@ impl TypedNode for OriginNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -283,7 +283,7 @@ impl TypedNode for OriginNode {
 
 /// Node for BLOBBASEFEE operation: gets the blob base fee.
 pub struct BlobBaseFeeNode {
-    inputs: EnvInput<'static>,
+    inputs: EnvInput,
     outputs: U256Output,
 }
 
@@ -301,8 +301,8 @@ impl TypedNode for BlobBaseFeeNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }
 
@@ -347,7 +347,7 @@ impl TypedNode for BlobHashNode {
         }
         Ok(())
     }
-    fn get_u256_output(&self, index: usize) -> Option<*const U256> {
-        match index { 0 => Some(&self.outputs.0), _ => None }
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
     }
 }

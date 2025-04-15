@@ -1,7 +1,7 @@
 use revm_interpreter::InstructionResult;
-use revm_primitives::{AccountInfo, Bytes, U256};
+use revm_primitives::{AccountInfo, AccountStatus, Bytes, U256};
 
-use crate::context::FrameInput;
+use crate::context::{CallOutcome, CreateOutcome, FrameContext, FrameInput};
 
 /// Core trait that all typed nodes must implement
 pub trait TypedNode {
@@ -9,16 +9,16 @@ pub trait TypedNode {
     fn execute(&mut self) -> anyhow::Result<()>;
     
     /// Get U256 output at specified index if available
-    fn get_u256_output(&self, _index: usize) -> Option<*const U256> {
-        None
+    fn get_u256_output(&self) -> *const U256 {
+        &U256::ZERO
     }
 
-    fn get_usize_output(&self) -> usize {
-        0
+    fn get_usize_output(&self) -> *const usize {
+        &0
     }
 
-    fn get_instruction_result_output(&self) -> InstructionResult {
-        InstructionResult::Continue
+    fn get_instruction_result_output(&self) -> *const InstructionResult {
+        &InstructionResult::Continue
     }
 
     fn get_bytes_output(&self) -> Option<*const Bytes> {
@@ -28,10 +28,27 @@ pub trait TypedNode {
     fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
         None
     }
+    
+    fn get_account_status_output(&self) -> *const AccountStatus {
+        &AccountStatus::default()
+    }
+    
+    fn get_create_outcome_output(&self) -> Option<*const CreateOutcome> {
+        None
+    }
 
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         None // Default implementation returns None
     }
+
+    fn get_frame_context_output(&self) -> Option<*const FrameContext> {
+        None
+    }
+
+    fn get_call_outcome_output(&self) -> Option<*const CallOutcome> {
+        None
+    }
+
 }
 
 /// Trait for compile-time input type checking
