@@ -62,6 +62,10 @@ impl TypedNode for ChainIdNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        format!("ChainIdNode: Chain ID = {}", self.outputs.0)
+    }
 }
 
 // --- COINBASE Node (0x41) ---
@@ -93,6 +97,10 @@ impl TypedNode for CoinbaseNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        format!("CoinbaseNode: Coinbase = {}", self.outputs.0)
+    }
 }
 
 // --- TIMESTAMP Node (0x42) ---
@@ -122,6 +130,10 @@ impl TypedNode for TimestampNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        format!("TimestampNode: Timestamp = {}", self.outputs.0)
+    }
 }
 
 // --- NUMBER Node (0x43) ---
@@ -150,6 +162,10 @@ impl TypedNode for NumberNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        format!("NumberNode: Block Number = {}", self.outputs.0)
     }
 }
 
@@ -187,6 +203,10 @@ impl TypedNode for DifficultyNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        format!("DifficultyNode: Difficulty/Prevrandao = {}", self.outputs.0)
+    }
 }
 
 // --- GASLIMIT Node (0x45) ---
@@ -215,6 +235,10 @@ impl TypedNode for GasLimitNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        format!("GasLimitNode: Gas Limit = {}", self.outputs.0)
     }
 }
 
@@ -245,6 +269,10 @@ impl TypedNode for GasPriceNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        format!("GasPriceNode: Gas Price = {}", self.outputs.0)
+    }
 }
 
 // --- BASEFEE Node (0x48) ---
@@ -273,6 +301,10 @@ impl TypedNode for BaseFeeNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        format!("BaseFeeNode: Base Fee = {}", self.outputs.0)
     }
 }
 
@@ -303,6 +335,10 @@ impl TypedNode for OriginNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        format!("OriginNode: Origin = {}", self.outputs.0)
     }
 }
 
@@ -338,6 +374,10 @@ impl TypedNode for BlobBaseFeeNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        format!("BlobBaseFeeNode: Blob Base Fee = {}", self.outputs.0)
     }
 }
 
@@ -383,5 +423,11 @@ impl TypedNode for BlobHashNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!("BlobHashNode: Blob Hash at index {} = {}", *self.inputs.0, self.outputs.0)
+        }
     }
 }

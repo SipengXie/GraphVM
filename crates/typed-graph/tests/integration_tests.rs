@@ -110,7 +110,7 @@ pub fn execute_case(code: Bytes, case_name: &str, config: ExecutionConfig) -> st
 
     // --- Part 2: Convert SSA Logs to TypedGraph and Execute ---
 
-    let execution_time = typed_graph_execute(logs, config.clone(), &env, &first_call);
+    let execution_time = typed_graph_execute(logs, config.clone(), &env, &first_call, &bytecode);
 
     execution_time
 }
@@ -121,13 +121,12 @@ fn typed_graph_execute(
     config: ExecutionConfig,
     env: &Env,
     _first_frame: &FrameInput,
+    bytecode: &Bytecode,
 ) -> std::time::Duration {
     println!(
         "Converting {} SSA log entries to TypedGraph...",
         entries.len()
     );
-
-    let start_time = Instant::now();
 
     // Initialize required components
     let shared_memory = Rc::new(RefCell::new(SharedMemory::new()));
@@ -141,8 +140,8 @@ fn typed_graph_execute(
             AccountInfo {
                 nonce: 0,
                 balance: uint!(10000000000000000000000000_U256),
-                code_hash: keccak256(&config.input.clone().unwrap_or_default()),
-                code: Some(Bytecode::new_raw(config.input.unwrap_or_default())),
+                code_hash: bytecode.hash_slow(),
+                code: Some(bytecode.clone()),
             },
             AccountStatus::default(),
         ),
@@ -189,11 +188,18 @@ fn typed_graph_execute(
 
     // Convert SSA logs to TypedGraph
     let (mut typed_graph, _constant_pool) = converter.convert(entries);
+    
+    // eprintln!("== TypedGraph before execution ==");
+    // typed_graph.print_graph();
 
+    let start_time = Instant::now();
     // Execute the TypedGraph
     if let Err(e) = typed_graph.execute() {
         eprintln!("Error executing TypedGraph: {:?}", e);
     }
+
+    // eprintln!("== TypedGraph after execution ==");
+    // typed_graph.print_graph();
 
     start_time.elapsed()
 }

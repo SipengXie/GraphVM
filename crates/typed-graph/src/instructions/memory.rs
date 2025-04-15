@@ -62,6 +62,15 @@ impl TypedNode for MloadNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "MloadNode: Load from offset {} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
+    }
 }
 
 // --- MSTORE Node ---
@@ -108,6 +117,15 @@ impl TypedNode for MstoreNode {
             memory.set_u256(offset, value);
         }
         Ok(())
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "MstoreNode: Store {} at offset {}",
+                *self.inputs.1, *self.inputs.0
+            )
+        }
     }
 }
 
@@ -156,6 +174,16 @@ impl TypedNode for Mstore8Node {
         }
         Ok(())
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            let byte_value = (*self.inputs.1).byte(0);
+            format!(
+                "Mstore8Node: Store byte {} at offset {}",
+                byte_value, *self.inputs.0
+            )
+        }
+    }
 }
 
 // --- MSIZE Node ---
@@ -192,6 +220,13 @@ impl TypedNode for MsizeNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        format!(
+            "MsizeNode: Memory size = {}",
+            self.outputs.0
+        )
     }
 }
 
@@ -266,5 +301,14 @@ impl TypedNode for McopyNode {
             memory.copy(dst, src, len);
         }
         Ok(())
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "McopyNode: Copy {} bytes from offset {} to offset {}",
+                *self.inputs.2, *self.inputs.1, *self.inputs.0
+            )
+        }
     }
 }

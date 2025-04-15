@@ -41,6 +41,14 @@ impl TypedNode for GasNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "GasNode: Gas remaining = {}",
+                *self.inputs.0
+            )
+        }
+    }
 }
 
 // --- ADDRESS Node (0x30) ---
@@ -75,6 +83,12 @@ impl TypedNode for AddressNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    fn print(&self) -> String {
+        format!(
+            "AddressNode: Current address = {}",
+            self.outputs.0
+        )
     }
 }
 
@@ -111,6 +125,12 @@ impl TypedNode for CallerNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    fn print(&self) -> String {
+        format!(
+            "CallerNode: Caller address = {}",
+            self.outputs.0
+        )
+    }
 }
 
 // --- CODESIZE Node (0x38) ---
@@ -145,6 +165,12 @@ impl TypedNode for CodesizeNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    fn print(&self) -> String {
+        format!(
+            "CodesizeNode: Code size = {}",
+            self.outputs.0
+        )
     }
 }
 
@@ -230,6 +256,14 @@ impl TypedNode for CodecopyNode {
         }
         Ok(())
     }
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CodecopyNode: Copy code from offset {} with length {} to memory offset {}",
+                *self.inputs.1, *self.inputs.2, *self.inputs.0
+            )
+        }
+    }
 }
 
 // --- CALLDATALOAD Node (0x35) ---
@@ -277,6 +311,14 @@ impl TypedNode for CalldataloadNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CalldataloadNode: Load calldata from offset {} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
+    }
 }
 
 // --- CALLDATASIZE Node (0x36) ---
@@ -312,6 +354,12 @@ impl TypedNode for CalldatasizeNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    fn print(&self) -> String {
+        format!(
+            "CalldatasizeNode: Calldata size = {}",
+            self.outputs.0
+        )
+    }
 }
 
 // --- CALLVALUE Node (0x34) ---
@@ -345,6 +393,12 @@ impl TypedNode for CallvalueNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    fn print(&self) -> String {
+        format!(
+            "CallvalueNode: Call value = {}",
+            self.outputs.0
+        )
     }
 }
 
@@ -430,6 +484,14 @@ impl TypedNode for CalldatacopyNode {
         }
         Ok(())
     }
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CalldatacopyNode: Copy calldata from offset {} with length {} to memory offset {}",
+                *self.inputs.1, *self.inputs.2, *self.inputs.0
+            )
+        }
+    }
 }
 
 // --- RETURNDATASIZE Node (0x3d) ---
@@ -465,6 +527,12 @@ impl TypedNode for ReturndatasizeNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    fn print(&self) -> String {
+        format!(
+            "ReturndatasizeNode: Return data size = {}",
+            self.outputs.0
+        )
     }
 }
 
@@ -564,6 +632,14 @@ impl TypedNode for ReturndatacopyNode {
         }
         Ok(())
     }
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ReturndatacopyNode: Copy return data from offset {} with length {} to memory offset {}",
+                *self.inputs.1, *self.inputs.2, *self.inputs.0
+            )
+        }
+    }
 }
 
 // --- KECCAK256 Node (0x20) ---
@@ -628,5 +704,13 @@ impl TypedNode for Keccak256Node {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "Keccak256Node: Hash data at offset {} with length {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }

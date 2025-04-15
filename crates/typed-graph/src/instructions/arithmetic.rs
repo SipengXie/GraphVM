@@ -30,6 +30,15 @@ impl TypedNode for AddNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "AddNode: {} + {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing multiplication operation
@@ -61,6 +70,15 @@ impl TypedNode for MulNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "MulNode: {} * {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing subtraction operation
@@ -91,6 +109,15 @@ impl TypedNode for SubNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SubNode: {} - {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }
 
@@ -128,6 +155,15 @@ impl TypedNode for DivNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "DivNode: {} / {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing modulo operation
@@ -163,6 +199,15 @@ impl TypedNode for ModNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ModNode: {} % {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }
 
@@ -200,6 +245,15 @@ impl TypedNode for AddModNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "AddModNode: ({} + {}) % {} = {}",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing multiplication modulo operation
@@ -236,6 +290,15 @@ impl TypedNode for MulModNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "MulModNode: ({} * {}) % {} = {}",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing exponentiation operation
@@ -266,6 +329,15 @@ impl TypedNode for ExpNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ExpNode: {} ^ {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }
 
@@ -302,5 +374,14 @@ impl TypedNode for SignExtendNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SignExtendNode: SignExtend({}, {}) = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }

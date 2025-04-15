@@ -9,6 +9,11 @@ pub trait TypedNode {
     /// Execute the node's operation
     fn execute(&mut self) -> anyhow::Result<()>;
 
+    /// Print the node's type and content
+    fn print(&self) -> String {
+        format!("TypedNode: Generic Node")
+    }
+
     /// Get U256 output at specified index if available
     fn get_u256_output(&self) -> *const U256 {
         &U256::ZERO
@@ -90,5 +95,14 @@ impl TypedGraph {
     /// Get a reference to a node
     pub fn get_node(&self, idx: usize) -> &dyn TypedNode {
         &*self.nodes[idx]
+    }
+    
+    /// Print all nodes in the graph according to execution order
+    pub fn print_graph(&self) {
+        println!("TypedGraph with {} nodes:", self.nodes.len());
+        for (i, &idx) in self.execution_order.iter().enumerate() {
+            let node_str = self.nodes[idx].print();
+            println!("Node {}: {}", i, node_str);
+        }
     }
 }

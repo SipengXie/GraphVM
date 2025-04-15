@@ -79,6 +79,15 @@ impl TypedNode for SloadNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SloadNode: Load from address {} slot {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 // --- SSTORE Node (Simplified) ---
@@ -151,6 +160,15 @@ impl TypedNode for SstoreNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SstoreNode: Store {} to address {} slot {}",
+                *self.inputs.2, *self.inputs.0, *self.inputs.1
+            )
+        }
+    }
 }
 
 // --- BALANCE Node ---
@@ -215,6 +233,15 @@ impl TypedNode for BalanceNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "BalanceNode: Balance of address {} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
+    }
 }
 
 // --- EXTCODESIZE Node ---
@@ -278,6 +305,15 @@ impl TypedNode for ExtcodesizeNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ExtcodesizeNode: Code size of address {} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
     }
 }
 
@@ -348,6 +384,15 @@ impl TypedNode for ExtcodehashNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ExtcodehashNode: Code hash of address {} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
+    }
 }
 
 // --- BLOCKHASH Node ---
@@ -407,6 +452,15 @@ impl TypedNode for BlockhashNode {
     }
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "BlockhashNode: Hash of block {} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
     }
 }
 

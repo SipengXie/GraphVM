@@ -7,30 +7,44 @@ use crate::instructions::memory::{MloadNode, MstoreNode};
 use crate::typed_graph::TypedGraph;
 use core::panic;
 use revm_interpreter::{InstructionResult, SharedMemory};
-use revm_primitives::{AccountInfo, Bytes, Env, U256, U256_ONE};
+use revm_primitives::{AccountInfo, Bytes, Env, U256, U256_ONE, HashMap};
 use revm_ssa::logger::LsnType;
 use revm_ssa::{FrameInput, SSAInput, SSALogEntry};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
-/// Constant pool for storing constant values used in TypedNodes
+/// Constant pool for storing constant values used in TypedNodes, ensuring uniqueness.
 pub struct ConstantPool {
-    /// Storage for U256 constants
+    /// Storage for unique U256 constants
     u256_constants: Vec<U256>,
+    /// Map from U256 value to its index in u256_constants
+    value_to_index: HashMap<U256, usize>,
 }
 
 impl ConstantPool {
     pub fn new() -> Self {
         Self {
             u256_constants: Vec::new(),
+            value_to_index: HashMap::default(), // Initialize the HashMap
         }
     }
 
-    /// Add a U256 constant and return its pointer
+    /// Add a U256 constant if it doesn't exist, and return its pointer.
+    /// Ensures that identical U256 values are stored only once.
     pub fn add_u256(&mut self, value: U256) -> *const U256 {
-        self.u256_constants.push(value);
-        &self.u256_constants[self.u256_constants.len() - 1] as *const U256
+        // Check if the value already exists in the map
+        if let Some(&index) = self.value_to_index.get(&value) {
+            // If exists, return pointer to the existing value in the vector
+            &self.u256_constants[index] as *const U256
+        } else {
+            // If not exists, add the value to the vector
+            let index = self.u256_constants.len();
+            self.u256_constants.push(value.clone()); // Clone the value for the vector
+            // Add the value and its index to the map
+            self.value_to_index.insert(value, index); // Take ownership of the original value for the map
+            // Return pointer to the newly added value
+            &self.u256_constants[index] as *const U256
+        }
     }
 }
 
@@ -91,7 +105,7 @@ impl SsaConverter {
 
     /// Convert SSA log entries to TypedGraph
     pub fn convert(&mut self, entries: Vec<SSALogEntry>) -> (TypedGraph, ConstantPool) {
-        eprintln!("Logs to convert: {:#?}", entries);
+        // eprintln!("Logs to convert: {:#?}", entries);
         // First pass: Create nodes for each entry
         for entry in entries.iter() {
             let node_index = self.create_node_for_entry(entry);

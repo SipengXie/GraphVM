@@ -45,6 +45,15 @@ impl TypedNode for JumpNode {
     fn get_usize_output(&self) -> *const usize {
         &self.outputs.0 as *const usize
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "JumpNode: Jump to PC {}",
+                *self.inputs.0
+            )
+        }
+    }
 }
 
 // --- JUMPI Node (0x57) ---
@@ -88,6 +97,17 @@ impl TypedNode for JumpiNode {
 
     fn get_usize_output(&self) -> *const usize {
         &self.outputs.0 as *const usize
+    }
+    
+    fn print(&self) -> String {
+        unsafe {
+            let condition = *self.inputs.1;
+            let should_jump = !condition.is_zero();
+            format!(
+                "JumpiNode: Conditional jump to PC {} if condition {} (Jump: {})",
+                *self.inputs.0, condition, should_jump
+            )
+        }
     }
 }
 
@@ -179,6 +199,25 @@ impl TypedNode for ReturnRevertNode {
     fn get_bytes_output(&self) -> Option<*const Bytes> {
         Some(&self.outputs.1 as *const Bytes) // Return pointer TO the Bytes struct
     }
+    
+    fn print(&self) -> String {
+        unsafe {
+            let op_type = match self.inputs.3 {
+                InstructionResult::Return => "RETURN",
+                InstructionResult::Revert => "REVERT",
+                _ => "UNKNOWN",
+            };
+            
+            format!(
+                "ReturnRevertNode: {} data from offset {} with length {} (Result: {:?}, Data len: {})",
+                op_type, 
+                *self.inputs.0, 
+                *self.inputs.1,
+                self.outputs.0,
+                self.outputs.1.len()
+            )
+        }
+    }
 }
 
 // --- STOP Node (0x00) / INVALID Node (0xfe) ---
@@ -216,5 +255,18 @@ impl TypedNode for StopInvalidNode {
     }
     fn get_bytes_output(&self) -> Option<*const Bytes> {
         Some(&self.outputs.1 as *const Bytes)
+    }
+    
+    fn print(&self) -> String {
+        let op_type = match self.outputs.0 {
+            InstructionResult::Stop => "STOP",
+            _ => if self.outputs.0.is_error() { "INVALID" } else { "UNKNOWN" },
+        };
+        
+        format!(
+            "StopInvalidNode: {} operation (Result: {:?})",
+            op_type,
+            self.outputs.0
+        )
     }
 }

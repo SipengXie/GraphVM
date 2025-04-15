@@ -90,6 +90,16 @@ impl TypedNode for DeductCallerNode {
             _ => None,
         }
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "DeductCallerNode: Caller={}, IsCreate={}, Cost={}, Output AccountInfo=(Balance: {}, Nonce: {})",
+                *self.inputs.0, self.inputs.1, *self.inputs.2, 
+                self.outputs.0.balance, self.outputs.0.nonce
+            )
+        }
+    }
 }
 
 // --- Simplified Refund Gas Node ---
@@ -117,6 +127,10 @@ impl TypedNode for RefundGasNode {
     fn execute(&mut self) -> anyhow::Result<()> {
         /* No-op */
         Ok(())
+    }
+
+    fn print(&self) -> String {
+        format!("RefundGasNode: Refund remaining gas to caller")
     }
 }
 
@@ -271,6 +285,17 @@ impl TypedNode for CallNode {
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CallNode: Gas={}, Address={}, Value={}, InOffset={}, InSize={}, OutOffset={}, OutSize={}, Output FrameInput=(Target: {}, Value: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, 
+                *self.inputs.3, *self.inputs.4, *self.inputs.5, *self.inputs.6,
+                self.outputs.0.target_address, self.outputs.0.transfer_value
+            )
+        }
+    }
 }
 
 // --- CALLCODE Node (0xf2) ---
@@ -304,6 +329,17 @@ impl TypedNode for CallcodeNode {
     }
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CallcodeNode: Gas={}, Address={}, Value={}, InOffset={}, InSize={}, OutOffset={}, OutSize={}, Output FrameInput=(Target: {}, Value: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, 
+                *self.inputs.3, *self.inputs.4, *self.inputs.5, *self.inputs.6,
+                self.outputs.0.target_address, self.outputs.0.transfer_value
+            )
+        }
     }
 }
 
@@ -362,6 +398,17 @@ impl TypedNode for DelegatecallNode {
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "DelegatecallNode: Gas={}, Address={}, InOffset={}, InSize={}, OutOffset={}, OutSize={}, Output FrameInput=(Target: {}, CallData len: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, 
+                *self.inputs.3, *self.inputs.4, *self.inputs.5, 
+                self.outputs.0.target_address, self.outputs.0.input.len()
+            )
+        }
+    }
 }
 
 // --- STATICCALL Node (0xfa) ---
@@ -408,6 +455,17 @@ impl TypedNode for StaticcallNode {
     }
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "StaticcallNode: Gas={}, Address={}, InOffset={}, InSize={}, OutOffset={}, OutSize={}, Output FrameInput=(Target: {}, CallData len: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, 
+                *self.inputs.3, *self.inputs.4, *self.inputs.5, 
+                self.outputs.0.target_address, self.outputs.0.input.len()
+            )
+        }
     }
 }
 
@@ -583,6 +641,16 @@ impl TypedNode for MakeCallFrameNode {
             _ => None,
         }
     }
+
+    fn print(&self) -> String {
+        format!(
+            "MakeCallFrameNode: FrameContext = {:?}, CallOutcome=(Result: {:?}), CallerInfo=(Balance: {}, Nonce: {}), TargetInfo=(Balance: {}, Nonce: {})",
+            self.outputs.0,
+            self.outputs.1.result,
+            self.outputs.2.balance, self.outputs.2.nonce,
+            self.outputs.3.balance, self.outputs.3.nonce
+        )
+    }
 }
 
 // --- Call Return Node (Conceptual) ---
@@ -639,6 +707,21 @@ impl TypedNode for CallReturnNode {
 
     fn get_call_outcome_output(&self) -> Option<*const CallOutcome> {
         Some(&self.outputs.0 as *const CallOutcome)
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CallReturnNode: Result={:?}, ReturnData={}, CallOutcome=(Result: {:?})",
+                *self.inputs.0,
+                if let Some(bytes) = &self.inputs.1.as_ref() { 
+                    format!("({} bytes)", bytes.len()) 
+                } else { 
+                    "None".to_string() 
+                },
+                self.outputs.0.result
+            )
+        }
     }
 }
 
@@ -713,6 +796,17 @@ impl TypedNode for InsertCallOutcomeNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.1 as *const U256
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "InsertCallOutcomeNode: Input CallOutcome={:?}, Output Success={}, ReturnData=({} bytes)",
+                *self.inputs.0,
+                self.outputs.1,
+                self.outputs.0.len()
+            )
+        }
     }
 }
 
@@ -792,6 +886,16 @@ impl TypedNode for CreateNode {
     }
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CreateNode: Value={}, CodeOffset={}, Length={}, Output FrameInput=(Target: {}, Input len: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, 
+                self.outputs.0.target_address, self.outputs.0.input.len()
+            )
+        }
     }
 }
 
@@ -880,6 +984,16 @@ impl TypedNode for Create2Node {
     }
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "Create2Node: Value={}, CodeOffset={}, Length={}, Salt={}, Output FrameInput=(Target: {}, Input len: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2, *self.inputs.3,
+                self.outputs.0.target_address, self.outputs.0.input.len()
+            )
+        }
     }
 }
 
@@ -1000,6 +1114,15 @@ impl TypedNode for MakeCreateFrameNode {
     fn get_account_status_output(&self) -> *const AccountStatus {
         &self.outputs.3 as *const AccountStatus
     }
+
+    fn print(&self) -> String {
+        format!(
+            "MakeCreateFrameNode: Account 1=(Balance: {}, Nonce: {}), Account 2=(Balance: {}, Nonce: {}), Status={:?}",
+            self.outputs.1.balance, self.outputs.1.nonce,
+            self.outputs.2.balance, self.outputs.2.nonce,
+            self.outputs.3
+        )
+    }
 }
 
 // --- Create Return Node (Conceptual) ---
@@ -1113,6 +1236,22 @@ impl TypedNode for CreateReturnNode {
     fn get_account_info_output(&self, _index: usize) -> Option<*const AccountInfo> {
         Some(&self.outputs.1 as *const AccountInfo)
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "CreateReturnNode: Result={:?}, CreateOutcome=(Result: {:?}, Address: {}), AccountInfo=(Balance: {}, Nonce: {})",
+                *self.inputs.0,
+                self.outputs.0.result,
+                if let Some(addr) = &self.outputs.0.created_address { 
+                    format!("{}", addr) 
+                } else { 
+                    "None".to_string() 
+                },
+                self.outputs.1.balance, self.outputs.1.nonce
+            )
+        }
+    }
 }
 
 // --- Insert Create Outcome Node ---
@@ -1169,5 +1308,16 @@ impl TypedNode for InsertCreateOutcomeNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.1 as *const U256
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "InsertCreateOutcomeNode: Input CreateOutcome={:?}, Output Address={}, ReturnData=({} bytes)",
+                *self.inputs.0,
+                self.outputs.1,
+                self.outputs.0.len()
+            )
+        }
     }
 }

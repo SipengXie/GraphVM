@@ -34,6 +34,15 @@ impl TypedNode for LtNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "LtNode: {} < {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing greater than operation
@@ -68,6 +77,15 @@ impl TypedNode for GtNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "GtNode: {} > {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }
 
@@ -104,6 +122,15 @@ impl TypedNode for EqNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "EqNode: {} == {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing is zero check
@@ -139,6 +166,15 @@ impl TypedNode for IsZeroNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "IsZeroNode: {} == 0 = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing bitwise AND operation
@@ -169,6 +205,15 @@ impl TypedNode for AndNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "AndNode: {} & {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
     }
 }
 
@@ -201,6 +246,15 @@ impl TypedNode for OrNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "OrNode: {} | {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing bitwise XOR operation
@@ -232,6 +286,15 @@ impl TypedNode for XorNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "XorNode: {} ^ {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing bitwise NOT operation
@@ -262,6 +325,15 @@ impl TypedNode for NotNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "NotNode: ~{} = {}",
+                *self.inputs.0, self.outputs.0
+            )
+        }
     }
 }
 
@@ -301,6 +373,15 @@ impl TypedNode for ByteNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ByteNode: byte({}, {}) = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing left shift operation
@@ -339,6 +420,15 @@ impl TypedNode for ShlNode {
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
     }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ShlNode: {} << {} = {}",
+                *self.inputs.1, *self.inputs.0, self.outputs.0
+            )
+        }
+    }
 }
 
 /// Node for performing logical right shift operation
@@ -376,6 +466,15 @@ impl TypedNode for ShrNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "ShrNode: {} >> {} = {}",
+                *self.inputs.1, *self.inputs.0, self.outputs.0
+            )
+        }
     }
 }
 
@@ -417,5 +516,14 @@ impl TypedNode for SarNode {
 
     fn get_u256_output(&self) -> *const U256 {
         &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SarNode: {} >>> {} = {}",
+                *self.inputs.1, *self.inputs.0, self.outputs.0
+            )
+        }
     }
 }
