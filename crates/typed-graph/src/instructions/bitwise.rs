@@ -1,5 +1,6 @@
 use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
 use revm_primitives::U256;
+use std::cmp::Ordering;
 
 /// Node for performing less than operation
 pub struct LtNode {
@@ -523,6 +524,107 @@ impl TypedNode for SarNode {
             format!(
                 "SarNode: {} >>> {} = {}",
                 *self.inputs.1, *self.inputs.0, self.outputs.0
+            )
+        }
+    }
+}
+
+/// Node for performing signed less than operation
+pub struct SltNode {
+    inputs: (*const U256, *const U256),
+    outputs: (U256,),
+}
+
+impl HasInputType<(*const U256, *const U256)> for SltNode {}
+impl HasOutputType<(U256,)> for SltNode {}
+
+impl SltNode {
+    pub fn new(input1: *const U256, input2: *const U256) -> Self {
+        Self {
+            inputs: (input1, input2),
+            outputs: (U256::ZERO,),
+        }
+    }
+}
+
+/// Compare two U256 values as signed 256-bit integers.
+#[inline]
+fn i256_cmp(a: &U256, b: &U256) -> Ordering {
+    let a_neg = a.bit(255);
+    let b_neg = b.bit(255);
+
+    match (a_neg, b_neg) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => a.cmp(b),
+    }
+}
+
+impl TypedNode for SltNode {
+    fn execute(&mut self) -> anyhow::Result<()> {
+        unsafe {
+            self.outputs.0 = if i256_cmp(&*self.inputs.0, &*self.inputs.1) == Ordering::Less {
+                U256::from(1)
+            } else {
+                U256::from(0)
+            };
+        }
+        Ok(())
+    }
+
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SltNode: (signed){} < (signed){} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
+}
+
+/// Node for performing signed greater than operation
+pub struct SgtNode {
+    inputs: (*const U256, *const U256),
+    outputs: (U256,),
+}
+
+impl HasInputType<(*const U256, *const U256)> for SgtNode {}
+impl HasOutputType<(U256,)> for SgtNode {}
+
+impl SgtNode {
+    pub fn new(input1: *const U256, input2: *const U256) -> Self {
+        Self {
+            inputs: (input1, input2),
+            outputs: (U256::ZERO,),
+        }
+    }
+}
+
+impl TypedNode for SgtNode {
+    fn execute(&mut self) -> anyhow::Result<()> {
+        unsafe {
+            self.outputs.0 = if i256_cmp(&*self.inputs.0, &*self.inputs.1) == Ordering::Greater {
+                U256::from(1)
+            } else {
+                U256::from(0)
+            };
+        }
+        Ok(())
+    }
+
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SgtNode: (signed){} > (signed){} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
             )
         }
     }
