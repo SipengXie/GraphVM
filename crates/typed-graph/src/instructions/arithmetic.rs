@@ -20,6 +20,7 @@ impl AddNode {
 }
 
 impl TypedNode for AddNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).overflowing_add(*self.inputs.1).0;
@@ -60,6 +61,7 @@ impl MulNode {
 }
 
 impl TypedNode for MulNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).overflowing_mul(*self.inputs.1).0;
@@ -100,6 +102,7 @@ impl SubNode {
 }
 
 impl TypedNode for SubNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).overflowing_sub(*self.inputs.1).0;
@@ -140,6 +143,7 @@ impl DivNode {
 }
 
 impl TypedNode for DivNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let b = *self.inputs.1;
@@ -185,6 +189,7 @@ impl ModNode {
 }
 
 impl TypedNode for ModNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let b = *self.inputs.1;
@@ -230,6 +235,7 @@ impl AddModNode {
 }
 
 impl TypedNode for AddModNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let n = *self.inputs.2;
@@ -275,6 +281,7 @@ impl MulModNode {
 }
 
 impl TypedNode for MulModNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let n = *self.inputs.2;
@@ -320,6 +327,7 @@ impl ExpNode {
 }
 
 impl TypedNode for ExpNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).pow(*self.inputs.1);
@@ -360,6 +368,7 @@ impl SignExtendNode {
 }
 
 impl TypedNode for SignExtendNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let ext = (*self.inputs.0).as_limbs()[0];
@@ -380,6 +389,161 @@ impl TypedNode for SignExtendNode {
         unsafe {
             format!(
                 "SignExtendNode: SignExtend({}, {}) = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
+}
+
+// Helper function to determine the sign of a U256 interpreted as i256
+// 0 for positive, 1 for negative
+#[inline(always)]
+fn i256_sign(val: U256) -> bool {
+    val.bit(255)
+}
+
+// Helper function for signed division of U256 values
+// Adapts logic from revm i256_div
+#[inline(always)]
+fn i256_div(mut num: U256, mut den: U256) -> U256 {
+    let num_sign = i256_sign(num);
+    let den_sign = i256_sign(den);
+
+    if num_sign {
+        num = num.wrapping_neg();
+    }
+    if den_sign {
+        den = den.wrapping_neg();
+    }
+
+    let mut ret = num.wrapping_div(den);
+
+    if num_sign != den_sign {
+        ret = ret.wrapping_neg();
+    }
+
+    ret
+}
+
+// Helper function for signed modulo of U256 values
+// Adapts logic from revm i256_mod
+#[inline(always)]
+fn i256_mod(mut num: U256, den: U256) -> U256 {
+    let num_sign = i256_sign(num);
+
+    if num_sign {
+        num = num.wrapping_neg();
+    }
+    // Denominator sign doesn't matter for modulo result sign
+    // let den_sign = i256_sign(den);
+    // if den_sign {
+    //     den = den.wrapping_neg();
+    // }
+
+    let mut ret = num.wrapping_rem(den);
+
+    if num_sign {
+        ret = ret.wrapping_neg();
+    }
+
+    ret
+}
+
+/// Node for performing signed division operation
+pub struct SdivNode {
+    inputs: (*const U256, *const U256),
+    outputs: (U256,),
+}
+
+impl HasInputType<(*const U256, *const U256)> for SdivNode {}
+impl HasOutputType<(U256,)> for SdivNode {}
+
+impl SdivNode {
+    pub fn new(input1: *const U256, input2: *const U256) -> Self {
+        Self {
+            inputs: (input1, input2),
+            outputs: (U256::ZERO,),
+        }
+    }
+}
+
+impl TypedNode for SdivNode {
+    #[inline(always)]
+    fn execute(&mut self) -> anyhow::Result<()> {
+        unsafe {
+            let b = *self.inputs.1;
+            self.outputs.0 = if b == U256::from(0) {
+                U256::from(0)
+            } else {
+                // Handle the edge case INT_MIN / -1 = INT_MIN (which is U256::MAX / (U256::MAX.wrapping_neg()) )
+                let a = *self.inputs.0;
+                let int_min = U256::from(1) << 255;
+                if a == int_min && b == U256::MAX.wrapping_add(U256::from(1)).wrapping_neg() {
+                     // b is -1 in two's complement
+                    int_min
+                } else {
+                   i256_div(a, b)
+                }
+            };
+        }
+        Ok(())
+    }
+
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SdivNode: {} / {} = {}",
+                *self.inputs.0, *self.inputs.1, self.outputs.0
+            )
+        }
+    }
+}
+
+/// Node for performing signed modulo operation
+pub struct SmodNode {
+    inputs: (*const U256, *const U256),
+    outputs: (U256,),
+}
+
+impl HasInputType<(*const U256, *const U256)> for SmodNode {}
+impl HasOutputType<(U256,)> for SmodNode {}
+
+impl SmodNode {
+    pub fn new(input1: *const U256, input2: *const U256) -> Self {
+        Self {
+            inputs: (input1, input2),
+            outputs: (U256::ZERO,),
+        }
+    }
+}
+
+impl TypedNode for SmodNode {
+    #[inline(always)]
+    fn execute(&mut self) -> anyhow::Result<()> {
+        unsafe {
+            let b = *self.inputs.1;
+            self.outputs.0 = if b == U256::from(0) {
+                U256::from(0)
+            } else {
+                let a = *self.inputs.0;
+                i256_mod(a, b)
+            };
+        }
+        Ok(())
+    }
+
+    fn get_u256_output(&self) -> *const U256 {
+        &self.outputs.0
+    }
+
+    fn print(&self) -> String {
+        unsafe {
+            format!(
+                "SmodNode: {} % {} = {}",
                 *self.inputs.0, *self.inputs.1, self.outputs.0
             )
         }

@@ -53,6 +53,7 @@ impl ChainIdNode {
 }
 
 impl TypedNode for ChainIdNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = U256::from((*self.inputs.0).cfg.chain_id);
@@ -86,6 +87,7 @@ impl CoinbaseNode {
 }
 
 impl TypedNode for CoinbaseNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // Convert Address (B160) to U256
@@ -121,6 +123,7 @@ impl TimestampNode {
 }
 
 impl TypedNode for TimestampNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).block.timestamp;
@@ -154,6 +157,7 @@ impl NumberNode {
 }
 
 impl TypedNode for NumberNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).block.number;
@@ -187,6 +191,7 @@ impl DifficultyNode {
 }
 
 impl TypedNode for DifficultyNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let env = &*self.inputs.0;
@@ -227,6 +232,7 @@ impl GasLimitNode {
 }
 
 impl TypedNode for GasLimitNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = U256::from((*self.inputs.0).block.gas_limit);
@@ -260,6 +266,7 @@ impl GasPriceNode {
 }
 
 impl TypedNode for GasPriceNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).effective_gas_price();
@@ -293,6 +300,7 @@ impl BaseFeeNode {
 }
 
 impl TypedNode for BaseFeeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).block.basefee;
@@ -326,6 +334,7 @@ impl OriginNode {
 }
 
 impl TypedNode for OriginNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // Convert Address (B160) to U256
@@ -360,6 +369,7 @@ impl BlobBaseFeeNode {
 }
 
 impl TypedNode for BlobBaseFeeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // .block.get_blob_gasprice() returns Option<u128>
@@ -407,6 +417,7 @@ impl BlobHashNode {
 }
 
 impl TypedNode for BlobHashNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let index = as_usize_saturated!(*self.inputs.0);

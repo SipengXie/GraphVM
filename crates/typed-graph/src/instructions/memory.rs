@@ -44,6 +44,7 @@ impl MloadNode {
 }
 
 impl TypedNode for MloadNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
@@ -103,6 +104,7 @@ impl MstoreNode {
 }
 
 impl TypedNode for MstoreNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
@@ -159,6 +161,7 @@ impl Mstore8Node {
 }
 
 impl TypedNode for Mstore8Node {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
@@ -211,6 +214,7 @@ impl MsizeNode {
 }
 
 impl TypedNode for MsizeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         let memory = self.inputs.0.borrow();
         let size = memory.len();
@@ -275,6 +279,7 @@ impl McopyNode {
 }
 
 impl TypedNode for McopyNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let dst = as_usize_saturated!(*self.inputs.0);

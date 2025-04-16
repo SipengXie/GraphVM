@@ -31,6 +31,7 @@ impl JumpNode {
 }
 
 impl TypedNode for JumpNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // Directly convert the target PC to usize.
@@ -84,6 +85,7 @@ impl JumpiNode {
 }
 
 impl TypedNode for JumpiNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let target_pc = as_usize_saturated!(*self.inputs.0);
@@ -159,6 +161,7 @@ impl ReturnRevertNode {
 }
 
 impl TypedNode for ReturnRevertNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
@@ -245,6 +248,7 @@ impl StopInvalidNode {
 }
 
 impl TypedNode for StopInvalidNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         // No actual execution needed, outputs are set in new()
         Ok(())

@@ -32,6 +32,7 @@ impl GasNode {
 }
 
 impl TypedNode for GasNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = *self.inputs.0;
@@ -74,6 +75,7 @@ impl AddressNode {
 }
 
 impl TypedNode for AddressNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let address = (*self.inputs.0).frame_input.target_address;
@@ -115,6 +117,7 @@ impl CallerNode {
 }
 
 impl TypedNode for CallerNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let caller = (*self.inputs.0).frame_input.caller;
@@ -156,6 +159,7 @@ impl CodesizeNode {
 }
 
 impl TypedNode for CodesizeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let code_size = (*self.inputs.0).bytecode.len();
@@ -223,6 +227,7 @@ impl CodecopyNode {
 }
 
 impl TypedNode for CodecopyNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let mem_offset = as_usize_saturated!(*self.inputs.0);
@@ -292,6 +297,7 @@ impl CalldataloadNode {
 }
 
 impl TypedNode for CalldataloadNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
@@ -344,6 +350,7 @@ impl CalldatasizeNode {
 }
 
 impl TypedNode for CalldatasizeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let data_size = (*self.inputs.0).frame_input.input.len();
@@ -385,6 +392,7 @@ impl CallvalueNode {
 }
 
 impl TypedNode for CallvalueNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = (*self.inputs.0).frame_input.transfer_value;
@@ -451,6 +459,7 @@ impl CalldatacopyNode {
 }
 
 impl TypedNode for CalldatacopyNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let mem_offset = as_usize_saturated!(*self.inputs.0);
@@ -518,6 +527,7 @@ impl ReturndatasizeNode {
 }
 
 impl TypedNode for ReturndatasizeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let return_data_size = (*self.inputs.0).len();
@@ -591,6 +601,7 @@ impl ReturndatacopyNode {
 }
 
 impl TypedNode for ReturndatacopyNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let mem_offset = as_usize_saturated!(*self.inputs.0);
@@ -673,6 +684,7 @@ impl Keccak256Node {
 }
 
 impl TypedNode for Keccak256Node {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);

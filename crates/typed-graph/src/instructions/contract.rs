@@ -52,6 +52,7 @@ impl DeductCallerNode {
 }
 
 impl TypedNode for DeductCallerNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let caller_address = Address::from_word(B256::from(*self.inputs.0));
@@ -124,6 +125,7 @@ impl RefundGasNode {
     }
 }
 impl TypedNode for RefundGasNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         /* No-op */
         Ok(())
@@ -279,6 +281,7 @@ impl CallNode {
     }
 }
 impl TypedNode for CallNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         execute_base_call(0xF1, &self.inputs, &mut self.outputs)
     }
@@ -324,6 +327,7 @@ impl CallcodeNode {
     }
 }
 impl TypedNode for CallcodeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         execute_base_call(0xF2, &self.inputs, &mut self.outputs)
     }
@@ -379,6 +383,7 @@ impl DelegatecallNode {
     }
 }
 impl TypedNode for DelegatecallNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         // Adapt inputs for base call function (insert a dummy value pointer)
         let dummy_value = U256::ZERO;
@@ -437,6 +442,7 @@ impl StaticcallNode {
     }
 }
 impl TypedNode for StaticcallNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         // Adapt inputs for base call function
         let dummy_value = U256::ZERO;
@@ -533,6 +539,7 @@ impl MakeCallFrameNode {
     }
 }
 impl TypedNode for MakeCallFrameNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // 1. Get FrameInput and context.
@@ -690,6 +697,7 @@ impl CallReturnNode {
     }
 }
 impl TypedNode for CallReturnNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let result = *self.inputs.0;
@@ -766,6 +774,7 @@ impl InsertCallOutcomeNode {
     }
 }
 impl TypedNode for InsertCallOutcomeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let outcome = &*self.inputs.0;
@@ -859,6 +868,7 @@ impl CreateNode {
     }
 }
 impl TypedNode for CreateNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let value = *self.inputs.0;
@@ -956,6 +966,7 @@ impl Create2Node {
     }
 }
 impl TypedNode for Create2Node {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let value = *self.inputs.0;
@@ -1043,6 +1054,7 @@ impl MakeCreateFrameNode {
     }
 }
 impl TypedNode for MakeCreateFrameNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // 1. Get FrameInput, CallerInfo.
@@ -1186,6 +1198,7 @@ impl CreateReturnNode {
     }
 }
 impl TypedNode for CreateReturnNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             // 1. Get result, deployment bytecode, gas used, frame context, initial state.
@@ -1284,6 +1297,7 @@ impl InsertCreateOutcomeNode {
     }
 }
 impl TypedNode for InsertCreateOutcomeNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let outcome = &*self.inputs.0;

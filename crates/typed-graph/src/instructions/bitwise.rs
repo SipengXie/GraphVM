@@ -21,6 +21,7 @@ impl LtNode {
 }
 
 impl TypedNode for LtNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = if *self.inputs.0 < *self.inputs.1 {
@@ -65,6 +66,7 @@ impl GtNode {
 }
 
 impl TypedNode for GtNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = if *self.inputs.0 > *self.inputs.1 {
@@ -109,6 +111,7 @@ impl EqNode {
 }
 
 impl TypedNode for EqNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = if *self.inputs.0 == *self.inputs.1 {
@@ -153,6 +156,7 @@ impl IsZeroNode {
 }
 
 impl TypedNode for IsZeroNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = if (*self.inputs.0).is_zero() {
@@ -197,6 +201,7 @@ impl AndNode {
 }
 
 impl TypedNode for AndNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = *self.inputs.0 & *self.inputs.1;
@@ -237,6 +242,7 @@ impl OrNode {
 }
 
 impl TypedNode for OrNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = *self.inputs.0 | *self.inputs.1;
@@ -277,6 +283,7 @@ impl XorNode {
 }
 
 impl TypedNode for XorNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = *self.inputs.0 ^ *self.inputs.1;
@@ -317,6 +324,7 @@ impl NotNode {
 }
 
 impl TypedNode for NotNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = !*self.inputs.0;
@@ -357,6 +365,7 @@ impl ByteNode {
 }
 
 impl TypedNode for ByteNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let index = (*self.inputs.0).as_limbs()[0] as usize;
@@ -404,6 +413,7 @@ impl ShlNode {
 }
 
 impl TypedNode for ShlNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let shift = *self.inputs.0;
@@ -451,6 +461,7 @@ impl ShrNode {
 }
 
 impl TypedNode for ShrNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let shift = *self.inputs.0;
@@ -498,6 +509,7 @@ impl SarNode {
 }
 
 impl TypedNode for SarNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let shift = *self.inputs.0;
@@ -561,6 +573,7 @@ fn i256_cmp(a: &U256, b: &U256) -> Ordering {
 }
 
 impl TypedNode for SltNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = if i256_cmp(&*self.inputs.0, &*self.inputs.1) == Ordering::Less {
@@ -605,6 +618,7 @@ impl SgtNode {
 }
 
 impl TypedNode for SgtNode {
+    #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             self.outputs.0 = if i256_cmp(&*self.inputs.0, &*self.inputs.1) == Ordering::Greater {
