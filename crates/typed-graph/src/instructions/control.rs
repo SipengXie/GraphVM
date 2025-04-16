@@ -1,9 +1,14 @@
 use crate::instructions::memory::calc_memory_size;
-use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use crate::typed_graph::TypedNode;
 use revm_interpreter::{as_usize_saturated, InstructionResult, SharedMemory}; // Use InstructionResult
 use revm_primitives::{Bytes, U256};
 use std::cell::RefCell;
 use std::rc::Rc; // Assuming path
+use super::types::{
+    InterpreterResultOutputs,
+    ReturnRevertInputs, JumpInputs, JumpiInputs, JumpOutput,
+    StopInvalidInputs,
+};
 
 // --- JUMP Node (0x56) ---
 
@@ -13,13 +18,11 @@ use std::rc::Rc; // Assuming path
 /// based on the output of this node.
 pub struct JumpNode {
     /// Input: *const U256 - The target program counter (PC).
-    inputs: (*const U256,),
+    inputs: JumpInputs,
     /// Output: usize - The target PC as a usize index.
-    outputs: (usize,),
+    outputs: JumpOutput,
 }
 
-impl HasInputType<(*const U256,)> for JumpNode {}
-impl HasOutputType<(usize,)> for JumpNode {}
 
 impl JumpNode {
     pub fn new(target_pc_ptr: *const U256) -> Self {
@@ -66,14 +69,12 @@ pub struct JumpiNode {
     /// Inputs:
     /// 0: *const U256 - The target program counter (PC) if condition is non-zero.
     /// 1: *const U256 - The condition value.
-    inputs: (*const U256, *const U256),
+    inputs: JumpiInputs,
     /// Outputs:
     /// 0: usize - The target PC if jumping.
-    outputs: (usize,),
+    outputs: JumpOutput,
 }
 
-impl HasInputType<(*const U256, *const U256)> for JumpiNode {}
-impl HasOutputType<(usize,)> for JumpiNode {}
 
 impl JumpiNode {
     pub fn new(target_pc_ptr: *const U256, condition_ptr: *const U256) -> Self {
@@ -123,28 +124,13 @@ pub struct ReturnRevertNode {
     /// 1: *const U256 - Length of return/revert data.
     /// 2: Rc<RefCell<SharedMemory>> - Shared memory reference.
     /// 3: InstructionResult - Indicates if it's RETURN (Ok) or REVERT (Revert).
-    inputs: (
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        InstructionResult,
-    ),
+    inputs: ReturnRevertInputs,
     /// Output:
     /// 0: InstructionResult - The final execution status for this frame.
     /// 1: Bytes - The data returned or reverted with.
-    outputs: (InstructionResult, Bytes),
+    outputs: InterpreterResultOutputs,
 }
 
-// Define the specific input type tuple
-type ReturnRevertInput = (
-    *const U256,
-    *const U256,
-    Rc<RefCell<SharedMemory>>,
-    InstructionResult,
-);
-
-impl HasInputType<ReturnRevertInput> for ReturnRevertNode {}
-impl HasOutputType<(InstructionResult, Bytes)> for ReturnRevertNode {}
 
 impl ReturnRevertNode {
     pub fn new(
@@ -155,7 +141,7 @@ impl ReturnRevertNode {
     ) -> Self {
         Self {
             inputs: (offset_ptr, len_ptr, memory, result),
-            outputs: (InstructionResult::Continue, Bytes::new()), // Initial state
+            outputs: (InstructionResult::Continue, Bytes::default()), // Initial state
         }
     }
 }
@@ -182,10 +168,10 @@ impl TypedNode for ReturnRevertNode {
 
             // Read the data from memory
             let output_data = if len == 0 {
-                Bytes::new()
+                Bytes::default()
             } else {
                 // Read the slice safely after potential resize
-                Bytes::copy_from_slice(memory.slice(offset, len))
+                memory.slice(offset, len).to_vec().into()
             };
 
             // Set the outputs
@@ -229,13 +215,11 @@ impl TypedNode for ReturnRevertNode {
 /// Node for STOP or INVALID operations. Signals end of frame execution.
 pub struct StopInvalidNode {
     /// Input: The specific result (Ok for STOP, revert code for INVALID).
-    _inputs: (InstructionResult,), // Just the result code
+    _inputs: StopInvalidInputs,
     /// Outputs: Same as inputs.
-    outputs: (InstructionResult, Bytes), // Output Bytes is always empty
+    outputs: InterpreterResultOutputs, // Output Bytes is always empty
 }
 
-impl HasInputType<(InstructionResult,)> for StopInvalidNode {}
-impl HasOutputType<(InstructionResult, Bytes)> for StopInvalidNode {}
 
 impl StopInvalidNode {
     pub fn new(result: InstructionResult) -> Self {

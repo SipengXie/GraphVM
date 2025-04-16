@@ -1,10 +1,14 @@
 use crate::context::FrameContext;
-use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use crate::typed_graph::TypedNode;
 use revm_interpreter::{as_usize_saturated, SharedMemory};
 use revm_primitives::{Bytes, KECCAK_EMPTY, U256};
 use std::cell::RefCell;
 use std::cmp::min;
 use std::rc::Rc;
+use super::types::{
+    UnaryU256Inputs, U256Output, FrameContextInputs, CallDataInputs,
+    BytesDataInput, CodeCopyInputs, ReturnDataCopyInputs, Keccak256Inputs,
+};
 
 use super::memory::calc_memory_size;
 
@@ -13,14 +17,10 @@ use super::memory::calc_memory_size;
 
 /// Node for GAS operation (Simplified: passes through gas value).
 pub struct GasNode {
-    /// Input: Pointer to the current gas value.
-    inputs: (*const U256,),
-    /// Output: The current gas value.
-    outputs: (U256,),
+    inputs: UnaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256,)> for GasNode {}
-impl HasOutputType<(U256,)> for GasNode {}
 
 impl GasNode {
     pub fn new(gas_ptr: *const U256) -> Self {
@@ -56,14 +56,10 @@ impl TypedNode for GasNode {
 
 /// Node for ADDRESS operation: gets the address of the current contract.
 pub struct AddressNode {
-    /// Input: Pointer to the current frame context.
-    inputs: (*const FrameContext,),
-    /// Output: Address as U256.
-    outputs: (U256,),
+    inputs: FrameContextInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const FrameContext,)> for AddressNode {}
-impl HasOutputType<(U256,)> for AddressNode {}
 
 impl AddressNode {
     pub fn new(frame_ptr: *const FrameContext) -> Self {
@@ -98,14 +94,10 @@ impl TypedNode for AddressNode {
 
 /// Node for CALLER operation: gets the address of the message sender.
 pub struct CallerNode {
-    /// Input: Pointer to the current frame context.
-    inputs: (*const FrameContext,),
-    /// Output: Caller address as U256.
-    outputs: (U256,),
+    inputs: FrameContextInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const FrameContext,)> for CallerNode {}
-impl HasOutputType<(U256,)> for CallerNode {}
 
 impl CallerNode {
     pub fn new(frame_ptr: *const FrameContext) -> Self {
@@ -140,14 +132,10 @@ impl TypedNode for CallerNode {
 
 /// Node for CODESIZE operation: gets the size of the current contract's code.
 pub struct CodesizeNode {
-    /// Input: Pointer to the current frame context.
-    inputs: (*const FrameContext,),
-    /// Output: Code size in bytes.
-    outputs: (U256,),
+    inputs: FrameContextInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const FrameContext,)> for CodesizeNode {}
-impl HasOutputType<(U256,)> for CodesizeNode {}
 
 impl CodesizeNode {
     pub fn new(frame_ptr: *const FrameContext) -> Self {
@@ -182,34 +170,10 @@ impl TypedNode for CodesizeNode {
 
 /// Node for CODECOPY operation: copies code of the current contract to memory.
 pub struct CodecopyNode {
-    /// Inputs:
-    /// 0: *const U256 - Memory destination offset.
-    /// 1: *const U256 - Code source offset.
-    /// 2: *const U256 - Length of bytes to copy.
-    /// 3: *const FrameContext - Contains the bytecode.
-    /// 4: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const FrameContext,
-        Rc<RefCell<SharedMemory>>,
-    ),
-    /// Outputs: None. Modifies memory.
+    inputs: CodeCopyInputs,
     _outputs: (),
 }
 
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        *const U256,
-        *const FrameContext,
-        Rc<RefCell<SharedMemory>>,
-    )> for CodecopyNode
-{
-}
-impl HasOutputType<()> for CodecopyNode {}
 
 impl CodecopyNode {
     pub fn new(
@@ -275,17 +239,10 @@ impl TypedNode for CodecopyNode {
 
 /// Node for CALLDATALOAD operation: loads 32 bytes from calldata.
 pub struct CalldataloadNode {
-    /// Inputs:
-    /// 0: *const U256 - Calldata offset.
-    /// 1: *const FrameContext - Contains the calldata (input).
-    inputs: (*const U256, *const FrameContext),
-    /// Output:
-    /// 0: U256 - The 32 bytes loaded from calldata.
-    outputs: (U256,),
+    inputs: CallDataInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const FrameContext)> for CalldataloadNode {}
-impl HasOutputType<(U256,)> for CalldataloadNode {}
 
 impl CalldataloadNode {
     pub fn new(offset_ptr: *const U256, frame_ptr: *const FrameContext) -> Self {
@@ -331,14 +288,10 @@ impl TypedNode for CalldataloadNode {
 
 /// Node for CALLDATASIZE operation: gets the size of calldata.
 pub struct CalldatasizeNode {
-    /// Input: Pointer to the current frame context.
-    inputs: (*const FrameContext,),
-    /// Output: Calldata size in bytes.
-    outputs: (U256,),
+    inputs: FrameContextInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const FrameContext,)> for CalldatasizeNode {}
-impl HasOutputType<(U256,)> for CalldatasizeNode {}
 
 impl CalldatasizeNode {
     pub fn new(frame_ptr: *const FrameContext) -> Self {
@@ -373,14 +326,10 @@ impl TypedNode for CalldatasizeNode {
 
 /// Node for CALLVALUE operation: gets the value sent with the message call.
 pub struct CallvalueNode {
-    /// Input: Pointer to the current frame context.
-    inputs: (*const FrameContext,),
-    /// Output: Call value.
-    outputs: (U256,),
+    inputs: FrameContextInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const FrameContext,)> for CallvalueNode {}
-impl HasOutputType<(U256,)> for CallvalueNode {}
 
 impl CallvalueNode {
     pub fn new(frame_ptr: *const FrameContext) -> Self {
@@ -414,34 +363,10 @@ impl TypedNode for CallvalueNode {
 
 /// Node for CALLDATACOPY operation: copies calldata to memory.
 pub struct CalldatacopyNode {
-    /// Inputs:
-    /// 0: *const U256 - Memory destination offset.
-    /// 1: *const U256 - Calldata source offset.
-    /// 2: *const U256 - Length of bytes to copy.
-    /// 3: *const FrameContext - Contains the calldata.
-    /// 4: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const FrameContext,
-        Rc<RefCell<SharedMemory>>,
-    ),
-    /// Outputs: None. Modifies memory.
+    inputs: CodeCopyInputs,
     _outputs: (),
 }
 
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        *const U256,
-        *const FrameContext,
-        Rc<RefCell<SharedMemory>>,
-    )> for CalldatacopyNode
-{
-}
-impl HasOutputType<()> for CalldatacopyNode {}
 
 impl CalldatacopyNode {
     pub fn new(
@@ -507,14 +432,10 @@ impl TypedNode for CalldatacopyNode {
 
 /// Node for RETURNDATASIZE operation: gets the size of the last call's return data.
 pub struct ReturndatasizeNode {
-    /// Input: Pointer to the return data buffer.
-    inputs: (*const Bytes,),
-    /// Output: Size of the return data buffer.
-    outputs: (U256,),
+    inputs: BytesDataInput,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const Bytes,)> for ReturndatasizeNode {}
-impl HasOutputType<(U256,)> for ReturndatasizeNode {}
 
 impl ReturndatasizeNode {
     // Assume the return data buffer is managed externally and passed as input
@@ -550,34 +471,10 @@ impl TypedNode for ReturndatasizeNode {
 
 /// Node for RETURNDATACOPY operation: copies return data to memory.
 pub struct ReturndatacopyNode {
-    /// Inputs:
-    /// 0: *const U256 - Memory destination offset.
-    /// 1: *const U256 - Return data source offset.
-    /// 2: *const U256 - Length of bytes to copy.
-    /// 3: *const Bytes - Pointer to the return data buffer.
-    /// 4: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const Bytes,
-        Rc<RefCell<SharedMemory>>,
-    ),
-    /// Outputs: None. Modifies memory.
+    inputs: ReturnDataCopyInputs,
     _outputs: (),
 }
 
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        *const U256,
-        *const Bytes,
-        Rc<RefCell<SharedMemory>>,
-    )> for ReturndatacopyNode
-{
-}
-impl HasOutputType<()> for ReturndatacopyNode {}
 
 impl ReturndatacopyNode {
     pub fn new(
@@ -588,13 +485,7 @@ impl ReturndatacopyNode {
         memory: Rc<RefCell<SharedMemory>>,
     ) -> Self {
         Self {
-            inputs: (
-                mem_offset_ptr,
-                data_offset_ptr,
-                len_ptr,
-                return_data_ptr,
-                memory,
-            ),
+            inputs: (mem_offset_ptr, data_offset_ptr, len_ptr, return_data_ptr, memory),
             _outputs: (),
         }
     }
@@ -657,18 +548,10 @@ impl TypedNode for ReturndatacopyNode {
 
 /// Node for KECCAK256 operation: computes Keccak-256 hash of a memory region.
 pub struct Keccak256Node {
-    /// Inputs:
-    /// 0: *const U256 - Memory offset.
-    /// 1: *const U256 - Length of data to hash.
-    /// 2: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    inputs: (*const U256, *const U256, Rc<RefCell<SharedMemory>>),
-    /// Output:
-    /// 0: U256 - The Keccak-256 hash result.
-    outputs: (U256,),
+    inputs: Keccak256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256, Rc<RefCell<SharedMemory>>)> for Keccak256Node {}
-impl HasOutputType<(U256,)> for Keccak256Node {}
 
 impl Keccak256Node {
     pub fn new(

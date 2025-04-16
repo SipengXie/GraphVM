@@ -1,58 +1,32 @@
 use crate::instructions::memory::calc_memory_size;
 use crate::{
     context::{get_account_context, get_storage_slot_context, ExternalContext, FrameContext},
-    typed_graph::{HasInputType, HasOutputType, TypedNode},
+    typed_graph::TypedNode,
     u256_to_address,
 };
 use revm_interpreter::{as_u64_saturated, as_usize_saturated, InstructionResult, SharedMemory};
 use revm_primitives::{AccountInfo, AccountStatus, Bytes, KECCAK_EMPTY, U256};
 use std::{cell::RefCell, rc::Rc};
+use super::types::*;
 
 // --- SLOAD Node ---
 
 /// Node for SLOAD operation. Reads a storage slot.
 pub struct SloadNode {
-    /// Inputs:
-    /// 0: *const U256 - Contract address (as U256).
-    /// 1: *const U256 - Storage slot index.
-    /// 2: Option<*const U256> - Pointer to value if written by a previous node.
-    /// 3: Option<Rc<RefCell<ExternalContext>>> - Ref to external context if value from DB.
-    inputs: (
-        *const U256,
-        *const U256,
-        Option<*const U256>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    ),
-    /// Output:
-    /// 0: U256 - The value read from storage.
-    outputs: (U256,),
+    inputs: StorageLoadInputs,
+    outputs: U256Output,
 }
 
-// Update Input/Output Traits
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        Option<*const U256>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    )> for SloadNode
-{
-}
-impl HasOutputType<(U256,)> for SloadNode {}
 
 impl SloadNode {
     pub fn new(
-        address_u256_ptr: *const U256, // Changed parameter name
+        frame_context: *const FrameContext,
         index_ptr: *const U256,
         value_ptr: Option<*const U256>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>, // Changed parameter name
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
-        assert!(
-            value_ptr.is_some() ^ context_ref.is_some(),
-            "SLOAD must have exactly one value source"
-        );
         Self {
-            inputs: (address_u256_ptr, index_ptr, value_ptr, context_ref),
+            inputs: (frame_context, index_ptr, value_ptr, context_ref),
             outputs: (U256::ZERO,),
         }
     }
@@ -65,14 +39,12 @@ impl TypedNode for SloadNode {
             if let Some(value_ptr) = self.inputs.2 {
                 // Value comes from a previous node in the graph
                 self.outputs.0 = *value_ptr;
-            } else if let Some(context_ref) = &self.inputs.3 {
-                // Value comes from external context
-                let address = u256_to_address!(*self.inputs.0); // Convert U256 to Address
-                let index = *self.inputs.1;
-                let context = context_ref.borrow();
-                self.outputs.0 = get_storage_slot_context(&context, address, index);
             } else {
-                unreachable!("SLOAD node created without a value source");
+                // Value comes from external context
+                let address = (*self.inputs.0).frame_input.target_address;
+                let index = *self.inputs.1;
+                let context_ref = &self.inputs.3.borrow();
+                self.outputs.0 = get_storage_slot_context(&context_ref, address, index);
             }
         }
         Ok(())
@@ -86,7 +58,7 @@ impl TypedNode for SloadNode {
         unsafe {
             format!(
                 "SloadNode: Load from address {} slot {} = {}",
-                *self.inputs.0, *self.inputs.1, self.outputs.0
+                (*self.inputs.0).frame_input.target_address, *self.inputs.1, self.outputs.0
             )
         }
     }
@@ -96,44 +68,21 @@ impl TypedNode for SloadNode {
 
 /// Node for SSTORE operation. Writes a storage slot. (Gas calculation ignored).
 pub struct SstoreNode {
-    /// Inputs:
-    /// 0: *const U256 - Contract address (as U256).
-    /// 1: *const U256 - Storage slot index.
-    /// 2: *const U256 - Value to store.
-    /// 3: Option<Rc<RefCell<ExternalContext>>> - Ref to external context (optional, for potential state update).
-    inputs: (
-        *const U256,                          // address_u256_ptr
-        *const U256,                          // index_ptr
-        *const U256,                          // new_value_ptr
-        Option<Rc<RefCell<ExternalContext>>>, // context_ref
-    ),
-    /// Output:
-    /// 0: U256 - The new value written to storage (available for subsequent SLOADs).
-    outputs: (U256,),
+    inputs: StorageStoreInputs,
+    outputs: U256Output,
 }
 
-// Update Input/Output Traits
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        *const U256,
-        Option<Rc<RefCell<ExternalContext>>>,
-    )> for SstoreNode
-{
-}
-impl HasOutputType<(U256,)> for SstoreNode {}
 
 impl SstoreNode {
     pub fn new(
-        address_u256_ptr: *const U256,
+        frame_context_ptr: *const FrameContext,
         index_ptr: *const U256,
         new_value_ptr: *const U256,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>,
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
         Self {
-            inputs: (address_u256_ptr, index_ptr, new_value_ptr, context_ref),
-            outputs: (U256::ZERO,), // Will be overwritten in execute
+            inputs: (frame_context_ptr, index_ptr, new_value_ptr, context_ref),
+            outputs: (U256::ZERO,),
         }
     }
 }
@@ -168,7 +117,7 @@ impl TypedNode for SstoreNode {
         unsafe {
             format!(
                 "SstoreNode: Store {} to address {} slot {}",
-                *self.inputs.2, *self.inputs.0, *self.inputs.1
+                *self.inputs.2, (*self.inputs.0).frame_input.target_address, *self.inputs.1
             )
         }
     }
@@ -178,38 +127,17 @@ impl TypedNode for SstoreNode {
 
 /// Node for BALANCE operation. Reads account balance.
 pub struct BalanceNode {
-    /// Inputs:
-    /// 0: *const U256 - Address to check balance of (as U256).
-    /// 1: Option<*const AccountInfo> - Pointer if info comes from preceding node.
-    /// 2: Option<Rc<RefCell<ExternalContext>>> - Reference to external context.
-    inputs: (
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    ),
-    outputs: (U256,),
+    inputs: BalanceCheckInputs,
+    outputs: U256Output,
 }
 
-impl
-    HasInputType<(
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    )> for BalanceNode
-{
-}
-impl HasOutputType<(U256,)> for BalanceNode {}
 
 impl BalanceNode {
     pub fn new(
-        address_u256_ptr: *const U256, // Changed parameter name
+        address_u256_ptr: *const U256,
         info_ptr: Option<*const AccountInfo>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>, // Changed parameter name
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
-        assert!(
-            info_ptr.is_some() ^ context_ref.is_some(),
-            "BALANCE must have exactly one info source"
-        );
         Self {
             inputs: (address_u256_ptr, info_ptr, context_ref),
             outputs: (U256::ZERO,),
@@ -223,12 +151,11 @@ impl TypedNode for BalanceNode {
         unsafe {
             let balance = if let Some(info_ptr) = self.inputs.1 {
                 (*info_ptr).balance
-            } else if let Some(context_ref) = &self.inputs.2 {
-                let address = u256_to_address!(*self.inputs.0); // Convert
-                let context = context_ref.borrow();
-                get_account_context(&context, address).0.balance // Get AccountInfo part
             } else {
-                unreachable!("BALANCE node created without an info source");
+                let context_ref = &self.inputs.2.borrow();
+                let address = u256_to_address!(*self.inputs.0); // Convert
+                get_account_context(&context_ref, address).0.balance // Get AccountInfo part
+            
             };
             self.outputs.0 = balance;
         }
@@ -252,34 +179,17 @@ impl TypedNode for BalanceNode {
 
 /// Node for EXTCODESIZE operation. Reads external contract code size.
 pub struct ExtcodesizeNode {
-    inputs: (
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    ),
-    outputs: (U256,),
+    inputs: CodeInfoInputs,
+    outputs: U256Output,
 }
 
-impl
-    HasInputType<(
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    )> for ExtcodesizeNode
-{
-}
-impl HasOutputType<(U256,)> for ExtcodesizeNode {}
 
 impl ExtcodesizeNode {
     pub fn new(
-        address_u256_ptr: *const U256, // Changed name
+        address_u256_ptr: *const U256,
         info_ptr: Option<*const AccountInfo>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>, // Changed name
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
-        assert!(
-            info_ptr.is_some() ^ context_ref.is_some(),
-            "EXTCODESIZE must have exactly one info source"
-        );
         Self {
             inputs: (address_u256_ptr, info_ptr, context_ref),
             outputs: (U256::ZERO,),
@@ -293,16 +203,14 @@ impl TypedNode for ExtcodesizeNode {
         unsafe {
             let code_len = if let Some(info_ptr) = self.inputs.1 {
                 (*info_ptr).code.as_ref().map_or(0, |c| c.len())
-            } else if let Some(context_ref) = &self.inputs.2 {
+            } else  {
+                let context_ref = &self.inputs.2.borrow();
                 let address = u256_to_address!(*self.inputs.0); // Convert
-                let context = context_ref.borrow();
-                get_account_context(&context, address)
+                get_account_context(&context_ref, address)
                     .0
                     .code
                     .as_ref()
                     .map_or(0, |c| c.len())
-            } else {
-                unreachable!("EXTCODESIZE node created without an info source");
             };
             self.outputs.0 = U256::from(code_len);
         }
@@ -326,34 +234,17 @@ impl TypedNode for ExtcodesizeNode {
 
 /// Node for EXTCODEHASH operation. Reads external contract code hash.
 pub struct ExtcodehashNode {
-    inputs: (
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    ),
-    outputs: (U256,),
+    inputs: CodeInfoInputs,
+    outputs: U256Output,
 }
 
-impl
-    HasInputType<(
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    )> for ExtcodehashNode
-{
-}
-impl HasOutputType<(U256,)> for ExtcodehashNode {}
 
 impl ExtcodehashNode {
     pub fn new(
-        address_u256_ptr: *const U256, // Changed name
+        address_u256_ptr: *const U256,
         info_ptr: Option<*const AccountInfo>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>, // Changed name
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
-        assert!(
-            info_ptr.is_some() ^ context_ref.is_some(),
-            "EXTCODEHASH must have exactly one info source"
-        );
         Self {
             inputs: (address_u256_ptr, info_ptr, context_ref),
             outputs: (U256::ZERO,),
@@ -367,12 +258,10 @@ impl TypedNode for ExtcodehashNode {
         unsafe {
             let (info, status) = if let Some(info_ptr) = self.inputs.1 {
                 ((*info_ptr).clone(), AccountStatus::Loaded) // Assume loaded if from graph
-            } else if let Some(context_ref) = &self.inputs.2 {
-                let address = u256_to_address!(*self.inputs.0); // Convert
-                let context = context_ref.borrow();
-                get_account_context(&context, address)
             } else {
-                unreachable!("EXTCODEHASH node created without an info source");
+                let context_ref = &self.inputs.2.borrow();
+                let address = u256_to_address!(*self.inputs.0); // Convert
+                get_account_context(&context_ref, address)
             };
 
             // Logic per EIP-1052: Hash is KECCAK_EMPTY if account doesn't exist or is empty.
@@ -405,21 +294,15 @@ impl TypedNode for ExtcodehashNode {
 
 /// Node for BLOCKHASH operation. Reads historical block hash.
 pub struct BlockhashNode {
-    /// Inputs:
-    /// 0: *const U256 - Block number.
-    /// 1: Rc<RefCell<ExternalContext>> - Reference to external context.
-    /// 2: *const U256 - Current block number (needed for validation).
-    inputs: (*const U256, Rc<RefCell<ExternalContext>>, *const U256),
-    outputs: (U256,),
+    inputs: BlockHashInputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, Rc<RefCell<ExternalContext>>, *const U256)> for BlockhashNode {}
-impl HasOutputType<(U256,)> for BlockhashNode {}
 
 impl BlockhashNode {
     pub fn new(
         number_ptr: *const U256,
-        context_ref: Rc<RefCell<ExternalContext>>, // Changed name
+        context_ref: Rc<RefCell<ExternalContext>>,
         current_block_number_ptr: *const U256,
     ) -> Self {
         Self {
@@ -475,39 +358,17 @@ impl TypedNode for BlockhashNode {
 
 /// Node for SELFBALANCE operation. Reads the balance of the current contract.
 pub struct SelfBalanceNode {
-    /// Inputs:
-    /// 0: *const FrameContext - To get the current contract address.
-    /// 1: Option<*const AccountInfo> - Pointer if info comes from preceding node.
-    /// 2: Option<Rc<RefCell<ExternalContext>>> - Reference to external context.
-    inputs: (
-        *const FrameContext,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    ),
-    outputs: (U256,),
+    inputs: SelfBalanceInputs,
+    outputs: U256Output,
 }
 
-impl
-    HasInputType<(
-        *const FrameContext,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    )> for SelfBalanceNode
-{
-}
-impl HasOutputType<(U256,)> for SelfBalanceNode {}
 
 impl SelfBalanceNode {
     pub fn new(
         frame_context_ptr: *const FrameContext,
         info_ptr: Option<*const AccountInfo>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>,
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
-        // Ensure exactly one source for the account info/balance is provided
-        assert!(
-            info_ptr.is_some() ^ context_ref.is_some(),
-            "SELFBALANCE must have exactly one info source"
-        );
         Self {
             inputs: (frame_context_ptr, info_ptr, context_ref),
             outputs: (U256::ZERO,),
@@ -522,15 +383,12 @@ impl TypedNode for SelfBalanceNode {
             let balance = if let Some(info_ptr) = self.inputs.1 {
                 // Balance comes from a preceding node modifying the account info
                 (*info_ptr).balance
-            } else if let Some(context_ref) = &self.inputs.2 {
+            } else {
+                let context_ref = &self.inputs.2.borrow();
                 // Balance needs to be fetched from the external context
                 let frame_context = &*self.inputs.0;
                 let address = frame_context.frame_input.target_address; // Get self address
-                let context = context_ref.borrow();
-                get_account_context(&context, address).0.balance // Fetch info and get balance
-            } else {
-                // This case should be prevented by the assert in new()
-                unreachable!("SELFBALANCE node created without an info source");
+                get_account_context(&context_ref, address).0.balance // Fetch info and get balance
             };
             self.outputs.0 = balance;
         }
@@ -556,40 +414,10 @@ impl TypedNode for SelfBalanceNode {
 
 /// Node for EXTCODECOPY operation. Copies external contract bytecode to memory.
 pub struct ExtcodecopyNode {
-    /// Inputs:
-    /// 0: *const U256 - Address of the external contract (as U256).
-    /// 1: *const U256 - Memory offset to write to.
-    /// 2: *const U256 - Code offset to read from.
-    /// 3: *const U256 - Length of bytes to copy.
-    /// 4: Option<*const AccountInfo> - Pointer if account info comes from preceding node.
-    /// 5: Option<Rc<RefCell<ExternalContext>>> - Reference to external context.
-    /// 6: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-        Rc<RefCell<SharedMemory>>,
-    ),
-    /// Outputs: None directly, modifies memory.
+    inputs: ExtCodeCopyInputs,
     _outputs: (),
 }
 
-// Define the specific input type tuple
-type ExtcodecopyInput = (
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    Option<*const AccountInfo>,
-    Option<Rc<RefCell<ExternalContext>>>,
-    Rc<RefCell<SharedMemory>>,
-);
-
-impl HasInputType<ExtcodecopyInput> for ExtcodecopyNode {}
-impl HasOutputType<()> for ExtcodecopyNode {} // No direct output value
 
 impl ExtcodecopyNode {
     pub fn new(
@@ -598,14 +426,9 @@ impl ExtcodecopyNode {
         code_offset_ptr: *const U256,
         len_ptr: *const U256,
         info_ptr: Option<*const AccountInfo>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>,
+        context_ref: Rc<RefCell<ExternalContext>>,
         memory: Rc<RefCell<SharedMemory>>,
     ) -> Self {
-        // Ensure exactly one source for the account info/code is provided
-        assert!(
-            info_ptr.is_some() ^ context_ref.is_some(),
-            "EXTCODECOPY must have exactly one info source"
-        );
         Self {
             inputs: (
                 address_u256_ptr,
@@ -616,7 +439,7 @@ impl ExtcodecopyNode {
                 context_ref,
                 memory,
             ),
-            _outputs: (), // No direct output value
+            _outputs: (),
         }
     }
 }
@@ -633,13 +456,11 @@ impl TypedNode for ExtcodecopyNode {
             let code_bytes = if let Some(info_ptr) = self.inputs.4 {
                  // Code info comes from a preceding node
                  (*info_ptr).code.as_ref().map_or(Bytes::new(), |c| c.bytes().clone()) // Get original bytes
-            } else if let Some(context_ref) = &self.inputs.5 {
+            } else {
+                 let context_ref = &self.inputs.5.borrow();
                  // Code info needs to be fetched from the external context
                  let address = u256_to_address!(*self.inputs.0); // Convert address
-                 let context = context_ref.borrow();
-                 get_account_context(&context, address).0.code.as_ref().map_or(Bytes::new(), |c| c.bytes().clone())
-            } else {
-                 unreachable!("EXTCODECOPY node created without an info source");
+                 get_account_context(&context_ref, address).0.code.as_ref().map_or(Bytes::new(), |c| c.bytes().clone())
             };
 
 
@@ -674,44 +495,10 @@ impl TypedNode for ExtcodecopyNode {
 
 /// Node for SELFDESTRUCT operation. Marks contract for deletion and transfers balance.
 pub struct SelfdestructNode {
-    /// Inputs:
-    /// 0: *const U256 - Target address for refund (as U256).
-    /// 1: *const FrameContext - Current frame context (for self address).
-    /// 2: Option<*const AccountInfo> - Pointer if self info comes from preceding node.
-    /// 3: Option<*const AccountInfo> - Pointer if target info comes from preceding node.
-    /// 4: Option<Rc<RefCell<ExternalContext>>> - Reference to external context (fallback).
-    /// 5: *const Env - Environment to check spec features (e.g., Cancun).
-    inputs: (
-        *const U256,
-        *const FrameContext,
-        Option<*const AccountInfo>, // Self info source
-        Option<*const AccountInfo>, // Target info source
-        Option<Rc<RefCell<ExternalContext>>>,
-        bool, // Cancun enabled
-    ),
-    /// Outputs:
-    /// 0: AccountInfo - Updated self account info (balance zeroed).
-    /// 1: AccountInfo - Updated target account info (balance increased).
-    /// 2: AccountStatus - Final status of the self-destructed account.
-    /// 3: InstructionResult - Always Ok for SELFDESTRUCT itself.
-    outputs: (AccountInfo, AccountInfo, AccountStatus, InstructionResult),
+    inputs: SelfDestructInputs,
+    outputs: SelfDestructOutputs,
 }
 
-// Define the specific input type tuple
-type SelfdestructInput = (
-    *const U256,
-    *const FrameContext,
-    Option<*const AccountInfo>,
-    Option<*const AccountInfo>,
-    Option<Rc<RefCell<ExternalContext>>>,
-    bool, // Cancun enabled
-);
-
-impl HasInputType<SelfdestructInput> for SelfdestructNode {}
-impl HasOutputType<(AccountInfo, AccountInfo, AccountStatus, InstructionResult)>
-    for SelfdestructNode
-{
-}
 
 impl SelfdestructNode {
     pub fn new(
@@ -719,28 +506,25 @@ impl SelfdestructNode {
         frame_context_ptr: *const FrameContext,
         self_info_ptr: Option<*const AccountInfo>,
         target_info_ptr: Option<*const AccountInfo>,
-        context_ref: Option<Rc<RefCell<ExternalContext>>>,
+        self_status_ptr: Option<*const AccountStatus>,
+        context_ref: Rc<RefCell<ExternalContext>>,
         is_cancun_enabled: bool,
     ) -> Self {
-        // Assert that at least one source exists if context is None
-        assert!(
-            context_ref.is_some() || (self_info_ptr.is_some() && target_info_ptr.is_some()),
-            "SELFDESTRUCT needs context or direct info pointers"
-        );
         Self {
             inputs: (
                 target_u256_ptr,
                 frame_context_ptr,
                 self_info_ptr,
                 target_info_ptr,
+                self_status_ptr,
                 context_ref,
                 is_cancun_enabled,
             ),
             outputs: (
                 AccountInfo::default(),
                 AccountInfo::default(),
-                AccountStatus::Loaded, // Initial status, will be updated
-                InstructionResult::Stop, // Final result
+                AccountStatus::Loaded,
+                InstructionResult::Stop,
             ),
         }
     }
@@ -753,20 +537,24 @@ impl TypedNode for SelfdestructNode {
             let target_address = u256_to_address!(*self.inputs.0);
             let frame_context = &*self.inputs.1;
             let self_address = frame_context.frame_input.target_address;
-            let is_cancun_enabled = self.inputs.5;
-
-            // Get self and target account info, prioritizing direct pointers over context
-            let (mut self_info, self_status) = self.inputs.2.map_or_else(
+            let is_cancun_enabled = self.inputs.6;
+            let context = self.inputs.5.borrow();
+            
+            let mut self_info = self.inputs.2.map_or_else(
                 || {
-                    let context = self.inputs.4.as_ref().expect("Context missing for self_info").borrow();
-                    get_account_context(&context, self_address)
+                    get_account_context(&context, self_address).0
                 },
-                |ptr| ((*ptr).clone(), AccountStatus::Loaded), // Assume loaded if from graph
+                |ptr| (*ptr).clone()
+            );
+            let self_status = self.inputs.4.map_or_else(
+                || {
+                    get_account_context(&context, self_address).1
+                },
+                |ptr| (*ptr)
             );
 
             let (mut target_info, _target_status) = self.inputs.3.map_or_else(
                 || {
-                    let context = self.inputs.4.as_ref().expect("Context missing for target_info").borrow();
                     get_account_context(&context, target_address)
                 },
                 |ptr| ((*ptr).clone(), AccountStatus::Loaded), // Assume loaded if from graph

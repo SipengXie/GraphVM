@@ -1,14 +1,13 @@
-use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use crate::typed_graph::TypedNode;
 use revm_primitives::U256;
+use super::types::{BinaryU256Inputs, TernaryU256Inputs, U256Output};
 
 /// Node for performing addition operation
 pub struct AddNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for AddNode {}
-impl HasOutputType<(U256,)> for AddNode {}
 
 impl AddNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -44,12 +43,10 @@ impl TypedNode for AddNode {
 
 /// Node for performing multiplication operation
 pub struct MulNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for MulNode {}
-impl HasOutputType<(U256,)> for MulNode {}
 
 impl MulNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -85,12 +82,10 @@ impl TypedNode for MulNode {
 
 /// Node for performing subtraction operation
 pub struct SubNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SubNode {}
-impl HasOutputType<(U256,)> for SubNode {}
 
 impl SubNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -126,12 +121,10 @@ impl TypedNode for SubNode {
 
 /// Node for performing division operation
 pub struct DivNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for DivNode {}
-impl HasOutputType<(U256,)> for DivNode {}
 
 impl DivNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -172,12 +165,10 @@ impl TypedNode for DivNode {
 
 /// Node for performing modulo operation
 pub struct ModNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for ModNode {}
-impl HasOutputType<(U256,)> for ModNode {}
 
 impl ModNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -218,12 +209,10 @@ impl TypedNode for ModNode {
 
 /// Node for performing addition modulo operation
 pub struct AddModNode {
-    inputs: (*const U256, *const U256, *const U256),
-    outputs: (U256,),
+    inputs: TernaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256, *const U256)> for AddModNode {}
-impl HasOutputType<(U256,)> for AddModNode {}
 
 impl AddModNode {
     pub fn new(input1: *const U256, input2: *const U256, input3: *const U256) -> Self {
@@ -264,12 +253,10 @@ impl TypedNode for AddModNode {
 
 /// Node for performing multiplication modulo operation
 pub struct MulModNode {
-    inputs: (*const U256, *const U256, *const U256),
-    outputs: (U256,),
+    inputs: TernaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256, *const U256)> for MulModNode {}
-impl HasOutputType<(U256,)> for MulModNode {}
 
 impl MulModNode {
     pub fn new(input1: *const U256, input2: *const U256, input3: *const U256) -> Self {
@@ -310,12 +297,10 @@ impl TypedNode for MulModNode {
 
 /// Node for performing exponentiation operation
 pub struct ExpNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for ExpNode {}
-impl HasOutputType<(U256,)> for ExpNode {}
 
 impl ExpNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -351,12 +336,10 @@ impl TypedNode for ExpNode {
 
 /// Node for performing sign extension operation
 pub struct SignExtendNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SignExtendNode {}
-impl HasOutputType<(U256,)> for SignExtendNode {}
 
 impl SignExtendNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -451,12 +434,10 @@ fn i256_mod(mut num: U256, den: U256) -> U256 {
 
 /// Node for performing signed division operation
 pub struct SdivNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SdivNode {}
-impl HasOutputType<(U256,)> for SdivNode {}
 
 impl SdivNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -505,12 +486,10 @@ impl TypedNode for SdivNode {
 
 /// Node for performing signed modulo operation
 pub struct SmodNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SmodNode {}
-impl HasOutputType<(U256,)> for SmodNode {}
 
 impl SmodNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {

@@ -1,6 +1,6 @@
 use crate::{
-    context::{get_account_context, CallOutcome, CreateOutcome, ExternalContext, FrameContext},
-    typed_graph::{HasInputType, HasOutputType, TypedNode},
+    context::{get_account_context, ExternalContext, FrameContext, CallOutcome, CreateOutcome},
+    typed_graph::TypedNode,
     u256_to_address,
 };
 use revm_interpreter::{
@@ -12,6 +12,7 @@ use revm_primitives::{
 };
 use revm_ssa::{FrameInput, TxScheme};
 use std::{cell::RefCell, cmp::min, rc::Rc};
+use super::types::*;
 
 use super::memory::calc_memory_size;
 
@@ -25,23 +26,18 @@ pub struct DeductCallerNode {
     /// 1: bool - True if the operation is CREATE/CREATE2 (prevents nonce increment).
     /// 2: *const U256 - Cost associated (e.g., gas cost, ignored for balance deduction now).
     /// 3: Rc<RefCell<ExternalContext>> - Reference to external context to get initial state.
-    inputs: (*const U256, bool, *const U256, Rc<RefCell<ExternalContext>>),
+    inputs: DeductCallerInputs,
     /// Output:
     /// 0: AccountInfo - Updated caller info (primarily nonce potentially incremented).
-    outputs: (AccountInfo,),
+    outputs: AccountInfoOutput,
 }
 
-impl HasInputType<(*const U256, bool, *const U256, Rc<RefCell<ExternalContext>>)>
-    for DeductCallerNode
-{
-}
-impl HasOutputType<(AccountInfo,)> for DeductCallerNode {}
 
 impl DeductCallerNode {
     pub fn new(
         caller_ptr: *const U256,
         is_create: bool,
-        cost_ptr: *const U256, // Added cost input, though unused for balance now
+        cost_ptr: *const U256, // Added cost input, though unused for balance deduction now
         context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
         Self {
@@ -113,9 +109,6 @@ pub struct RefundGasNode {
     _inputs: (),  // Placeholder
     _outputs: (), // Placeholder
 }
-// impl HasInputType... HasOutputType...
-impl HasInputType<()> for RefundGasNode {}
-impl HasOutputType<()> for RefundGasNode {}
 impl RefundGasNode {
     pub fn new() -> Self {
         Self {
@@ -141,23 +134,13 @@ impl TypedNode for RefundGasNode {
 
 fn execute_base_call(
     opcode: u8,
-    inputs: &(
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    outputs: &mut (FrameInput,),
+    inputs: &BaseCallInputs,
+    outputs: &mut FrameInputOutput,
 ) -> anyhow::Result<()> {
     unsafe {
         let gas_limit_ptr = inputs.0;
         let to_ptr = inputs.1;
-        let value_ptr = inputs.2; // Used in CALL/CALLCODE, ignored in DELEGATE/STATIC
+        let value_ptr = inputs.2;
         let in_offset_ptr = inputs.3;
         let in_len_ptr = inputs.4;
         let out_offset_ptr = inputs.5;
@@ -246,32 +229,11 @@ fn execute_base_call(
 
 // --- CALL Node (0xf1) ---
 pub struct CallNode {
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    outputs: (FrameInput,),
+    inputs: CallInputs,
+    outputs: FrameInputOutput,
 }
-type CallInputs = (
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    Rc<RefCell<SharedMemory>>,
-    *const FrameContext,
-);
-impl HasInputType<CallInputs> for CallNode {}
-impl HasOutputType<(FrameInput,)> for CallNode {}
+
+
 impl CallNode {
     pub fn new(i: CallInputs) -> Self {
         Self {
@@ -280,6 +242,7 @@ impl CallNode {
         }
     }
 }
+
 impl TypedNode for CallNode {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
@@ -303,21 +266,11 @@ impl TypedNode for CallNode {
 
 // --- CALLCODE Node (0xf2) ---
 pub struct CallcodeNode {
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    outputs: (FrameInput,),
+    inputs: CallInputs,
+    outputs: FrameInputOutput,
 }
-impl HasInputType<CallInputs> for CallcodeNode {} // Reuses CallInputs type alias
-impl HasOutputType<(FrameInput,)> for CallcodeNode {}
+
+
 impl CallcodeNode {
     pub fn new(i: CallInputs) -> Self {
         Self {
@@ -326,6 +279,7 @@ impl CallcodeNode {
         }
     }
 }
+
 impl TypedNode for CallcodeNode {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
@@ -349,39 +303,20 @@ impl TypedNode for CallcodeNode {
 
 // --- DELEGATECALL Node (0xf4) ---
 pub struct DelegatecallNode {
-    // Delegatecall doesn't use 'value' input, so input tuple is slightly different
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    outputs: (FrameInput,),
+    inputs: DelegateCallInputs,
+    outputs: FrameInputOutput,
 }
-type DelegatecallInputs = (
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    *const U256,
-    Rc<RefCell<SharedMemory>>,
-    *const FrameContext,
-);
-impl HasInputType<DelegatecallInputs> for DelegatecallNode {}
-impl HasOutputType<(FrameInput,)> for DelegatecallNode {}
+
+
 impl DelegatecallNode {
-    pub fn new(i: DelegatecallInputs) -> Self {
+    pub fn new(i: DelegateCallInputs) -> Self {
         Self {
             inputs: i,
             outputs: (FrameInput::default(),),
         }
     }
 }
+
 impl TypedNode for DelegatecallNode {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
@@ -418,29 +353,20 @@ impl TypedNode for DelegatecallNode {
 
 // --- STATICCALL Node (0xfa) ---
 pub struct StaticcallNode {
-    // Staticcall also doesn't use 'value' input
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    outputs: (FrameInput,),
+    inputs: DelegateCallInputs,
+    outputs: FrameInputOutput,
 }
-impl HasInputType<DelegatecallInputs> for StaticcallNode {} // Reuses DelegatecallInputs type alias
-impl HasOutputType<(FrameInput,)> for StaticcallNode {}
+
+
 impl StaticcallNode {
-    pub fn new(i: DelegatecallInputs) -> Self {
+    pub fn new(i: DelegateCallInputs) -> Self {
         Self {
             inputs: i,
             outputs: (FrameInput::default(),),
         }
     }
 }
+
 impl TypedNode for StaticcallNode {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
@@ -501,17 +427,7 @@ pub struct MakeCallFrameNode {
     /// 3: AccountInfo - Updated target info (if value transfer).
     outputs: (FrameContext, CallOutcome, AccountInfo, AccountInfo),
 }
-// Define Input/Output types and impl Has... traits
-type MakeCallFrameInputs = (
-    *const FrameInput,
-    Option<*const AccountInfo>,
-    Option<*const AccountInfo>,
-    Option<*const AccountInfo>,
-    Rc<RefCell<ExternalContext>>,
-);
-type MakeCallFrameOutputs = (FrameContext, CallOutcome, AccountInfo, AccountInfo);
-impl HasInputType<MakeCallFrameInputs> for MakeCallFrameNode {}
-impl HasOutputType<MakeCallFrameOutputs> for MakeCallFrameNode {}
+
 
 impl MakeCallFrameNode {
     pub fn new(
@@ -668,16 +584,12 @@ pub struct CallReturnNode {
     /// 0: InstructionResult - Result status from sub-execution.
     /// 1: *const Bytes - Return data buffer from sub-execution.
     /// 3: *const FrameContext - Context of the *completed* sub-frame.
-    inputs: (*const InstructionResult, *const Bytes, *const FrameContext),
+    inputs: CallReturnInputs,
     /// Outputs:
     /// 0: CallOutcome - Bundled result.
-    outputs: (CallOutcome,),
+    outputs: CallReturnOutputs,
 }
-// Define Input/Output types and impl Has... traits
-type CallReturnInputs = (*const InstructionResult, *const Bytes, *const FrameContext);
-type CallReturnOutputs = (CallOutcome,);
-impl HasInputType<CallReturnInputs> for CallReturnNode {}
-impl HasOutputType<CallReturnOutputs> for CallReturnNode {}
+
 
 impl CallReturnNode {
     pub fn new(
@@ -751,15 +663,7 @@ pub struct InsertCallOutcomeNode {
     /// 1: U256 - Success status (1 for Ok, 0 for Revert/Error).
     outputs: (Bytes, U256),
 }
-// Define Input/Output types and impl Has... traits
-type InsertCallOutcomeInputs = (
-    *const CallOutcome,
-    Rc<RefCell<SharedMemory>>,
-    *const FrameContext,
-);
-type InsertCallOutcomeOutputs = (U256, Bytes);
-impl HasInputType<InsertCallOutcomeInputs> for InsertCallOutcomeNode {}
-impl HasOutputType<InsertCallOutcomeOutputs> for InsertCallOutcomeNode {}
+
 
 impl InsertCallOutcomeNode {
     pub fn new(
@@ -824,34 +728,10 @@ impl TypedNode for InsertCallOutcomeNode {
 
 /// Node for CREATE operation.
 pub struct CreateNode {
-    /// Inputs:
-    /// 0: *const U256 - Value to transfer.
-    /// 1: *const U256 - Memory offset for init code.
-    /// 2: *const U256 - Length of init code.
-    /// 3: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    /// 4: *const FrameContext - Current frame context (for caller, nonce).
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    /// Output:
-    /// 0: FrameInput - Input for the creation frame.
-    outputs: (FrameInput,),
+    inputs: CreateInputs,
+    outputs: FrameInputOutput,
 }
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    )> for CreateNode
-{
-}
-impl HasOutputType<(FrameInput,)> for CreateNode {}
+
 
 impl CreateNode {
     pub fn new(
@@ -867,6 +747,7 @@ impl CreateNode {
         }
     }
 }
+
 impl TypedNode for CreateNode {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
@@ -874,26 +755,31 @@ impl TypedNode for CreateNode {
             let value = *self.inputs.0;
             let code_offset = as_usize_saturated!(*self.inputs.1);
             let len = as_usize_saturated!(*self.inputs.2);
-            let mut memory = self.inputs.3.borrow_mut(); // Mutable borrow to resize
+            let memory_ref = self.inputs.3.as_ref();
             let current_frame = &*self.inputs.4;
+            let caller = current_frame.frame_input.target_address; // In CREATE, caller is the current contract
 
             // Read init code from memory
-            let required_size = calc_memory_size(code_offset, len);
-            if required_size > memory.len() {
-                memory.resize(required_size);
-            }
-            let init_code = Bytes::copy_from_slice(memory.slice(code_offset, len));
+            let init_code = {
+                let mut memory = memory_ref.borrow_mut();
+                let required_size = calc_memory_size(code_offset, len);
+                if required_size > memory.len() {
+                    memory.resize(required_size);
+                }
+                Bytes::copy_from_slice(memory.slice(code_offset, len))
+            };
 
             self.outputs.0 = FrameInput {
                 input: init_code,
-                caller: current_frame.frame_input.target_address,
                 transfer_value: value,
-                scheme: TxScheme::Create, // CREATE
+                caller,
+                scheme: TxScheme::Create,
                 ..Default::default()
             };
         }
         Ok(())
     }
+
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
     }
@@ -901,9 +787,9 @@ impl TypedNode for CreateNode {
     fn print(&self) -> String {
         unsafe {
             format!(
-                "CreateNode: Value={}, CodeOffset={}, Length={}, Output FrameInput=(Target: {}, Input len: {})",
-                *self.inputs.0, *self.inputs.1, *self.inputs.2, 
-                self.outputs.0.target_address, self.outputs.0.input.len()
+                "CreateNode: Value={}, CodeOffset={}, Len={}, Output FrameInput=(Caller: {}, InitCode len: {})",
+                *self.inputs.0, *self.inputs.1, *self.inputs.2,
+                self.outputs.0.caller, self.outputs.0.input.len()
             )
         }
     }
@@ -911,37 +797,10 @@ impl TypedNode for CreateNode {
 
 /// Node for CREATE2 operation.
 pub struct Create2Node {
-    /// Inputs:
-    /// 0: *const U256 - Value to transfer.
-    /// 1: *const U256 - Memory offset for init code.
-    /// 2: *const U256 - Length of init code.
-    /// 3: *const U256 - Salt value.
-    /// 4: Rc<RefCell<SharedMemory>> - Shared memory reference.
-    /// 5: *const FrameContext - Current frame context (for caller).
-    inputs: (
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    /// Output:
-    /// 0: FrameInput - Input for the creation frame.
-    outputs: (FrameInput,),
+    inputs: Create2Inputs,
+    outputs: FrameInputOutput,
 }
-impl
-    HasInputType<(
-        *const U256,
-        *const U256,
-        *const U256,
-        *const U256,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    )> for Create2Node
-{
-}
-impl HasOutputType<(FrameInput,)> for Create2Node {}
+
 
 impl Create2Node {
     pub fn new(
@@ -953,18 +812,12 @@ impl Create2Node {
         frame_ptr: *const FrameContext,
     ) -> Self {
         Self {
-            inputs: (
-                value_ptr,
-                code_offset_ptr,
-                len_ptr,
-                salt_ptr,
-                memory_ref,
-                frame_ptr,
-            ),
+            inputs: (value_ptr, code_offset_ptr, len_ptr, salt_ptr, memory_ref, frame_ptr),
             outputs: (FrameInput::default(),),
         }
     }
 }
+
 impl TypedNode for Create2Node {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
@@ -973,61 +826,59 @@ impl TypedNode for Create2Node {
             let code_offset = as_usize_saturated!(*self.inputs.1);
             let len = as_usize_saturated!(*self.inputs.2);
             let salt = *self.inputs.3;
-            let mut memory = self.inputs.4.borrow_mut();
+            let memory_ref = self.inputs.4.as_ref();
             let current_frame = &*self.inputs.5;
+            let caller = current_frame.frame_input.target_address; // In CREATE2, caller is the current contract
 
             // Read init code from memory
-            let required_size = calc_memory_size(code_offset, len);
-            if required_size > memory.len() {
-                memory.resize(required_size);
-            }
-            let init_code = Bytes::copy_from_slice(memory.slice(code_offset, len));
+            let init_code = {
+                let mut memory = memory_ref.borrow_mut();
+                let required_size = calc_memory_size(code_offset, len);
+                 if required_size > memory.len() {
+                    memory.resize(required_size);
+                }
+                Bytes::copy_from_slice(memory.slice(code_offset, len))
+            };
 
             self.outputs.0 = FrameInput {
                 input: init_code,
-                caller: current_frame.frame_input.target_address,
                 transfer_value: value,
-                scheme: TxScheme::Create2 { salt }, // CREATE2 with salt
+                caller,
+                scheme: TxScheme::Create2 { salt },
                 ..Default::default()
             };
         }
         Ok(())
     }
+
     fn get_frame_input_output(&self) -> Option<*const FrameInput> {
         Some(&self.outputs.0 as *const FrameInput)
     }
 
-    fn print(&self) -> String {
+     fn print(&self) -> String {
         unsafe {
             format!(
-                "Create2Node: Value={}, CodeOffset={}, Length={}, Salt={}, Output FrameInput=(Target: {}, Input len: {})",
+                "Create2Node: Value={}, CodeOffset={}, Len={}, Salt={}, Output FrameInput=(Caller: {}, InitCode len: {})",
                 *self.inputs.0, *self.inputs.1, *self.inputs.2, *self.inputs.3,
-                self.outputs.0.target_address, self.outputs.0.input.len()
+                self.outputs.0.caller, self.outputs.0.input.len()
             )
         }
     }
 }
-
-// --- Make Create Frame Node (Conceptual) ---
-// Similar to MakeCallFrame, but calculates create address and sets initial nonce.
 
 pub struct MakeCreateFrameNode {
     /// Inputs:
     /// 0: *const FrameInput - The create parameters.
     /// 1: Option<*const AccountInfo> - Caller's account info (needed for nonce, updated by other nodes).
     /// 2: Option<Rc<RefCell<ExternalContext>>> - To check target existence and update state, get caller's info if not touched by other nodes.
-    inputs: (
-        *const FrameInput,
-        Option<*const AccountInfo>,
-        Option<Rc<RefCell<ExternalContext>>>,
-    ),
+    inputs: MakeCreateFrameInputs,
     /// Outputs:
     
     /// 0: AccountInfo - Updated caller info (balance transfer, nonce).
     /// 1: AccountInfo - Contract account info.
     /// 2: AccountStatus - Initial status for the *created* address.
     /// 3: FrameContext - Context for the create execution (if valid).
-    outputs: (AccountInfo, AccountInfo, AccountStatus, FrameContext),
+    outputs: MakeCreateFrameOutputs
 }
 // Define Input/Output types and impl Has... traits
 
@@ -1151,18 +1002,11 @@ pub struct CreateReturnNode {
     /// 3: Option<Rc<RefCell<ExternalContext>>> - To deploy the code (update account info).
     /// 4: Option<*const AccountInfo> - Target account info.
     /// 5: Option<bool> Whether to analyze the code.
-    inputs: (
-        *const InstructionResult,
-        Option<*const Bytes>,
-        Option<*const FrameContext>,
-        Option<Rc<RefCell<ExternalContext>>>,
-        Option<*const AccountInfo>,
-        Option<bool>,
-    ),
+    inputs: CreateReturnInputs,
     /// Outputs:
     /// 0: CreateOutcome - Bundled result including the created address.
     /// 1: AccountInfo - Updated AccountInfo with deployed code (if successful).
-    outputs: (CreateOutcome, AccountInfo),
+    outputs: CreateReturnOutputs
 }
 // Define Input/Output types and impl Has... traits
 
@@ -1276,17 +1120,12 @@ impl TypedNode for CreateReturnNode {
 // --- Insert Create Outcome Node ---
 // Takes CreateOutcome and outputs address/status.
 
+/// Node for taking CreateOutcome and outputs address/status.
 pub struct InsertCreateOutcomeNode {
-    /// Input:
-    /// 0: *const CreateOutcome - The result from the creation.
-    inputs: (*const CreateOutcome,),
-    /// Outputs:
-    /// 0: Bytes - The return data buffer (only relevant on revert).
-    /// 1: U256 - Created address as U256 (or 0 if failed/reverted).
-    outputs: (Bytes, U256),
+    inputs: CreateOutcomeInputs,
+    outputs: InsertCreateOutcomeOutputs,
 }
-impl HasInputType<(*const CreateOutcome,)> for InsertCreateOutcomeNode {}
-impl HasOutputType<(Bytes, U256)> for InsertCreateOutcomeNode {}
+
 
 impl InsertCreateOutcomeNode {
     pub fn new(outcome_ptr: *const CreateOutcome) -> Self {

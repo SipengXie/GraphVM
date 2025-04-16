@@ -1,39 +1,15 @@
-use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use crate::typed_graph::TypedNode;
 use revm_interpreter::as_usize_saturated;
-use revm_primitives::{Env, U256}; // Reusing this helper macro
+use revm_primitives::{Env, U256};
+use super::{types::{EnvInput, U256Output}, BlobHashInputs};
 
 // --- Common Input Type for Env Nodes ---
 
-/// Type alias for Env pointer input
-type EnvInput = (*const Env,);
+
 /// Trait implementation for Env pointer input
-impl HasInputType<EnvInput> for ChainIdNode {}
-impl HasInputType<EnvInput> for CoinbaseNode {}
-impl HasInputType<EnvInput> for TimestampNode {}
-impl HasInputType<EnvInput> for NumberNode {}
-impl HasInputType<EnvInput> for DifficultyNode {} // PREVRANDAO is handled internally
-impl HasInputType<EnvInput> for GasLimitNode {}
-impl HasInputType<EnvInput> for GasPriceNode {}
-impl HasInputType<EnvInput> for BaseFeeNode {}
-impl HasInputType<EnvInput> for OriginNode {}
-impl HasInputType<EnvInput> for BlobBaseFeeNode {}
 
 // --- Common Output Type ---
-
-/// Type alias for U256 output
-type U256Output = (U256,);
 /// Trait implementation for U256 output
-impl HasOutputType<U256Output> for ChainIdNode {}
-impl HasOutputType<U256Output> for CoinbaseNode {}
-impl HasOutputType<U256Output> for TimestampNode {}
-impl HasOutputType<U256Output> for NumberNode {}
-impl HasOutputType<U256Output> for DifficultyNode {}
-impl HasOutputType<U256Output> for GasLimitNode {}
-impl HasOutputType<U256Output> for GasPriceNode {}
-impl HasOutputType<U256Output> for BaseFeeNode {}
-impl HasOutputType<U256Output> for OriginNode {}
-impl HasOutputType<U256Output> for BlobBaseFeeNode {}
-impl HasOutputType<U256Output> for BlobHashNode {} // Also outputs U256
 
 // --- CHAINID Node (0x46) ---
 
@@ -395,17 +371,10 @@ impl TypedNode for BlobBaseFeeNode {
 
 /// Node for BLOBHASH operation: gets the versioned hash of a blob.
 pub struct BlobHashNode {
-    /// Inputs:
-    /// 0: *const U256 - Index of the blob.
-    /// 1: *const Env - Environment reference.
-    inputs: (*const U256, *const Env),
-    /// Output:
-    /// 0: U256 - The blob hash or zero if index is out of bounds.
+    inputs: BlobHashInputs,
     outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const Env)> for BlobHashNode {}
-// Output type already implemented above
 
 impl BlobHashNode {
     pub fn new(index_ptr: *const U256, env_ptr: *const Env) -> Self {

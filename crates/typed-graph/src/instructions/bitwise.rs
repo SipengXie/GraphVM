@@ -1,15 +1,14 @@
-use crate::typed_graph::{HasInputType, HasOutputType, TypedNode};
+use crate::typed_graph::TypedNode;
 use revm_primitives::U256;
 use std::cmp::Ordering;
+use super::types::{BinaryU256Inputs, UnaryU256Inputs, U256Output};
 
 /// Node for performing less than operation
 pub struct LtNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for LtNode {}
-impl HasOutputType<(U256,)> for LtNode {}
 
 impl LtNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -49,12 +48,10 @@ impl TypedNode for LtNode {
 
 /// Node for performing greater than operation
 pub struct GtNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for GtNode {}
-impl HasOutputType<(U256,)> for GtNode {}
 
 impl GtNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -94,12 +91,10 @@ impl TypedNode for GtNode {
 
 /// Node for performing equality comparison
 pub struct EqNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for EqNode {}
-impl HasOutputType<(U256,)> for EqNode {}
 
 impl EqNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -139,12 +134,10 @@ impl TypedNode for EqNode {
 
 /// Node for performing is zero check
 pub struct IsZeroNode {
-    inputs: (*const U256,),
-    outputs: (U256,),
+    inputs: UnaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256,)> for IsZeroNode {}
-impl HasOutputType<(U256,)> for IsZeroNode {}
 
 impl IsZeroNode {
     pub fn new(input: *const U256) -> Self {
@@ -184,12 +177,10 @@ impl TypedNode for IsZeroNode {
 
 /// Node for performing bitwise AND operation
 pub struct AndNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for AndNode {}
-impl HasOutputType<(U256,)> for AndNode {}
 
 impl AndNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -225,12 +216,10 @@ impl TypedNode for AndNode {
 
 /// Node for performing bitwise OR operation
 pub struct OrNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for OrNode {}
-impl HasOutputType<(U256,)> for OrNode {}
 
 impl OrNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -266,12 +255,10 @@ impl TypedNode for OrNode {
 
 /// Node for performing bitwise XOR operation
 pub struct XorNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for XorNode {}
-impl HasOutputType<(U256,)> for XorNode {}
 
 impl XorNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -307,12 +294,10 @@ impl TypedNode for XorNode {
 
 /// Node for performing bitwise NOT operation
 pub struct NotNode {
-    inputs: (*const U256,),
-    outputs: (U256,),
+    inputs: UnaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256,)> for NotNode {}
-impl HasOutputType<(U256,)> for NotNode {}
 
 impl NotNode {
     pub fn new(input: *const U256) -> Self {
@@ -348,12 +333,10 @@ impl TypedNode for NotNode {
 
 /// Node for performing byte extraction operation
 pub struct ByteNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for ByteNode {}
-impl HasOutputType<(U256,)> for ByteNode {}
 
 impl ByteNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -396,12 +379,10 @@ impl TypedNode for ByteNode {
 
 /// Node for performing left shift operation
 pub struct ShlNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for ShlNode {}
-impl HasOutputType<(U256,)> for ShlNode {}
 
 impl ShlNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -444,12 +425,10 @@ impl TypedNode for ShlNode {
 
 /// Node for performing logical right shift operation
 pub struct ShrNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for ShrNode {}
-impl HasOutputType<(U256,)> for ShrNode {}
 
 impl ShrNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -492,12 +471,10 @@ impl TypedNode for ShrNode {
 
 /// Node for performing arithmetic right shift operation
 pub struct SarNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SarNode {}
-impl HasOutputType<(U256,)> for SarNode {}
 
 impl SarNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -543,12 +520,10 @@ impl TypedNode for SarNode {
 
 /// Node for performing signed less than operation
 pub struct SltNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SltNode {}
-impl HasOutputType<(U256,)> for SltNode {}
 
 impl SltNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
@@ -601,12 +576,10 @@ impl TypedNode for SltNode {
 
 /// Node for performing signed greater than operation
 pub struct SgtNode {
-    inputs: (*const U256, *const U256),
-    outputs: (U256,),
+    inputs: BinaryU256Inputs,
+    outputs: U256Output,
 }
 
-impl HasInputType<(*const U256, *const U256)> for SgtNode {}
-impl HasOutputType<(U256,)> for SgtNode {}
 
 impl SgtNode {
     pub fn new(input1: *const U256, input2: *const U256) -> Self {
