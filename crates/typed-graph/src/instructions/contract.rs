@@ -22,7 +22,7 @@ use super::memory::calc_memory_size;
 /// Node to handle caller state changes (nonce increment). Simplified without gas.
 pub struct DeductCallerNode {
     /// Inputs:
-    /// 0: *const Address - Caller address.
+    /// 0: *const U256 - Caller address.
     /// 1: bool - True if the operation is CREATE/CREATE2 (prevents nonce increment).
     /// 2: *const U256 - Cost associated (e.g., gas cost, ignored for balance deduction now).
     /// 3: Rc<RefCell<ExternalContext>> - Reference to external context to get initial state.

@@ -633,6 +633,13 @@ impl SsaConverter {
                 );
                 self.graph.add_node(Box::new(node))
             },
+            0xDA => { // DEDUCT_CALLER
+                let caller_ptr = self.get_u256_ptr(&entry.inputs[0]);
+                let is_create = self.get_bool(&entry.inputs[1]);
+                let cost_ptr = self.get_u256_ptr(&entry.inputs[2]);
+                let node = DeductCallerNode::new(caller_ptr, is_create, cost_ptr, self.context.clone());
+                self.graph.add_node(Box::new(node))
+            },
             0xDB => { // REFUND_GAS (Placeholder opcode)
                 let node = RefundGasNode::new(); // Assuming RefundGasNode exists
                 self.graph.add_node(Box::new(node))
@@ -832,12 +839,7 @@ impl SsaConverter {
 
             // ... other opcodes ...
             _ => {
-                println!("Warning: Unimplemented opcode during conversion: 0x{:02x}", entry.opcode);
-                // panic!("Unimplemented opcode: 0x{:02x}", entry.opcode);
-                // Add a dummy node or skip? Adding a placeholder might be better.
-                // For now, let's skip adding a node for unimplemented opcodes.
-                // Returning usize::MAX might indicate skipping.
-                 usize::MAX // Indicate that no node was added (or handle differently)
+                panic!("Warning: Unimplemented opcode during conversion: 0x{:02x}", entry.opcode);
             }
         }
     }
