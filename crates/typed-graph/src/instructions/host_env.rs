@@ -367,7 +367,7 @@ impl TypedNode for BlobBaseFeeNode {
     }
 }
 
-// --- BLOBHASH Node (0x4f) --- Requires EIP-4844
+// --- BLOBHASH Node (0x49) --- Requires EIP-4844
 
 /// Node for BLOBHASH operation: gets the versioned hash of a blob.
 pub struct BlobHashNode {

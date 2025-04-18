@@ -597,6 +597,23 @@ impl TypedNode for SelfdestructNode {
             )
         }
     }
+
+    fn get_account_info_output(&self, index: usize) -> Option<*const AccountInfo> {
+        match index {
+            0 => Some(&self.outputs.0),
+            1 => Some(&self.outputs.1),
+            _ => None,
+        }
+    }
+    
+    fn get_account_status_output(&self) -> *const AccountStatus {
+        &self.outputs.2
+    }
+
+    fn get_instruction_result_output(&self) -> *const InstructionResult {
+        &self.outputs.3
+    }
+    
 }
 
 // --- Remaining Nodes (TLOAD, TSTORE, LOG) ---

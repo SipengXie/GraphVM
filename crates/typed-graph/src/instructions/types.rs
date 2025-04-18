@@ -244,7 +244,7 @@ pub type MakeCallFrameInputs = (
 pub type MakeCreateFrameInputs = (
     *const FrameInput,
     Option<*const AccountInfo>,
-    Option<Rc<RefCell<ExternalContext>>>,
+    Rc<RefCell<ExternalContext>>,
 );
 
 /// Input type for create return operations
@@ -252,15 +252,15 @@ pub type CreateReturnInputs = (
     *const InstructionResult,
     Option<*const Bytes>,
     Option<*const FrameContext>,
-    Option<Rc<RefCell<ExternalContext>>>,
+    Rc<RefCell<ExternalContext>>,
     Option<*const AccountInfo>,
-    Option<bool>,
+    bool,
 );
 
 /// Input type for call return operations
 pub type CallReturnInputs = (
     *const InstructionResult,
-    *const Bytes,
+    Option<*const Bytes>,
     *const FrameContext,
 );
 
@@ -268,7 +268,6 @@ pub type CallReturnInputs = (
 pub type InsertCallOutcomeInputs = (
     *const CallOutcome,
     Rc<RefCell<SharedMemory>>,
-    *const FrameContext,
 );
 
 /// Output type for frame context operations

@@ -114,6 +114,7 @@ impl SsaConverter {
 
     /// Create a TypedNode based on the SSA log entry's opcode
     fn create_node_for_entry(&mut self, entry: &SSALogEntry) -> usize {
+        // eprintln!("Creating node for entry: {:#?}", entry);
         match entry.opcode {
             // Control Flow & Halting Operations
             0x00 => { // STOP
@@ -409,22 +410,22 @@ impl SsaConverter {
                 let node = BaseFeeNode::new(self.env);
                 self.graph.add_node(Box::new(node))
             },
-            0x4a => { // BLOBBASEFEE
-                let node = BlobBaseFeeNode::new(self.env);
-                self.graph.add_node(Box::new(node))
-            },
-            0x4f => { // BLOBHASH
+            0x49 => { // BLOBHASH
                 let index_ptr = self.get_u256_ptr(&entry.inputs[0]);
                 let node = BlobHashNode::new(index_ptr, self.env);
                 self.graph.add_node(Box::new(node))
             },
+            0x4a => { // BLOBBASEFEE
+                let node = BlobBaseFeeNode::new(self.env);
+                self.graph.add_node(Box::new(node))
+            },
 
             // Contract Operations
-            // ! 从这里开始对照每一个指令的实现是否正确
             0xF0 => { // CREATE
                 let value_ptr = self.get_u256_ptr(&entry.inputs[0]);
                 let code_offset_ptr = self.get_u256_ptr(&entry.inputs[1]);
                 let len_ptr = self.get_u256_ptr(&entry.inputs[2]);
+                // inputs[3] is memory.
                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[4])
                                     .expect("CREATE needs FrameContext");
                 let node = CreateNode::new(
@@ -444,7 +445,8 @@ impl SsaConverter {
                 let args_size_ptr = self.get_u256_ptr(&entry.inputs[4]);
                 let ret_offset_ptr = self.get_u256_ptr(&entry.inputs[5]);
                 let ret_size_ptr = self.get_u256_ptr(&entry.inputs[6]);
-                let frame_ptr = self.get_frame_context_ptr(&entry.inputs[7])
+                // inputs[7] is memory.
+                let frame_ptr = self.get_frame_context_ptr(&entry.inputs[8])
                                     .expect("CALL needs FrameContext");
                 let node = CallNode::new((
                     gas_ptr,
@@ -467,7 +469,8 @@ impl SsaConverter {
                  let args_size_ptr = self.get_u256_ptr(&entry.inputs[4]);
                  let ret_offset_ptr = self.get_u256_ptr(&entry.inputs[5]);
                  let ret_size_ptr = self.get_u256_ptr(&entry.inputs[6]);
-                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[7])
+                 // inputs[7] is memory.
+                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[8])
                                      .expect("CALLCODE needs FrameContext");
                  let node = CallcodeNode::new((
                      gas_ptr,
@@ -490,7 +493,8 @@ impl SsaConverter {
                  let args_size_ptr = self.get_u256_ptr(&entry.inputs[3]);
                  let ret_offset_ptr = self.get_u256_ptr(&entry.inputs[4]);
                  let ret_size_ptr = self.get_u256_ptr(&entry.inputs[5]);
-                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[6]) // Index shift
+                 // inputs[6] is memory.
+                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[7]) // Index shift
                                      .expect("DELEGATECALL needs FrameContext");
                  let node = DelegatecallNode::new((
                      gas_ptr,
@@ -508,9 +512,10 @@ impl SsaConverter {
                  let value_ptr = self.get_u256_ptr(&entry.inputs[0]);
                  let code_offset_ptr = self.get_u256_ptr(&entry.inputs[1]);
                  let len_ptr = self.get_u256_ptr(&entry.inputs[2]);
-                 let salt_ptr = self.get_u256_ptr(&entry.inputs[5]);
+                 // inputs[3] is memory.
                  let frame_ptr = self.get_frame_context_ptr(&entry.inputs[4])
                                      .expect("CREATE2 needs FrameContext");
+                 let salt_ptr = self.get_u256_ptr(&entry.inputs[5]);
                  let node = Create2Node::new(
                      value_ptr,
                      code_offset_ptr,
@@ -529,7 +534,8 @@ impl SsaConverter {
                  let args_size_ptr = self.get_u256_ptr(&entry.inputs[3]);
                  let ret_offset_ptr = self.get_u256_ptr(&entry.inputs[4]);
                  let ret_size_ptr = self.get_u256_ptr(&entry.inputs[5]);
-                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[6]) // Index shift
+                 // inputs[6] is memory.
+                 let frame_ptr = self.get_frame_context_ptr(&entry.inputs[7]) // Index shift
                                      .expect("STATICCALL needs FrameContext");
                  let node = StaticcallNode::new((
                      gas_ptr,
@@ -563,7 +569,7 @@ impl SsaConverter {
                 let node = MakeCreateFrameNode::new(
                     frame_input_ptr,
                     caller_info_ptr,
-                    Some(self.context.clone()),
+                    self.context.clone(),
                 );
                 self.graph.add_node(Box::new(node))
             },
@@ -579,9 +585,9 @@ impl SsaConverter {
                     result_ptr,
                     output_bytes_ptr,
                     frame_context_ptr,
-                    Some(self.context.clone()),
+                    self.context.clone(),
                     target_info_ptr,
-                    Some(analyze_code),
+                    analyze_code,
                 );
                 self.graph.add_node(Box::new(node))
             },
@@ -608,8 +614,7 @@ impl SsaConverter {
              0xD8 => { // CALL_RETURN (Opcode used before, adjusted based on analysis)
                  let result_input = &entry.inputs[0];
                  let result_value = self.get_instruction_result_ptr(result_input);
-                 let return_data_ptr = self.get_bytes_ptr(result_input)
-                     .expect("CALL_RETURN needs Bytes pointer");
+                 let return_data_ptr = self.get_bytes_ptr(result_input);
                  let frame_context_ptr = self.get_frame_context_ptr(&entry.inputs[1])
                      .expect("CALL_RETURN needs FrameContext pointer");
                  let node = CallReturnNode::new(
@@ -622,14 +627,10 @@ impl SsaConverter {
             0xD9 => { // INSERT_CALL_OUTCOME (Placeholder opcode)
                 let outcome_ptr = self.get_call_outcome_ptr(&entry.inputs[0])
                                       .expect("INSERT_CALL_OUTCOME needs CallOutcome");
-                // Original frame context needed for ret_range
-                let original_frame_ptr = self.get_frame_context_ptr(&entry.inputs[1])
-                                            .expect("INSERT_CALL_OUTCOME needs original FrameContext");
 
                 let node = InsertCallOutcomeNode::new(
                     outcome_ptr,
                     self.shared_memory.clone(),
-                    original_frame_ptr
                 );
                 self.graph.add_node(Box::new(node))
             },

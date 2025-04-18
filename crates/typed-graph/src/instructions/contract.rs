@@ -162,13 +162,15 @@ fn execute_base_call(
         let current_frame = &*frame_ptr;
 
         // --- Read input data from memory ---
-        let input_data = {
+        let input_data = if in_len > 0 {
             let mut memory = memory_ref.borrow_mut();
             let required_in_size = calc_memory_size(in_offset, in_len);
             if required_in_size > memory.len() {
                 memory.resize(required_in_size);
             }
             Bytes::copy_from_slice(memory.slice(in_offset, in_len))
+        } else {
+            Bytes::default()
         };
 
         // --- Ensure memory is large enough for output buffer ---
@@ -559,13 +561,7 @@ impl TypedNode for MakeCallFrameNode {
 // Processes the result of a sub-graph execution.
 
 pub struct CallReturnNode {
-    /// Inputs:
-    /// 0: InstructionResult - Result status from sub-execution.
-    /// 1: *const Bytes - Return data buffer from sub-execution.
-    /// 3: *const FrameContext - Context of the *completed* sub-frame.
     inputs: CallReturnInputs,
-    /// Outputs:
-    /// 0: CallOutcome - Bundled result.
     outputs: CallReturnOutputs,
 }
 
@@ -573,7 +569,7 @@ pub struct CallReturnNode {
 impl CallReturnNode {
     pub fn new(
         result: *const InstructionResult,
-        return_data_ptr: *const Bytes,
+        return_data_ptr: Option<*const Bytes>,
         frame_context_ptr: *const FrameContext,
     ) -> Self {
         Self {
@@ -592,7 +588,10 @@ impl TypedNode for CallReturnNode {
     fn execute(&mut self) -> anyhow::Result<()> {
         unsafe {
             let result = *self.inputs.0;
-            let return_data = (*self.inputs.1).clone();
+            let return_data = self.inputs.1.map_or_else(
+                || Bytes::default(),
+                |ptr| (*ptr).clone(),
+            );
             let frame_context = &*self.inputs.2;
             // FrameContext might be needed to know the original ret_range if not stored elsewhere
             self.outputs.0 = CallOutcome {
@@ -613,8 +612,8 @@ impl TypedNode for CallReturnNode {
             format!(
                 "CallReturnNode: Result={:?}, ReturnData={}, CallOutcome=(Result: {:?})",
                 *self.inputs.0,
-                if let Some(bytes) = &self.inputs.1.as_ref() { 
-                    format!("({} bytes)", bytes.len()) 
+                if let Some(bytes) = &self.inputs.1 { 
+                    format!("({} bytes)", (**bytes).len()) 
                 } else { 
                     "None".to_string() 
                 },
@@ -628,19 +627,8 @@ impl TypedNode for CallReturnNode {
 // Takes CallOutcome and applies it: writes return data to memory, sets status.
 
 pub struct InsertCallOutcomeNode {
-    /// Inputs:
-    /// 0: *const CallOutcome - The result from the call.
-    /// 1: Rc<RefCell<SharedMemory>> - Memory to write return data into.
-    /// 2: *const FrameContext - The *original* frame context that initiated the call (needed for ret_range).
-    inputs: (
-        *const CallOutcome,
-        Rc<RefCell<SharedMemory>>,
-        *const FrameContext,
-    ),
-    /// Outputs:
-    /// 0: Bytes - The return data buffer (for RETURNDATASIZE/COPY).
-    /// 1: U256 - Success status (1 for Ok, 0 for Revert/Error).
-    outputs: (Bytes, U256),
+    inputs: InsertCallOutcomeInputs,
+    outputs: InsertCallOutcomeOutputs,
 }
 
 
@@ -648,11 +636,10 @@ impl InsertCallOutcomeNode {
     pub fn new(
         outcome_ptr: *const CallOutcome,
         memory_ref: Rc<RefCell<SharedMemory>>,
-        original_frame_ptr: *const FrameContext,
     ) -> Self {
         Self {
-            inputs: (outcome_ptr, memory_ref, original_frame_ptr),
-            outputs: (Bytes::default(), U256::ZERO), // Initialize outputs
+            inputs: (outcome_ptr, memory_ref),
+            outputs: (U256::ZERO, Bytes::default()), // Initialize outputs
         }
     }
 }
@@ -662,11 +649,10 @@ impl TypedNode for InsertCallOutcomeNode {
         unsafe {
             let outcome = &*self.inputs.0;
             let mut memory = self.inputs.1.borrow_mut();
-            let original_frame = &*self.inputs.2; // Frame that made the call
 
             let success = matches!(outcome.result, return_ok!());
             let return_data = &outcome.return_data;
-            let ret_range = original_frame.frame_input.ret_range.clone(); // Get range from original frame
+            let ret_range = outcome.ret_range.clone(); // Get range from original frame
 
             // Write return data to memory respecting the range
             let write_len = min(ret_range.len(), return_data.len());
@@ -676,18 +662,18 @@ impl TypedNode for InsertCallOutcomeNode {
                 memory.set(mem_offset, &return_data[..write_len]);
             }
 
-            self.outputs.0 = return_data.clone(); // Store for RETURNDATA ops
-            self.outputs.1 = if success { U256_ONE } else { U256::ZERO };
+            self.outputs.0 = if success { U256_ONE } else { U256::ZERO };
+            self.outputs.1 = return_data.clone(); // Store for RETURNDATA ops
         }
         Ok(())
     }
 
     fn get_bytes_output(&self) -> Option<*const Bytes> {
-        Some(&self.outputs.0 as *const Bytes)
+        Some(&self.outputs.1 as *const Bytes)
     }
 
     fn get_u256_output(&self) -> *const U256 {
-        &self.outputs.1 as *const U256
+        &self.outputs.0 as *const U256
     }
 
     fn print(&self) -> String {
@@ -695,8 +681,8 @@ impl TypedNode for InsertCallOutcomeNode {
             format!(
                 "InsertCallOutcomeNode: Input CallOutcome={:?}, Output Success={}, ReturnData=({} bytes)",
                 *self.inputs.0,
-                self.outputs.1,
-                self.outputs.0.len()
+                self.outputs.0,
+                self.outputs.1.len()
             )
         }
     }
@@ -739,13 +725,15 @@ impl TypedNode for CreateNode {
             let caller = current_frame.frame_input.target_address; // In CREATE, caller is the current contract
 
             // Read init code from memory
-            let init_code = {
+            let init_code = if len > 0 {
                 let mut memory = memory_ref.borrow_mut();
                 let required_size = calc_memory_size(code_offset, len);
                 if required_size > memory.len() {
                     memory.resize(required_size);
                 }
                 Bytes::copy_from_slice(memory.slice(code_offset, len))
+            } else {
+                Bytes::default()
             };
 
             self.outputs.0 = FrameInput {
@@ -810,13 +798,15 @@ impl TypedNode for Create2Node {
             let caller = current_frame.frame_input.target_address; // In CREATE2, caller is the current contract
 
             // Read init code from memory
-            let init_code = {
+            let init_code = if len > 0 {
                 let mut memory = memory_ref.borrow_mut();
                 let required_size = calc_memory_size(code_offset, len);
                  if required_size > memory.len() {
                     memory.resize(required_size);
                 }
                 Bytes::copy_from_slice(memory.slice(code_offset, len))
+            } else {
+                Bytes::default()
             };
 
             self.outputs.0 = FrameInput {
@@ -846,17 +836,7 @@ impl TypedNode for Create2Node {
 }
 
 pub struct MakeCreateFrameNode {
-    /// Inputs:
-    /// 0: *const FrameInput - The create parameters.
-    /// 1: Option<*const AccountInfo> - Caller's account info (needed for nonce, updated by other nodes).
-    /// 2: Option<Rc<RefCell<ExternalContext>>> - To check target existence and update state, get caller's info if not touched by other nodes.
     inputs: MakeCreateFrameInputs,
-    /// Outputs:
-    
-    /// 0: AccountInfo - Updated caller info (balance transfer, nonce).
-    /// 1: AccountInfo - Contract account info.
-    /// 2: AccountStatus - Initial status for the *created* address.
-    /// 3: FrameContext - Context for the create execution (if valid).
     outputs: MakeCreateFrameOutputs
 }
 // Define Input/Output types and impl Has... traits
@@ -865,15 +845,10 @@ impl MakeCreateFrameNode {
     pub fn new(
         frame_input_ptr: *const FrameInput,
         caller_info_ptr: Option<*const AccountInfo>,
-        context_ref_opt: Option<Rc<RefCell<ExternalContext>>>,
+        context_ref: Rc<RefCell<ExternalContext>>,
     ) -> Self {
-        assert_ne!(
-            caller_info_ptr.is_some(),
-            context_ref_opt.is_some(),
-            "caller_info_ptr and context_ref_opt must not both be Some"
-        );
         Self {
-            inputs: (frame_input_ptr, caller_info_ptr, context_ref_opt),
+            inputs: (frame_input_ptr, caller_info_ptr, context_ref),
             outputs: (
                 AccountInfo::default(),
                 AccountInfo::default(),
@@ -895,7 +870,7 @@ impl TypedNode for MakeCreateFrameNode {
 
             let mut caller_info = self.inputs.1.map_or_else(
                 || {
-                    let context_borrow = &*self.inputs.2.as_ref().unwrap().borrow();
+                    let context_borrow = &*self.inputs.2.as_ref().borrow();
                     get_account_context(&context_borrow, caller).0
                 },
                 |ptr| (*ptr).clone(),
@@ -974,17 +949,7 @@ impl TypedNode for MakeCreateFrameNode {
 // Processes the result of a CREATE sub-graph execution. Deploys code.
 
 pub struct CreateReturnNode {
-    /// Inputs:
-    /// 0: InstructionResult - Result status from sub-execution. If is not return_ok!, args 1~5 will be None.
-    /// 1: Option<*const Bytes> - Deployment bytecode (output of sub-execution).
-    /// 2: Option<*const FrameContext> - Context of the *completed* create sub-frame (contains calculated address).
-    /// 3: Option<Rc<RefCell<ExternalContext>>> - To deploy the code (update account info).
-    /// 4: Option<*const AccountInfo> - Target account info.
-    /// 5: Option<bool> Whether to analyze the code.
     inputs: CreateReturnInputs,
-    /// Outputs:
-    /// 0: CreateOutcome - Bundled result including the created address.
-    /// 1: AccountInfo - Updated AccountInfo with deployed code (if successful).
     outputs: CreateReturnOutputs
 }
 // Define Input/Output types and impl Has... traits
@@ -994,27 +959,18 @@ impl CreateReturnNode {
         result: *const InstructionResult,
         output_ptr: Option<*const Bytes>,
         frame_context_ptr: Option<*const FrameContext>,
-        ext_context_opt: Option<Rc<RefCell<ExternalContext>>>,
+        ext_context: Rc<RefCell<ExternalContext>>,
         target_info_ptr: Option<*const AccountInfo>,
-        analyze_opt: Option<bool>,
+        analyze: bool,
     ) -> Self {
-        unsafe {
-            if matches!(*result, return_ok!()) {
-                assert_ne!(
-                    target_info_ptr.is_some(),
-                    ext_context_opt.is_some(),
-                    "target_info_ptr and ext_context_opt must not both be Some"
-                );
-            }
-        }
         Self {
             inputs: (
                 result,
                 output_ptr,
                 frame_context_ptr,
-                ext_context_opt,
+                ext_context,
                 target_info_ptr,
-                analyze_opt,
+                analyze,
             ),
             outputs: (CreateOutcome::default(), AccountInfo::default()),
         }
@@ -1038,7 +994,7 @@ impl TypedNode for CreateReturnNode {
 
             let mut target_info = self.inputs.4.map_or_else(
                 || {
-                    let context_borrow = &*self.inputs.3.as_ref().unwrap().borrow();
+                    let context_borrow = &*self.inputs.3.as_ref().borrow();
                     get_account_context(&context_borrow, contract_address).0
                 },
                 |ptr| (*ptr).clone(),
@@ -1050,7 +1006,7 @@ impl TypedNode for CreateReturnNode {
                 created_address: Some(contract_address),
             };
 
-            let analysis_kind = self.inputs.5.unwrap_or(false);
+            let analysis_kind = self.inputs.5;
             let bytecode = if analysis_kind {
                 to_analysed(Bytecode::new_legacy(deployment_code_bytes.clone()))
             } else {
