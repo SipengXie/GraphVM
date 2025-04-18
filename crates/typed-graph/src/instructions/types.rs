@@ -201,7 +201,7 @@ pub type CallInputs = (
 );
 
 /// Input type for delegate call operations
-pub type DelegateCallInputs = (
+pub type CallWithoutValueInputs = (
     *const U256,  // gas_limit
     *const U256,  // to
     *const U256,  // in_offset

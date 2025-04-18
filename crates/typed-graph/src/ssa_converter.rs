@@ -420,6 +420,7 @@ impl SsaConverter {
             },
 
             // Contract Operations
+            // ! 从这里开始对照每一个指令的实现是否正确
             0xF0 => { // CREATE
                 let value_ptr = self.get_u256_ptr(&entry.inputs[0]);
                 let code_offset_ptr = self.get_u256_ptr(&entry.inputs[1]);

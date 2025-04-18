@@ -214,11 +214,7 @@ fn execute_base_call(
             target_address,
             bytecode_address,
             caller,
-            transfer_value: if scheme == TxScheme::DelegateCall {
-                U256::ZERO
-            } else {
-                value
-            }, // DELEGATECALL does not transfer value
+            transfer_value: value,
             scheme,
             ret_range: out_offset..out_offset + out_len,
             gas_limit,
@@ -303,13 +299,13 @@ impl TypedNode for CallcodeNode {
 
 // --- DELEGATECALL Node (0xf4) ---
 pub struct DelegatecallNode {
-    inputs: DelegateCallInputs,
+    inputs: CallWithoutValueInputs,
     outputs: FrameInputOutput,
 }
 
 
 impl DelegatecallNode {
-    pub fn new(i: DelegateCallInputs) -> Self {
+    pub fn new(i: CallWithoutValueInputs) -> Self {
         Self {
             inputs: i,
             outputs: (FrameInput::default(),),
@@ -353,13 +349,13 @@ impl TypedNode for DelegatecallNode {
 
 // --- STATICCALL Node (0xfa) ---
 pub struct StaticcallNode {
-    inputs: DelegateCallInputs,
+    inputs: CallWithoutValueInputs,
     outputs: FrameInputOutput,
 }
 
 
 impl StaticcallNode {
-    pub fn new(i: DelegateCallInputs) -> Self {
+    pub fn new(i: CallWithoutValueInputs) -> Self {
         Self {
             inputs: i,
             outputs: (FrameInput::default(),),
@@ -407,25 +403,8 @@ impl TypedNode for StaticcallNode {
 // If implemented as a node, it needs careful state management.
 
 pub struct MakeCallFrameNode {
-    /// Inputs:
-    /// 0: *const FrameInput - The call parameters.
-    /// 1: Option<*const AccountInfo> - Caller account info (if it is updated by other nodes)
-    /// 2: Option<*const AccountInfo> - Target account info (if it is updated by other nodes)
-    /// 3: Option<*const AccountInfo> - Bytecode address account info (if it is updated by other nodes)
-    /// 4: Rc<RefCell<ExternalContext>> - Fallback context to get account info.
-    inputs: (
-        *const FrameInput,
-        Option<*const AccountInfo>,
-        Option<*const AccountInfo>,
-        Option<*const AccountInfo>,
-        Rc<RefCell<ExternalContext>>,
-    ),
-    /// Outputs:
-    /// 0: FrameContext - The context for the next frame (if it's a contract call). None if precompile/empty.
-    /// 1: CallOutcome - The direct result if it's a precompile or empty call.
-    /// 2: AccountInfo - Updated caller info (if value transfer).
-    /// 3: AccountInfo - Updated target info (if value transfer).
-    outputs: (FrameContext, CallOutcome, AccountInfo, AccountInfo),
+    inputs: MakeCallFrameInputs,
+    outputs: MakeCallFrameOutputs
 }
 
 
