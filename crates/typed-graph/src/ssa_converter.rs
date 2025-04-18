@@ -60,13 +60,13 @@ impl ConstantPool {
 }
 
 /// Converts SSA log entries to a TypedGraph
-pub struct SsaConverter {
+pub struct SsaConverter<'a> {
     /// The TypedGraph being built
     graph: TypedGraph,
     /// Mapping from LSN to node index in the TypedGraph (LSN is 1-based, index is 0-based)
     lsn_to_node: HashMap<LsnType, usize>,
     /// Constant pool for storing constant values
-    constant_pool: ConstantPool,
+    constant_pool: &'a mut ConstantPool,
     /// Execution context (shared between nodes)
     context: Rc<RefCell<ExternalContext>>,
     /// Shared memory (shared between nodes)
@@ -77,18 +77,19 @@ pub struct SsaConverter {
     first_frame_input: *const FrameInput,
 }
 
-impl SsaConverter {
+impl<'a> SsaConverter<'a> {
     /// Create a new SsaConverter with execution context
     pub fn new(
         context: Rc<RefCell<ExternalContext>>,
         shared_memory: Rc<RefCell<SharedMemory>>,
         env: *const Env,
         first_frame_input: *const FrameInput,
+        constant_pool: &'a mut ConstantPool,
     ) -> Self {
         Self {
             graph: TypedGraph::new(),
             lsn_to_node: HashMap::new(),
-            constant_pool: ConstantPool::new(),
+            constant_pool,
             context,
             shared_memory,
             env,
@@ -97,7 +98,7 @@ impl SsaConverter {
     }
 
     /// Convert SSA log entries to TypedGraph
-    pub fn convert(&mut self, entries: Vec<SSALogEntry>) -> (TypedGraph, ConstantPool) {
+    pub fn convert(&mut self, entries: Vec<SSALogEntry>) -> TypedGraph {
         // eprintln!("Logs to convert: {:#?}", entries);
         // First pass: Create nodes for each entry
         for entry in entries.iter() {
@@ -105,11 +106,8 @@ impl SsaConverter {
             self.lsn_to_node.insert(entry.lsn, node_index);
         }
 
-        // Take ownership of graph and constant pool
-        (
-            std::mem::replace(&mut self.graph, TypedGraph::new()),
-            std::mem::replace(&mut self.constant_pool, ConstantPool::new()),
-        )
+        // Take ownership of graph
+        std::mem::replace(&mut self.graph, TypedGraph::new())
     }
 
     /// Create a TypedNode based on the SSA log entry's opcode
@@ -858,7 +856,7 @@ impl SsaConverter {
         match input {
             SSAInput::Constant(value) => {
                 // For constants, store in constant pool and return pointer
-                self.constant_pool.add_u256(value.clone())
+                self.constant_pool.add_u256(*value)
             }
             SSAInput::Stack(lsn_with_index) => {
                 // For stack values, get the node and its U256 output pointer

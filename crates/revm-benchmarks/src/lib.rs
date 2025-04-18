@@ -13,9 +13,15 @@ mod tests {
     use rayon::prelude::*;
     use revm::db::{CacheDB, EmptyDB};
     use revm::{inspector_handle_register, Evm};
-    use revm_primitives::{AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind};
+    use revm_interpreter::SharedMemory;
+    use revm_primitives::{uint, AccountInfo, AccountStatus, Address, Bytes, Env, LatestSpec, SpecId, TxKind};
+    use revm_ssa::FrameInput;
     use revm_ssa_graph::instruction_table::InstructionTable;
     use revm_ssa_graph::{ExecutionContext, SsaGraph};
+    use typed_graph::context::ExternalContext;
+    use typed_graph::ssa_converter::{ConstantPool, SsaConverter};
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -173,6 +179,119 @@ mod tests {
             println!("{} parallelism ratio: {:.4}", case.name, parallelism);
         }
     }
+
+    #[test]
+    fn test_typed_graph_execution() {
+        // 直接使用benches中的测试用例
+        let cases = get_bench_cases();
+        let mut constant_pool = ConstantPool::new();
+
+        for case in &cases {
+            // let case = &cases[8];
+            println!("{}", case.name);
+            // 准备测试环境和数据
+            let bytecode = Bytes::from(case.bytecode.clone());
+            let input = Bytes::from(case.calldata.clone());
+            let gas_limit = 1_000_000_000;
+            let caller = Address::from([0x1; 20]);
+            let contract_addr = Address::from([0x2; 20]);
+
+            // 设置EVM环境
+            let mut env = Env::default();
+            env.tx.caller = caller;
+            env.tx.transact_to = TxKind::Call(contract_addr);
+            env.tx.data = input.clone().into();
+            env.tx.gas_limit = gas_limit;
+
+            // 准备合约和字节码
+            let bytecode = revm_interpreter::analysis::to_analysed(
+                revm_primitives::Bytecode::new_raw(bytecode),
+            );
+
+            // 准备缓存数据库
+            let mut cache = CacheDB::new(EmptyDB::default());
+            cache.insert_account_info(
+                contract_addr,
+                AccountInfo {
+                    code_hash: bytecode.hash_slow(),
+                    code: Some(bytecode.clone()),
+                    ..Default::default()
+                },
+            );
+
+            // 添加存储数据
+            for (slot, value) in case.pre_determined_slots.clone() {
+                let _ = cache.insert_account_storage(contract_addr, slot, value);
+            }
+
+            // 创建和执行EVM（带SSA logger和StepCounter）
+            let mut evm = Evm::builder()
+                .with_spec_id(SpecId::LATEST)
+                .with_ref_db(cache)
+                .with_env(Box::new(env.clone()))
+                .with_ssa_logger()
+                .with_external_context(StepCounter::default())
+                .append_handler_register(inspector_handle_register)
+                .build_with_ssa_logger();
+            // 执行交易
+            let _ = evm.transact_preverified();
+
+            // 获取日志
+            let mut logger = evm.take_ssa_logger().unwrap();
+            let logs = logger.take_logs();
+            let first_frame = logger.take_first_frame_input().unwrap();
+           
+            // 创建共享内存实例，用于存储和管理VM执行过程中的内存数据
+            let shared_memory = Rc::new(RefCell::new(SharedMemory::new()));
+            
+            // 初始化账户映射，用于存储合约账户信息
+            let mut accounts = HashMap::default();
+            accounts.insert(
+                contract_addr,
+                (
+                    AccountInfo {
+                        nonce: 0,
+                        balance: uint!(10000000000000000000000000_U256), // 设置合约账户余额
+                        code_hash: bytecode.hash_slow(),                 // 计算合约字节码的哈希值
+                        code: Some(bytecode.clone()),                    // 存储合约字节码
+                    },
+                    AccountStatus::default(),                           // 设置账户状态为默认值
+                ),
+            );
+
+            // 初始化存储映射，用于存储预设的存储槽位值
+            let mut storage = HashMap::default();
+            for (slot, value) in case.pre_determined_slots.clone() {
+                storage.insert((contract_addr, slot), value);           // 将预设的存储槽位值插入存储映射
+            }
+
+            // 创建外部上下文，包含环境信息、账户信息、存储信息和区块哈希
+            let external_context = ExternalContext::new(
+                env.clone(),
+                accounts,
+                storage,
+                HashMap::default(), // 区块哈希映射设为空
+            );
+            // 将外部上下文包装为可共享和可修改的引用
+            let external_context = Rc::new(RefCell::new(external_context));
+
+            // 创建SSA转换器实例，用于将执行日志转换为类型化图
+            let mut converter = SsaConverter::new(
+                external_context,
+                shared_memory,
+                &env as *const Env,                           // 环境指针
+                &first_frame as *const FrameInput,           // 第一帧输入指针
+                &mut constant_pool,
+            );
+
+            // 将执行日志转换为类型化图和常量池
+            let mut typed_graph = converter.convert(logs);
+
+            let _ = typed_graph.execute();
+            // break;
+        }
+    }
+
 
     #[test]
     fn test_execution_layers() {

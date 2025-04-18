@@ -13,7 +13,7 @@ use revm_primitives::{
 use revm_ssa::{FrameInput, SSALogEntry};
 use std::cell::RefCell;
 use std::rc::Rc;
-use typed_graph::{context::ExternalContext, ssa_converter::SsaConverter};
+use typed_graph::{context::ExternalContext, ssa_converter::{ConstantPool, SsaConverter}};
 // TODO: Add necessary imports from typed_graph crate
 // use typed_graph::{TypedGraph, /* other necessary items */};
 
@@ -221,16 +221,19 @@ fn typed_graph_execute(
 
     let external_context = Rc::new(RefCell::new(external_context));
 
+    let mut constant_pool = ConstantPool::new();
+
     // Create SsaConverter with the environment
     let mut converter = SsaConverter::new(
         external_context,
         shared_memory,
         env as *const Env,
         _first_frame as *const FrameInput,
+        &mut constant_pool,
     );
 
     // Convert SSA logs to TypedGraph
-    let (mut typed_graph, _constant_pool) = converter.convert(entries);
+    let mut typed_graph = converter.convert(entries);
     
     // eprintln!("== TypedGraph before execution ==");
     // typed_graph.print_graph();

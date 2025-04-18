@@ -43,7 +43,6 @@ impl TypedNode for MloadNode {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
             let mut memory = self.inputs.1.borrow_mut();
-
             let required_size = calc_memory_size(offset, 32);
             if required_size > memory.len() {
                 memory.resize(required_size);
