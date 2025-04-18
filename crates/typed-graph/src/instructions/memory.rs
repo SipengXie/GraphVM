@@ -1,23 +1,14 @@
 use crate::typed_graph::TypedNode;
 use revm_interpreter::{as_usize_saturated, SharedMemory};
 use revm_primitives::U256;
-use std::cell::RefCell;
+use std::{cell::RefCell, cmp::max};
 use std::rc::Rc;
 use super::types::{MemoryStoreInputs, MemoryLoadInputs, U256Output, MemoryCopyInputs};
 
-/// Calculates the required memory size rounded up to the nearest 32-byte word.
-/// This function mimics the memory expansion logic in EVM.
-#[inline]
-pub fn calc_memory_size(offset: usize, size: usize) -> usize {
-    if size == 0 {
-        0
-    } else {
-        // Calculate the highest byte accessed
-        let end = offset.saturating_add(size);
-        // Round up to the nearest word (32 bytes)
-        (end.saturating_add(31)) / 32 * 32
-    }
-}
+#[cfg(feature = "metrics")]
+use metrics::histogram;
+#[cfg(feature = "metrics")]
+use std::time::Instant;
 
 // --- MLOAD Node ---
 
@@ -43,7 +34,7 @@ impl TypedNode for MloadNode {
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
             let mut memory = self.inputs.1.borrow_mut();
-            let required_size = calc_memory_size(offset, 32);
+            let required_size = offset.saturating_add(32);
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
@@ -92,19 +83,24 @@ impl MstoreNode {
 impl TypedNode for MstoreNode {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
+        #[cfg(feature = "metrics")]
+        let start = Instant::now();
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
             let value = *self.inputs.1;
             let mut memory = self.inputs.2.borrow_mut();
 
-            let required_size = calc_memory_size(offset, 32);
+            let required_size = offset.saturating_add(32);
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
 
             memory.set_u256(offset, value);
         }
-        Ok(())
+
+        #[cfg(feature = "metrics")]
+        histogram!("mstore_time", start.elapsed());
+        Ok(())          
     }
     
     fn print(&self) -> String {
@@ -147,7 +143,7 @@ impl TypedNode for Mstore8Node {
             let value_byte = (*self.inputs.1).byte(0);
             let mut memory = self.inputs.2.borrow_mut();
 
-            let required_size = calc_memory_size(offset, 1);
+            let required_size = offset.saturating_add(1);
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
@@ -244,12 +240,7 @@ impl TypedNode for McopyNode {
 
             let mut memory = self.inputs.3.borrow_mut();
 
-            let highest_byte_accessed = dst.saturating_add(len).max(src.saturating_add(len));
-            let required_size = if highest_byte_accessed > 0 {
-                calc_memory_size(highest_byte_accessed - 1, 1)
-            } else {
-                0
-            };
+            let required_size = max(dst, src).saturating_add(len);
 
             if required_size > memory.len() {
                 memory.resize(required_size);

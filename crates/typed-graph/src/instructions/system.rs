@@ -10,7 +10,10 @@ use super::types::{
     BytesDataInput, CodeCopyInputs, ReturnDataCopyInputs, Keccak256Inputs,
 };
 
-use super::memory::calc_memory_size;
+#[cfg(feature = "metrics")]
+use metrics::histogram;
+#[cfg(feature = "metrics")]
+use std::time::Instant;
 
 // --- GAS Node (0x5a) ---
 // Simplified: Assumes gas value is passed as input. Gas logic is complex.
@@ -207,7 +210,7 @@ impl TypedNode for CodecopyNode {
             let mut memory = self.inputs.4.borrow_mut();
 
             // Resize memory if needed
-            let required_size = calc_memory_size(mem_offset, len);
+            let required_size = mem_offset.saturating_add(len);
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
@@ -400,7 +403,7 @@ impl TypedNode for CalldatacopyNode {
             let mut memory = self.inputs.4.borrow_mut();
 
             // Resize memory if needed
-            let required_size = calc_memory_size(mem_offset, len);
+            let required_size = mem_offset.saturating_add(len);
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
@@ -516,7 +519,7 @@ impl TypedNode for ReturndatacopyNode {
             }
 
             // Resize memory if needed
-            let required_size = calc_memory_size(mem_offset, len);
+            let required_size = mem_offset.saturating_add(len);
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
@@ -569,6 +572,8 @@ impl Keccak256Node {
 impl TypedNode for Keccak256Node {
     #[inline(always)]
     fn execute(&mut self) -> anyhow::Result<()> {
+        #[cfg(feature = "metrics")]
+        let start = Instant::now();
         unsafe {
             let offset = as_usize_saturated!(*self.inputs.0);
             let len = as_usize_saturated!(*self.inputs.1);
@@ -577,7 +582,8 @@ impl TypedNode for Keccak256Node {
             let mut memory = self.inputs.2.borrow_mut();
 
             // Ensure memory is large enough
-            let required_size = calc_memory_size(offset, len);
+            let required_size = offset.saturating_add(len);
+            // eprintln!("required_size, memory.len(): {}, {}", required_size, memory.len());
             if required_size > memory.len() {
                 memory.resize(required_size);
             }
@@ -593,8 +599,11 @@ impl TypedNode for Keccak256Node {
                 revm_primitives::keccak256(&data_to_hash)
             };
 
-            self.outputs.0 = U256::from_be_bytes(hash.0);
+            self.outputs.0 = hash.into();
         }
+
+        #[cfg(feature = "metrics")]
+        histogram!("keccak256_time", start.elapsed());
         Ok(())
     }
     fn get_u256_output(&self) -> *const U256 {

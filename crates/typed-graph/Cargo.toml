@@ -10,3 +10,7 @@ revm-interpreter = { path = "../interpreter" }
 revm-ssa = { path = "../revm-ssa" }
 revm-precompile = { path = "../precompile" }
 revm = { path = "../revm" }
+metrics = { version = "0.21.1", optional = true}
+
+[features]
+metrics = ["dep:metrics"]

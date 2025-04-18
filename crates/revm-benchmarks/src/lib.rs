@@ -52,7 +52,7 @@ mod tests {
             name: _,
             pre_determined_slots: _,
         } = &cases[7]; // hash_10k Case
-                       // 获取WETH合约字节码
+
         let bytecode = Bytes::copy_from_slice(bytecode);
 
         // 设置基本参数
@@ -91,10 +91,9 @@ mod tests {
 
         // 执行交易并打印结果
         let start = Instant::now();
-        let result = evm.transact_preverified();
+        let _result = evm.transact_preverified();
         let end = Instant::now();
         println!("Execution time: {:?}", end.duration_since(start));
-        println!("execution result: {:#?}", result);
     }
 
     #[test]
@@ -182,12 +181,20 @@ mod tests {
 
     #[test]
     fn test_typed_graph_execution() {
+        #[cfg(feature = "metrics")]
+        let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
+        #[cfg(feature = "metrics")]
+        let _handle = builder
+            .with_http_listener(([127, 0, 0, 1], 9090))
+            .install()
+            .expect("failed to install Prometheus recorder");
+
         // 直接使用benches中的测试用例
         let cases = get_bench_cases();
         let mut constant_pool = ConstantPool::new();
 
         for case in &cases {
-            // let case = &cases[8];
+            // let case = &cases[7];
             println!("{}", case.name);
             // 准备测试环境和数据
             let bytecode = Bytes::from(case.bytecode.clone());
@@ -287,9 +294,14 @@ mod tests {
             // 将执行日志转换为类型化图和常量池
             let mut typed_graph = converter.convert(logs);
 
+            let start = Instant::now();
             let _ = typed_graph.execute();
+            let end = Instant::now();
+            println!("Execution time: {:?}", end.duration_since(start));
             // break;
         }
+        #[cfg(feature = "metrics")]
+        std::thread::sleep(std::time::Duration::from_secs(15));
     }
 
 

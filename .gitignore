@@ -27,3 +27,8 @@ rustc-ice-*
 tools
 .cursorrules
 TODO.md
+
+# Metrics
+*.svg
+*.data
+*.old

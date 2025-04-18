@@ -3,18 +3,12 @@ use criterion::{
 };
 use revm::db::{CacheDB, EmptyDB};
 use revm::Evm;
-use revm_interpreter::SharedMemory;
 use revm_primitives::{
-    b256, hex, uint, AccountInfo, AccountStatus, Address, Bytes, Env, HashMap, LatestSpec, SpecId, TxKind, U256
+    b256, hex, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256
 };
 use revm_ssa::logger::LsnType;
-use revm_ssa::FrameInput;
 use revm_ssa_graph::instruction_table::InstructionTable;
 use revm_ssa_graph::{ExecutionContext, SsaGraph};
-use typed_graph::context::ExternalContext;
-use typed_graph::ssa_converter::{ConstantPool, SsaConverter};
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -137,7 +131,7 @@ fn mk_group<'a>(c: &'a mut Criterion, name: &str) -> BenchmarkGroup<'a, WallTime
 
 fn bench_ssa_vs_nonssa(c: &mut Criterion) {
     let cases = get_bench_cases();
-    let mut constant_pool = ConstantPool::new();
+    // let mut constant_pool = ConstantPool::new();
 
     for case in cases {
         // 准备测试环境和数据
@@ -217,9 +211,9 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
         // 获取日志和调用信息
         let mut logger = evm.take_ssa_logger().unwrap();
         let logs = logger.take_logs();
-        let logs_for_typed_graph = logs.clone();
+        // let logs_for_typed_graph = logs.clone();
         let first_frame_input = logger.take_first_frame_input();
-        let first_frame_for_typed_graph = first_frame_input.clone().unwrap();
+        // let first_frame_for_typed_graph = first_frame_input.clone().unwrap();
         let lsns: Vec<LsnType> = logs.iter().map(|log| log.lsn).collect();
 
         // 创建依赖图
@@ -261,58 +255,58 @@ fn bench_ssa_vs_nonssa(c: &mut Criterion) {
             });
         });
 
-        // 创建共享内存实例，用于存储和管理VM执行过程中的内存数据
-        let shared_memory = Rc::new(RefCell::new(SharedMemory::new()));
+        // // 创建共享内存实例，用于存储和管理VM执行过程中的内存数据
+        // let shared_memory = Rc::new(RefCell::new(SharedMemory::new()));
         
-        // 初始化账户映射，用于存储合约账户信息
-        let mut accounts = HashMap::default();
-        accounts.insert(
-            contract_addr,
-            (
-                AccountInfo {
-                    nonce: 0,
-                    balance: uint!(10000000000000000000000000_U256), // 设置合约账户余额
-                    code_hash: bytecode.hash_slow(),                 // 计算合约字节码的哈希值
-                    code: Some(bytecode.clone()),                    // 存储合约字节码
-                },
-                AccountStatus::default(),                           // 设置账户状态为默认值
-            ),
-        );
+        // // 初始化账户映射，用于存储合约账户信息
+        // let mut accounts = HashMap::default();
+        // accounts.insert(
+        //     contract_addr,
+        //     (
+        //         AccountInfo {
+        //             nonce: 0,
+        //             balance: uint!(10000000000000000000000000_U256), // 设置合约账户余额
+        //             code_hash: bytecode.hash_slow(),                 // 计算合约字节码的哈希值
+        //             code: Some(bytecode.clone()),                    // 存储合约字节码
+        //         },
+        //         AccountStatus::default(),                           // 设置账户状态为默认值
+        //     ),
+        // );
 
-        // 初始化存储映射，用于存储预设的存储槽位值
-        let mut storage = HashMap::default();
-        for (slot, value) in pre_determined_slots {
-            storage.insert((contract_addr, slot), value);           // 将预设的存储槽位值插入存储映射
-        }
+        // // 初始化存储映射，用于存储预设的存储槽位值
+        // let mut storage = HashMap::default();
+        // for (slot, value) in pre_determined_slots {
+        //     storage.insert((contract_addr, slot), value);           // 将预设的存储槽位值插入存储映射
+        // }
 
-        // 创建外部上下文，包含环境信息、账户信息、存储信息和区块哈希
-        let external_context = ExternalContext::new(
-            env.clone(),
-            accounts,
-            storage,
-            HashMap::default(), // 区块哈希映射设为空
-        );
-        // 将外部上下文包装为可共享和可修改的引用
-        let external_context = Rc::new(RefCell::new(external_context));
+        // // 创建外部上下文，包含环境信息、账户信息、存储信息和区块哈希
+        // let external_context = ExternalContext::new(
+        //     env.clone(),
+        //     accounts,
+        //     storage,
+        //     HashMap::default(), // 区块哈希映射设为空
+        // );
+        // // 将外部上下文包装为可共享和可修改的引用
+        // let external_context = Rc::new(RefCell::new(external_context));
 
-        // 创建SSA转换器实例，用于将执行日志转换为类型化图
-        let mut converter = SsaConverter::new(
-            external_context,
-            shared_memory,
-            &env as *const Env,                           // 环境指针
-            &first_frame_for_typed_graph as *const FrameInput,  // 第一帧输入指针
-            &mut constant_pool,
-        );
+        // // 创建SSA转换器实例，用于将执行日志转换为类型化图
+        // let mut converter = SsaConverter::new(
+        //     external_context,
+        //     shared_memory,
+        //     &env as *const Env,                           // 环境指针
+        //     &first_frame_for_typed_graph as *const FrameInput,  // 第一帧输入指针
+        //     &mut constant_pool,
+        // );
 
-        // 将执行日志转换为类型化图和常量池
-        let mut typed_graph = converter.convert(logs_for_typed_graph);
+        // // 将执行日志转换为类型化图和常量池
+        // let mut typed_graph = converter.convert(logs_for_typed_graph);
 
-        // 添加TypedGraphVm的基准测试
-        group.bench_function("TypedGraphVm", |b| {
-            b.iter(|| {
-                typed_graph.execute()                     // 执行类型化图
-            });
-        });
+        // // 添加TypedGraphVm的基准测试
+        // group.bench_function("TypedGraphVm", |b| {
+        //     b.iter(|| {
+        //         typed_graph.execute()                     // 执行类型化图
+        //     });
+        // });
     }
 }
 

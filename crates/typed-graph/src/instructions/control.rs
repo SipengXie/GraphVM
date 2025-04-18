@@ -1,4 +1,3 @@
-use crate::instructions::memory::calc_memory_size;
 use crate::typed_graph::TypedNode;
 use revm_interpreter::{as_usize_saturated, InstructionResult, SharedMemory}; // Use InstructionResult
 use revm_primitives::{Bytes, U256};
@@ -158,7 +157,7 @@ impl TypedNode for ReturnRevertNode {
             let mut memory = self.inputs.2.borrow_mut();
 
             // Ensure memory is large enough (mimics EVM memory expansion on read for RETURN/REVERT)
-            let required_size = calc_memory_size(offset, len);
+            let required_size = offset.saturating_add(len);
             if required_size > memory.len() {
                 // EVM would revert with OutOfGas here if resize fails.
                 // For TypedGraph, we might need a way to signal this.

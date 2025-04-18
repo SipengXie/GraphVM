@@ -14,8 +14,6 @@ use revm_ssa::{FrameInput, TxScheme};
 use std::{cell::RefCell, cmp::min, rc::Rc};
 use super::types::*;
 
-use super::memory::calc_memory_size;
-
 // --- Simplified Deduct Caller Node ---
 // Primarily handles nonce increment for non-CREATE calls. Balance deduction is complex without gas.
 
@@ -164,7 +162,7 @@ fn execute_base_call(
         // --- Read input data from memory ---
         let input_data = if in_len > 0 {
             let mut memory = memory_ref.borrow_mut();
-            let required_in_size = calc_memory_size(in_offset, in_len);
+            let required_in_size = in_offset.saturating_add(in_len);
             if required_in_size > memory.len() {
                 memory.resize(required_in_size);
             }
@@ -177,7 +175,7 @@ fn execute_base_call(
         {
             // Separate scope for mutable borrow
             let mut memory = memory_ref.borrow_mut();
-            let required_out_size = calc_memory_size(out_offset, out_len);
+            let required_out_size = out_offset.saturating_add(out_len);
             if required_out_size > memory.len() {
                 memory.resize(required_out_size);
             }
@@ -727,7 +725,7 @@ impl TypedNode for CreateNode {
             // Read init code from memory
             let init_code = if len > 0 {
                 let mut memory = memory_ref.borrow_mut();
-                let required_size = calc_memory_size(code_offset, len);
+                let required_size = code_offset.saturating_add(len);
                 if required_size > memory.len() {
                     memory.resize(required_size);
                 }
@@ -800,7 +798,7 @@ impl TypedNode for Create2Node {
             // Read init code from memory
             let init_code = if len > 0 {
                 let mut memory = memory_ref.borrow_mut();
-                let required_size = calc_memory_size(code_offset, len);
+                let required_size = code_offset.saturating_add(len);
                  if required_size > memory.len() {
                     memory.resize(required_size);
                 }

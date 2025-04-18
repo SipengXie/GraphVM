@@ -1,4 +1,3 @@
-use crate::instructions::memory::calc_memory_size;
 use crate::{
     context::{get_account_context, get_storage_slot_context, ExternalContext, FrameContext},
     typed_graph::TypedNode,
@@ -468,7 +467,7 @@ impl TypedNode for ExtcodecopyNode {
             let mut memory = self.inputs.6.borrow_mut();
 
             // Ensure memory is large enough for the write operation
-            let required_mem_size = calc_memory_size(mem_offset, len);
+            let required_mem_size = mem_offset.saturating_add(len);
              if required_mem_size > memory.len() {
                 memory.resize(required_mem_size);
             }
