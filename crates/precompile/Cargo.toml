@@ -65,7 +65,7 @@ cfg-if = { version = "1.0", default-features = false }
 
 [dev-dependencies]
 criterion = "0.5"
-rand = { version = "0.8", features = ["std"] }
+rand = { version = "0.9", features = ["std"] }
 eyre = "0.6.12"
 rstest = "0.22.0"
 serde = "1.0"
