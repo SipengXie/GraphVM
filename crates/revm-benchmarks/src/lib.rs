@@ -191,10 +191,9 @@ mod tests {
 
         // 直接使用benches中的测试用例
         let cases = get_bench_cases();
-        let mut constant_pool = ConstantPool::new();
 
-        for case in &cases {
-            // let case = &cases[7];
+        for _case in &cases {
+            let case = &cases[8]; // WETH
             println!("{}", case.name);
             // 准备测试环境和数据
             let bytecode = Bytes::from(case.bytecode.clone());
@@ -281,7 +280,8 @@ mod tests {
             );
             // 将外部上下文包装为可共享和可修改的引用
             let external_context = Rc::new(RefCell::new(external_context));
-
+            let mut constant_pool = ConstantPool::new();
+            
             // 创建SSA转换器实例，用于将执行日志转换为类型化图
             let mut converter = SsaConverter::new(
                 external_context,
@@ -294,11 +294,14 @@ mod tests {
             // 将执行日志转换为类型化图和常量池
             let mut typed_graph = converter.convert(logs);
 
-            let start = Instant::now();
-            let _ = typed_graph.execute();
-            let end = Instant::now();
-            println!("Execution time: {:?}", end.duration_since(start));
-            // break;
+            // let start = Instant::now();
+            let iterations = 10;
+            for _ in 0..iterations {
+                let _ = typed_graph.execute();
+            }
+            // let end = Instant::now();
+            // println!("Execution time: {:?}", end.duration_since(start));
+            break;
         }
         #[cfg(feature = "metrics")]
         std::thread::sleep(std::time::Duration::from_secs(15));
@@ -395,8 +398,8 @@ mod tests {
     fn test_graph_execution() {
         let case = get_bench_cases()
             .into_iter()
-            .find(|case| case.name == "hash_10k")
-            .expect("hash_10k case not found");
+            .find(|case| case.name == "erc20_runtime")
+            .expect("erc20_runtime case not found");
 
         // 准备测试环境和数据
         let bytecode = Bytes::from(case.bytecode.clone());

@@ -89,12 +89,6 @@ pub fn get_bench_cases() -> Vec<BenchCase> {
             include_str!("../../../../data/snailtracer.rt.hex"),
             "0x30627b7c"
         ),
-        // WETH测试
-        BenchCase::new(
-            "weth",
-            include_str!("../../../../data/weth.rt.hex"),
-            "0x6b7c477a"
-        ),
         // Hash 10k测试
         BenchCase::new(
             "hash_10k",
@@ -106,6 +100,12 @@ pub fn get_bench_cases() -> Vec<BenchCase> {
             "uniswap_v2",
             include_str!("../../../../data/uniswap_v2.rt.hex"),
             "0xdfa5235e"
+        ),
+        // WETH测试
+        BenchCase::new(
+            "weth",
+            include_str!("../../../../data/weth.rt.hex"),
+            "0x6b7c477a"
         ),
     ]
 }

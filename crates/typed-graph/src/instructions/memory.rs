@@ -89,7 +89,6 @@ impl TypedNode for MstoreNode {
             let offset = as_usize_saturated!(*self.inputs.0);
             let value = *self.inputs.1;
             let mut memory = self.inputs.2.borrow_mut();
-
             let required_size = offset.saturating_add(32);
             if required_size > memory.len() {
                 memory.resize(required_size);

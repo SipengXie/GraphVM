@@ -26,36 +26,23 @@ use std::rc::Rc;
 
 /// Constant pool for storing constant values used in TypedNodes, ensuring uniqueness.
 pub struct ConstantPool {
-    /// Storage for unique U256 constants
-    u256_constants: Vec<U256>,
-    /// Map from U256 value to its index in u256_constants
-    value_to_index: HashMap<U256, usize>,
+    arena: bumpalo::Bump,
 }
 
 impl ConstantPool {
     pub fn new() -> Self {
         Self {
-            u256_constants: Vec::new(),
-            value_to_index: HashMap::default(), // Initialize the HashMap
+            arena: bumpalo::Bump::new(),
         }
     }
 
     /// Add a U256 constant if it doesn't exist, and return its pointer.
     /// Ensures that identical U256 values are stored only once.
-    pub fn add_u256(&mut self, value: U256) -> *const U256 {
-        // Check if the value already exists in the map
-        if let Some(&index) = self.value_to_index.get(&value) {
-            // If exists, return pointer to the existing value in the vector
-            &self.u256_constants[index] as *const U256
-        } else {
-            // If not exists, add the value to the vector
-            let index = self.u256_constants.len();
-            self.u256_constants.push(value.clone()); // Clone the value for the vector
-            // Add the value and its index to the map
-            self.value_to_index.insert(value, index); // Take ownership of the original value for the map
-            // Return pointer to the newly added value
-            &self.u256_constants[index] as *const U256
-        }
+    pub fn add_u256<'bump>(&'bump mut self, value: U256) -> *const U256 {
+        // Allocate the value within the arena. 'bump lifetime ensures pointer validity.
+        let value_ref: &'bump U256 = self.arena.alloc(value);
+        let ptr: *const U256 = value_ref as *const U256;
+        ptr
     }
 }
 
