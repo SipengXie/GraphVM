@@ -65,7 +65,7 @@ ethers-core = { version = "2.0", optional = true }
 # alloydb
 alloy-provider = { version = "0.7", optional = true, default-features = false }
 alloy-eips = { version = "0.7", optional = true, default-features = false }
-alloy-transport = { version = "0.7", optional = true, default-features = false }
+alloy-transport = { version = "1.0", optional = true, default-features = false }
 
 altius-benchtools = "0.2.1"
 rayon = "1.10.0"
