@@ -54,7 +54,10 @@ impl ReadWriteSet {
     pub fn has_conflict_with(&self, other: &ReadWriteSet) -> bool {
         for (address, access_types) in &self.read_set {
             if let Some(other_write_set) = other.write_set.get(address) {
-                if access_types.iter().any(|access_type| other_write_set.contains(access_type)) {
+                if access_types
+                    .iter()
+                    .any(|access_type| other_write_set.contains(access_type))
+                {
                     return true;
                 }
             }
@@ -62,7 +65,6 @@ impl ReadWriteSet {
         false
     }
 }
-
 
 /// A journal of state changes internal to the EVM.
 ///
@@ -230,7 +232,8 @@ impl JournaledState {
     #[inline]
     pub fn set_code_with_hash(&mut self, address: Address, code: Bytecode, hash: B256) {
         let account = self.state.get_mut(&address).unwrap();
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
+        self.read_write_set
+            .add_write(address, AccessType::AccountInfo);
         Self::touch_account(self.journal.last_mut().unwrap(), &address, account);
 
         self.journal
@@ -253,7 +256,8 @@ impl JournaledState {
     #[inline]
     pub fn inc_nonce(&mut self, address: Address) -> Option<u64> {
         let account = self.state.get_mut(&address).unwrap();
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
+        self.read_write_set
+            .add_write(address, AccessType::AccountInfo);
         // Check if nonce is going to overflow.
         if account.info.nonce == u64::MAX {
             return None;
@@ -291,7 +295,8 @@ impl JournaledState {
             return Ok(Some(InstructionResult::OutOfFunds));
         };
         *from_balance = from_balance_incr;
-        self.read_write_set.add_write(*from, AccessType::AccountInfo);
+        self.read_write_set
+            .add_write(*from, AccessType::AccountInfo);
 
         // add balance to
         let to_account = &mut self.state.get_mut(to).unwrap();
@@ -357,7 +362,8 @@ impl JournaledState {
 
         // set account status to created.
         account.mark_created();
-        self.read_write_set.add_write(address, AccessType::AccountStatus);
+        self.read_write_set
+            .add_write(address, AccessType::AccountStatus);
 
         // this entry will revert set nonce.
         last_journal.push(JournalEntry::AccountCreated { address });
@@ -379,13 +385,15 @@ impl JournaledState {
             // nonce is going to be reset to zero in AccountCreated journal entry.
             account.info.nonce = 1;
         }
-        self.read_write_set.add_write(address, AccessType::AccountInfo);
+        self.read_write_set
+            .add_write(address, AccessType::AccountInfo);
 
         // Sub balance from caller
         let caller_account = self.state.get_mut(&caller).unwrap();
         // Balance is already checked in `create_inner`, so it is safe to just subtract.
         caller_account.info.balance -= balance;
-        self.read_write_set.add_write(caller, AccessType::AccountInfo);
+        self.read_write_set
+            .add_write(caller, AccessType::AccountInfo);
 
         // add journal entry of transferred balance
         last_journal.push(JournalEntry::BalanceTransfer {
@@ -579,8 +587,10 @@ impl JournaledState {
             let target_account = self.state.get_mut(&target).unwrap();
             Self::touch_account(self.journal.last_mut().unwrap(), &target, target_account);
             target_account.info.balance += acc_balance;
-            self.read_write_set.add_write(target, AccessType::AccountInfo);
-            self.read_write_set.add_write(target, AccessType::AccountStatus);
+            self.read_write_set
+                .add_write(target, AccessType::AccountInfo);
+            self.read_write_set
+                .add_write(target, AccessType::AccountStatus);
         }
 
         let acc = self.state.get_mut(&address).unwrap();
@@ -591,8 +601,10 @@ impl JournaledState {
         // EIP-6780 (Cancun hard-fork): selfdestruct only if contract is created in the same tx
         let is_created = acc.is_created();
         let journal_entry = if is_created || !is_cancun_enabled {
-            self.read_write_set.add_write(address, AccessType::AccountInfo);
-            self.read_write_set.add_write(address, AccessType::AccountStatus);
+            self.read_write_set
+                .add_write(address, AccessType::AccountInfo);
+            self.read_write_set
+                .add_write(address, AccessType::AccountStatus);
             acc.mark_selfdestruct();
             acc.info.balance = U256::ZERO;
             Some(JournalEntry::AccountDestroyed {
@@ -602,7 +614,8 @@ impl JournaledState {
                 had_balance: balance,
             })
         } else if address != target {
-            self.read_write_set.add_write(address, AccessType::AccountInfo);
+            self.read_write_set
+                .add_write(address, AccessType::AccountInfo);
             acc.info.balance = U256::ZERO;
             Some(JournalEntry::BalanceTransfer {
                 from: address,
@@ -679,8 +692,10 @@ impl JournaledState {
         address: Address,
         db: &mut DB,
     ) -> Result<StateLoad<&mut Account>, EVMError<DB::Error>> {
-        self.read_write_set.add_read(address, AccessType::AccountInfo);
-        self.read_write_set.add_read(address, AccessType::AccountStatus);
+        self.read_write_set
+            .add_read(address, AccessType::AccountInfo);
+        self.read_write_set
+            .add_read(address, AccessType::AccountStatus);
         let load = match self.state.entry(address) {
             Entry::Occupied(entry) => {
                 let account = entry.into_mut();
@@ -778,7 +793,8 @@ impl JournaledState {
         key: U256,
         db: &mut DB,
     ) -> Result<StateLoad<U256>, EVMError<DB::Error>> {
-        self.read_write_set.add_read(address, AccessType::StorageSlot(key));
+        self.read_write_set
+            .add_read(address, AccessType::StorageSlot(key));
         // assume acc is warm
         let account = self.state.get_mut(&address).unwrap();
         // only if account is created in this tx we can assume that storage is empty.
@@ -828,7 +844,8 @@ impl JournaledState {
         new: U256,
         db: &mut DB,
     ) -> Result<StateLoad<SStoreResult>, EVMError<DB::Error>> {
-        self.read_write_set.add_write(address, AccessType::StorageSlot(key));
+        self.read_write_set
+            .add_write(address, AccessType::StorageSlot(key));
         // assume that acc exists and load the slot.
         let present = self.sload(address, key, db)?;
         let acc = self.state.get_mut(&address).unwrap();
@@ -873,7 +890,8 @@ impl JournaledState {
     /// EIP-1153: Transient storage opcodes
     #[inline]
     pub fn tload(&mut self, address: Address, key: U256) -> U256 {
-        self.read_write_set.add_read(address, AccessType::TransientSlot(key));
+        self.read_write_set
+            .add_read(address, AccessType::TransientSlot(key));
         self.transient_storage
             .get(&(address, key))
             .copied()
@@ -888,7 +906,8 @@ impl JournaledState {
     /// EIP-1153: Transient storage opcodes
     #[inline]
     pub fn tstore(&mut self, address: Address, key: U256, new: U256) {
-        self.read_write_set.add_write(address, AccessType::TransientSlot(key));
+        self.read_write_set
+            .add_write(address, AccessType::TransientSlot(key));
         let had_value = if new.is_zero() {
             // if new values is zero, remove entry from transient storage.
             // if previous values was some insert it inside journal.

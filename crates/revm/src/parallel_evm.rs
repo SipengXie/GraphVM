@@ -63,7 +63,6 @@ where
         ParallelEvm { contexts, handlers }
     }
 
-    /// 并行执行多条交易
     pub fn run_parallel(&self, frames: Vec<Frame>) -> Result<Vec<FrameResult>, EVMError<DB::Error>> {
         let num_threads = self.contexts.len();
         let frames_per_thread = frames.len() / num_threads;
@@ -86,10 +85,7 @@ where
                             let mut res = results.lock().unwrap();
                             res.push(result);
                         },
-                        Err(e) => {
-                            // 这里可以根据需求处理错误，例如记录日志或继续
-                            // 目前简单地忽略错误
-                        },
+                        Err(e) => { },
                     }
                 }
             });
@@ -116,7 +112,6 @@ where
     DB: Database + DatabaseCommit + fmt::Debug + Send + Sync,
     DB::Error: fmt::Debug,
 {
-    /// 创建新的 ParallelEvm 实例
     pub fn builder() -> ParallelEvmBuilder<'a, EXT, DB> {
         ParallelEvmBuilder::default()
     }
@@ -145,13 +140,11 @@ where
     EXT: fmt::Debug,
     DB: Database,
 {
-    /// 设置���行实例的数量
     pub fn with_num_instances(mut self, num: usize) -> Self {
         self.num_instances = num;
         self
     }
 
-    /// 构建 ParallelEvm 实例
     pub fn build(self) -> ParallelEvm<'a, EXT, DB> {
         ParallelEvm::new(self.num_instances)
     }

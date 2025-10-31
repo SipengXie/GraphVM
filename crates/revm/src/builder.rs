@@ -52,7 +52,6 @@ impl<'a> Default for EvmBuilder<'a, SetGenericStage, (), EmptyDB> {
     }
 }
 
-
 impl<'a, EXT, DB: Database> EvmBuilder<'a, SetGenericStage, EXT, DB> {
     /// Sets the [`EmptyDB`] as the [`Database`] that will be used by [`Evm`].
     pub fn with_empty_db(self) -> EvmBuilder<'a, SetGenericStage, EXT, EmptyDB> {
@@ -92,7 +91,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, SetGenericStage, EXT, DB> {
         }
     }
 
-
     /// Sets the external context that will be used by [`Evm`].
     pub fn with_external_context<OEXT>(
         self,
@@ -104,7 +102,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, SetGenericStage, EXT, DB> {
             phantom: PhantomData,
         }
     }
-
 
     /// Sets Builder with [`EnvWithHandlerCfg`].
     pub fn with_env_with_handler_cfg(
@@ -119,7 +116,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, SetGenericStage, EXT, DB> {
             phantom: PhantomData,
         }
     }
-
 
     /// Sets Builder with [`ContextWithHandlerCfg`].
     pub fn with_context_with_handler_cfg<OEXT, ODB: Database>(
@@ -203,7 +199,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, HandlerStage, EXT, DB> {
         }
     }
 
-
     /// Sets the [`EmptyDB`] and resets the [`Handler`] to default mainnet.
     pub fn reset_handler_with_empty_db(self) -> EvmBuilder<'a, HandlerStage, EXT, EmptyDB> {
         EvmBuilder {
@@ -215,7 +210,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, HandlerStage, EXT, DB> {
             phantom: PhantomData,
         }
     }
-
 
     /// Resets the [`Handler`] and sets base mainnet handler.
     ///
@@ -243,7 +237,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, HandlerStage, EXT, DB> {
         }
     }
 
-
     /// Resets [`Handler`] and sets the [`DatabaseRef`] that will be used by [`Evm`]
     /// and resets the [`Handler`] to default mainnet.
     pub fn reset_handler_with_ref_db<ODB: DatabaseRef>(
@@ -262,7 +255,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, HandlerStage, EXT, DB> {
         }
     }
 
-
     /// Resets [`Handler`] and sets new `ExternalContext` type.
     ///  and resets the [`Handler`] to default mainnet.
     pub fn reset_handler_with_external_context<OEXT>(
@@ -276,7 +268,6 @@ impl<'a, EXT, DB: Database> EvmBuilder<'a, HandlerStage, EXT, DB> {
         }
     }
 }
-
 
 impl<'a, BuilderStage, EXT, DB: Database> EvmBuilder<'a, BuilderStage, EXT, DB> {
     /// Creates the default handler.
@@ -313,7 +304,6 @@ impl<'a, BuilderStage, EXT, DB: Database> EvmBuilder<'a, BuilderStage, EXT, DB> 
         }
     }
 
-
     /// Builds the [`Evm`].
     pub fn build(self) -> Evm<'a, EXT, DB> {
         Evm::new(self.context, self.handler)
@@ -340,7 +330,7 @@ impl<'a, BuilderStage, EXT, DB: Database> EvmBuilder<'a, BuilderStage, EXT, DB> 
             .append_handler_register(register::HandleRegisters::Plain(handle_register));
         EvmBuilder {
             context: self.context,
-            handler: self.handler,   
+            handler: self.handler,
 
             phantom: PhantomData,
         }
@@ -405,8 +395,8 @@ impl<'a, BuilderStage, EXT, DB: Database> EvmBuilder<'a, BuilderStage, EXT, DB> 
     }
 
     /// Sets ssa logger
-    pub fn with_ssa_logger(mut self, ssa_logger: SSALogger) -> Self {
-        self.context.evm.inner.ssa_logger = Some(ssa_logger);
+    pub fn with_ssa_logger(mut self) -> Self {
+        self.context.evm.inner.ssa_logger = Some(SSALogger::new());
         self
     }
 

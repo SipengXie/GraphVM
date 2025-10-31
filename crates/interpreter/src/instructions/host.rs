@@ -1,5 +1,9 @@
 use crate::{
-    gas::{self, warm_cold_cost, warm_cold_cost_with_delegation}, interpreter::Interpreter, opcode::*, primitives::{Bytes, Log, LogData, Spec, SpecId::*, B256, U256}, Host, InstructionResult
+    gas::{self, warm_cold_cost},
+    interpreter::Interpreter,
+    opcode::*,
+    primitives::{Bytes, Log, LogData, Spec, SpecId::*, B256, U256},
+    Host, InstructionResult,
 };
 use core::cmp::min;
 use std::vec::Vec;
@@ -39,7 +43,11 @@ pub fn selfbalance<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     };
     push!(interpreter, balance.data);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_self_balance(SELFBALANCE, interpreter.contract.target_address, balance.data);
+        logger.log_self_balance(
+            SELFBALANCE,
+            interpreter.contract.target_address,
+            balance.data,
+        );
     }
 }
 
@@ -49,9 +57,8 @@ pub fn extcodesize<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;
     };
-    let (code, load) = code.into_components();
     if SPEC::enabled(BERLIN) {
-        gas!(interpreter, warm_cold_cost_with_delegation(load));
+        gas!(interpreter, warm_cold_cost(code.is_cold));
     } else if SPEC::enabled(TANGERINE) {
         gas!(interpreter, 700);
     } else {
@@ -72,17 +79,16 @@ pub fn extcodehash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;
     };
-    let (code_hash, load) = code_hash.into_components();
     if SPEC::enabled(BERLIN) {
-        gas!(interpreter, warm_cold_cost_with_delegation(load))
+        gas!(interpreter, warm_cold_cost(code_hash.is_cold))
     } else if SPEC::enabled(ISTANBUL) {
         gas!(interpreter, 700);
     } else {
         gas!(interpreter, 400);
     }
-    push_b256!(interpreter, code_hash);
+    push_b256!(interpreter, *code_hash);
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_extcodehash(EXTCODEHASH, address, code_hash.into());
+        logger.log_extcodehash(EXTCODEHASH, address, code_hash.data.into());
     }
 }
 
@@ -96,10 +102,9 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     };
 
     let len = as_usize_or_fail!(interpreter, len_u256);
-    let (code, load) = code.into_components();
     gas_or_fail!(
         interpreter,
-        gas::extcodecopy_cost(SPEC::SPEC_ID, len as u64, load)
+        gas::extcodecopy_cost(SPEC::SPEC_ID, len as u64, code.is_cold)
     );
     let memory_offset = as_usize_or_fail!(interpreter, memory_offset);
     let code_offset = min(as_usize_saturated!(code_offset), code.len());
@@ -107,15 +112,19 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     if len == 0 {
         if let Some(logger) = interpreter.ssa_logger.as_mut() {
             let mem_length = None;
-            let lsn = logger.log_extcodecopy(EXTCODECOPY,
+            let lsn = logger.log_extcodecopy(
+                EXTCODECOPY,
                 address,
                 memory_offset,
                 code_offset,
                 len,
-                code,
-                mem_length);
+                code.data,
+                mem_length,
+            );
             // record the shadow_memory
-            interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+            interpreter
+                .shared_memory
+                .record_shadow_write(memory_offset, len, (lsn, 0));
         }
         return;
     }
@@ -124,19 +133,27 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     // Note: this can't panic because we resized memory to fit.
     interpreter
         .shared_memory
-        .set_data(memory_offset, code_offset, len, &code);
+        .set_data(memory_offset, code_offset, len, &code.data);
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        let lsn = logger.log_extcodecopy(EXTCODECOPY,
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        let lsn = logger.log_extcodecopy(
+            EXTCODECOPY,
             address,
             memory_offset,
             code_offset,
             len,
-            code,
-            mem_length);
+            code.data,
+            mem_length,
+        );
         // record the shadow_memory
-        interpreter.shared_memory.record_shadow_write(memory_offset, len, (lsn, 0));
+        interpreter
+            .shared_memory
+            .record_shadow_write(memory_offset, len, (lsn, 0));
     }
 }
 
@@ -165,7 +182,12 @@ pub fn sload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
     let original_index = *index;
     *index = value.data;
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_sload(SLOAD, interpreter.contract.target_address, original_index, value.data);
+        logger.log_sload(
+            SLOAD,
+            interpreter.contract.target_address,
+            original_index,
+            value.data,
+        );
     }
 }
 
@@ -177,21 +199,27 @@ pub fn sstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
         interpreter.instruction_result = InstructionResult::FatalExternalError;
         return;
     };
-    gas_or_fail!(interpreter, {
-        let remaining_gas = interpreter.gas.remaining();
-        gas::sstore_cost(
-            SPEC::SPEC_ID,
-            &state_load.data,
-            remaining_gas,
-            state_load.is_cold,
-        )
-    });
-    refund!(
-        interpreter,
-        gas::sstore_refund(SPEC::SPEC_ID, &state_load.data)
+
+    let gas_cost = gas::sstore_cost(
+        SPEC::SPEC_ID,
+        &state_load.data,
+        interpreter.gas.remaining(),
+        state_load.is_cold,
     );
+    let gas_refund = gas::sstore_refund(SPEC::SPEC_ID, &state_load.data);
+
+    gas_or_fail!(interpreter, gas_cost);
+    refund!(interpreter, gas_refund);
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_sstore(SSTORE, interpreter.contract.target_address, index, value);
+        logger.log_sstore(
+            SSTORE,
+            interpreter.contract.target_address,
+            index,
+            value,
+            gas_cost.unwrap(),
+            gas_refund,
+        );
     }
 }
 
@@ -205,6 +233,10 @@ pub fn tstore<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host:
     pop!(interpreter, index, value);
 
     host.tstore(interpreter.contract.target_address, index, value);
+
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_tstore(TSTORE, interpreter.contract.target_address, index, value);
+    }
 }
 
 /// EIP-1153: Transient storage opcodes
@@ -214,8 +246,18 @@ pub fn tload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: 
     gas!(interpreter, gas::WARM_STORAGE_READ_COST);
 
     pop_top!(interpreter, index);
+    let original_index = *index;
 
     *index = host.tload(interpreter.contract.target_address, *index);
+
+    if let Some(logger) = interpreter.ssa_logger.as_mut() {
+        logger.log_tload(
+            TLOAD,
+            interpreter.contract.target_address,
+            original_index,
+            *index,
+        );
+    }
 }
 
 pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host: &mut H) {
@@ -250,15 +292,23 @@ pub fn log<const N: usize, H: Host + ?Sized>(interpreter: &mut Interpreter, host
             data: log_data,
         };
         let offset = as_usize_or_fail!(interpreter, offset);
-        let mem_deps = interpreter.shared_memory.get_shadow_deps(offset..offset+len);
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        logger.log_log_opcode(LOG0 + N as u8,
+        let mem_deps = interpreter
+            .shared_memory
+            .get_shadow_deps(offset..offset + len);
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_log_opcode(
+            LOG0 + N as u8,
             offset,
             len,
             topics,
             mem_deps,
             log_to_record.clone(),
-            mem_length);
+            mem_length,
+        );
 
         log_to_record
     } else {
@@ -298,10 +348,10 @@ pub fn selfdestruct<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter,
 
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
         logger.log_selfdestruct(
-            SELFDESTRUCT, 
-            interpreter.contract.target_address, 
-            target, 
-            is_created, 
+            SELFDESTRUCT,
+            interpreter.contract.target_address,
+            target,
+            is_created,
             is_cancun_enabled,
             address_info,
             address_status,

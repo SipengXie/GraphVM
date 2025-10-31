@@ -11,16 +11,20 @@ revm-interpreter = { path = "../interpreter" }
 revm-precompile = { path = "../precompile" }
 revm-ssa = { path = "../revm-ssa" }
 revm-ssa-graph = { path = "../revm-ssa-graph" }
+typed-graph = { path = "../typed-graph" }
 criterion = "0.5"
 rayon = "1.10.0"
 parking_lot = "0.12"
-metrics-exporter-prometheus = "0.12"
+metrics-exporter-prometheus = { version = "0.12", optional = true}
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = { version = "1.0", features = ["alloc", "std"] }
-rand = "0.9.0"
+rand = "0.8"
 crossbeam = "0.8"
 k256 = { version = "0.13", features = ["ecdsa"] }
+petgraph = "0.6"
 
+[features]
+metrics = ["dep:metrics-exporter-prometheus"]
 
 [[bench]]
 name = "revm_ssa_bench"

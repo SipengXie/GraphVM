@@ -1,12 +1,20 @@
 mod call_helpers;
 
-pub use call_helpers::{calc_call_gas, get_memory_input_and_out_ranges, resize_memory, get_memory_input_and_out_ranges_whether_new_allocation};
+pub use call_helpers::{
+    calc_call_gas, get_memory_input_and_out_ranges,
+    get_memory_input_and_out_ranges_whether_new_allocation, resize_memory,
+};
 use revm_primitives::U256_ONE;
 
 use crate::{
-    gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS}, interpreter::Interpreter, opcode::*, primitives::{
+    gas::{self, cost_per_word, EOF_CREATE_GAS, KECCAK256WORD, MIN_CALLEE_GAS},
+    interpreter::Interpreter,
+    opcode::*,
+    primitives::{
         eof::EofHeader, keccak256, Address, BerlinSpec, Bytes, Eof, Spec, SpecId::*, B256, U256,
-    }, CallInputs, CallScheme, CallValue, CreateInputs, CreateScheme, EOFCreateInputs, Host, InstructionResult, InterpreterAction, InterpreterResult, MAX_INITCODE_SIZE
+    },
+    CallInputs, CallScheme, CallValue, CreateInputs, CreateScheme, EOFCreateInputs, Host,
+    InstructionResult, InterpreterAction, InterpreterResult, MAX_INITCODE_SIZE,
 };
 use core::cmp::max;
 use std::boxed::Box;
@@ -390,16 +398,25 @@ pub fn create<const IS_CREATE2: bool, H: Host + ?Sized, SPEC: Spec>(
             };
         }
         let code_offset = as_usize_or_fail!(interpreter, code_offset);
-        let code_deps = interpreter.shared_memory.get_shadow_deps(code_offset..code_offset + len);
-        let mem_length = if resized { Some(interpreter.shared_memory.len()) } else { None };
-        ssa_logger.log_create(opcode, 
-            value, 
-            code_offset, 
+        let code_deps = interpreter
+            .shared_memory
+            .get_shadow_deps(code_offset..code_offset + len);
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        ssa_logger.log_create(
+            opcode,
+            value,
+            code_offset,
             len,
-            code.clone(), code_deps, // memory
-            interpreter.contract.target_address, 
-            salt, 
-            mem_length);
+            code.clone(),
+            code_deps, // memory
+            interpreter.contract.target_address,
+            salt,
+            mem_length,
+        );
     }
 
     // Call host to interact with target contract
@@ -428,9 +445,10 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
         return;
     }
 
-    let (input, return_memory_offset) =
-    if interpreter.ssa_logger.is_some() {
-        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+    let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
+        let Some((input, in_range, return_memory_offset, resized)) =
+            get_memory_input_and_out_ranges_whether_new_allocation(interpreter)
+        else {
             return;
         };
         let logger = interpreter.ssa_logger.as_mut().unwrap();
@@ -439,20 +457,29 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
         let out_offset = return_memory_offset.start;
         let out_len = return_memory_offset.len();
         let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
-        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
-        logger.log_call(CALL, 
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_call(
+            CALL,
             local_gas_limit,
             to,
             value,
-            in_offset, in_len, // in range
-            out_offset, out_len, // return range
-            input.clone(), mem_deps, // memory
+            in_offset,
+            in_len, // in range
+            out_offset,
+            out_len, // return range
+            input.clone(),
+            mem_deps, // memory
             interpreter.contract.target_address,
-            mem_length
+            mem_length,
         );
         (input, return_memory_offset)
     } else {
-        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter)
+        else {
             return;
         };
         (input, return_memory_offset)
@@ -501,30 +528,41 @@ pub fn call_code<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
 
     pop!(interpreter, value);
     let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
-        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+        let Some((input, in_range, return_memory_offset, resized)) =
+            get_memory_input_and_out_ranges_whether_new_allocation(interpreter)
+        else {
             return;
         };
-        
+
         let logger = interpreter.ssa_logger.as_mut().unwrap();
         let in_offset = in_range.start;
         let in_len = in_range.len();
         let out_offset = return_memory_offset.start;
         let out_len = return_memory_offset.len();
         let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
-        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
-        logger.log_call_code(CALLCODE, 
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_call_code(
+            CALLCODE,
             local_gas_limit,
             to,
             value,
-            in_offset, in_len, // in range
-            out_offset, out_len, // return range
-            input.clone(), mem_deps, // memory
+            in_offset,
+            in_len, // in range
+            out_offset,
+            out_len, // return range
+            input.clone(),
+            mem_deps, // memory
             interpreter.contract.target_address,
-            mem_length
+            mem_length,
         );
         (input, return_memory_offset)
     } else {
-        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter)
+        else {
             return;
         };
         (input, return_memory_offset)
@@ -575,7 +613,9 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
     let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
 
     let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
-        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+        let Some((input, in_range, return_memory_offset, resized)) =
+            get_memory_input_and_out_ranges_whether_new_allocation(interpreter)
+        else {
             return;
         };
         let logger = interpreter.ssa_logger.as_mut().unwrap();
@@ -584,20 +624,29 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
         let out_offset = return_memory_offset.start;
         let out_len = return_memory_offset.len();
         let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
-        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
-        logger.log_delegatecall(DELEGATECALL, 
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_delegatecall(
+            DELEGATECALL,
             local_gas_limit,
             to,
-            in_offset, in_len, // in range
-            out_offset, out_len, // return range
-            input.clone(), mem_deps, // memory
+            in_offset,
+            in_len, // in range
+            out_offset,
+            out_len, // return range
+            input.clone(),
+            mem_deps, // memory
             mem_length,
             interpreter.contract.caller,
             interpreter.contract.target_address,
         );
         (input, return_memory_offset)
     } else {
-        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter)
+        else {
             return;
         };
         (input, return_memory_offset)
@@ -641,10 +690,12 @@ pub fn static_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
 
     let (input, return_memory_offset) = if interpreter.ssa_logger.is_some() {
-        let Some((input, in_range, return_memory_offset, resized)) = get_memory_input_and_out_ranges_whether_new_allocation(interpreter) else {
+        let Some((input, in_range, return_memory_offset, resized)) =
+            get_memory_input_and_out_ranges_whether_new_allocation(interpreter)
+        else {
             return;
         };
-        
+
         let logger = interpreter.ssa_logger.as_mut().unwrap();
         let in_offset = in_range.start;
         let in_len = in_range.len();
@@ -652,19 +703,28 @@ pub fn static_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         let out_len = return_memory_offset.len();
 
         let mem_deps = interpreter.shared_memory.get_shadow_deps(in_range);
-        let mem_length = if resized {Some(interpreter.shared_memory.len())} else {None};
-        logger.log_staticcall(STATICCALL, 
+        let mem_length = if resized {
+            Some(interpreter.shared_memory.len())
+        } else {
+            None
+        };
+        logger.log_staticcall(
+            STATICCALL,
             local_gas_limit,
             to,
-            in_offset, in_len, // in range
-            out_offset, out_len, // return range
-            input.clone(), mem_deps, // memory
+            in_offset,
+            in_len, // in range
+            out_offset,
+            out_len, // return range
+            input.clone(),
+            mem_deps, // memory
             mem_length,
             interpreter.contract.target_address,
         );
         (input, return_memory_offset)
     } else {
-        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+        let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter)
+        else {
             return;
         };
         (input, return_memory_offset)

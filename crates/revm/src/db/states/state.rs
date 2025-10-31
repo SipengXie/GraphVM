@@ -4,7 +4,7 @@ use super::{
 };
 use crate::db::EmptyDB;
 use revm_interpreter::primitives::{
-    db::{Database, DatabaseRef, DatabaseCommit},
+    db::{Database, DatabaseCommit, DatabaseRef},
     hash_map, Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
 };
 use std::{
@@ -25,7 +25,7 @@ pub type StateDBBox<'a, E> = State<DBBox<'a, E>>;
 ///
 /// State clear flag is set inside CacheState and by default it is enabled.
 /// If you want to disable it use `set_state_clear_flag` function.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct State<DB> {
     /// Cached state contains both changed from evm execution and cached/loaded account/storages
     /// from database. This allows us to have only one layer of cache where we can fetch data.
@@ -227,7 +227,7 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
     }
 
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let res = match self.cache.contracts.get(&code_hash ) {
+        let res = match self.cache.contracts.get(&code_hash) {
             Some(entry) => Ok(entry.clone()),
             None => self.database.code_by_hash_ref(code_hash),
         };
@@ -237,20 +237,26 @@ impl<DB: DatabaseRef> DatabaseRef for State<DB> {
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         if let Some(account) = self.cache.accounts.get(&address) {
             let is_storage_known = account.status.is_storage_known();
-            Ok(account.account.as_ref().map(|a| match a.storage.get(&index) {
-                Some(entry) => Ok(*entry),
-                None => {
-                    let value = if is_storage_known {
-                        U256::ZERO
-                    } else {
-                        self.database.storage_ref(address, index)?
-                    };
-                    Ok(value)
-                },
-            }).transpose()?
-            .unwrap_or_default())
+            Ok(account
+                .account
+                .as_ref()
+                .map(|a| match a.storage.get(&index) {
+                    Some(entry) => Ok(*entry),
+                    None => {
+                        let value = if is_storage_known {
+                            U256::ZERO
+                        } else {
+                            self.database.storage_ref(address, index)?
+                        };
+                        Ok(value)
+                    }
+                })
+                .transpose()?
+                .unwrap_or_default())
         } else {
-            unreachable!("For accessing any storage account is guaranteed to be loaded beforehand")
+            self.database.storage_ref(address, index)
+            // We should find a better way to handle this.
+            // unreachable!("For accessing any storage account {} is guaranteed to be loaded beforehand", address)
         }
     }
 
@@ -677,10 +683,7 @@ mod tests {
                     previous_status: AccountStatus::Loaded,
                     previous_info: Some(existing_account_with_storage_info.clone()),
                     storage: HashMap::from_iter([
-                        (
-                            slot1,
-                            StorageSlot::new_changed(U256_ONE, U256::from(10)),
-                        ),
+                        (slot1, StorageSlot::new_changed(U256_ONE, U256::from(10))),
                         (slot2, StorageSlot::new_changed(U256::ZERO, U256::from(20))),
                     ]),
                     storage_was_destroyed: false,
@@ -718,10 +721,7 @@ mod tests {
                     previous_status: AccountStatus::Changed,
                     previous_info: Some(existing_account_with_storage_info.clone()),
                     storage: HashMap::from_iter([
-                        (
-                            slot1,
-                            StorageSlot::new_changed(U256::from(10), U256_ONE),
-                        ),
+                        (slot1, StorageSlot::new_changed(U256::from(10), U256_ONE)),
                         (slot2, StorageSlot::new_changed(U256::from(20), U256::ZERO)),
                     ]),
                     storage_was_destroyed: false,

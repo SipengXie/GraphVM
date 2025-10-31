@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use revm_primitives::keccak256;
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use revm_primitives::keccak256;
 use std::time::Duration;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
@@ -12,20 +12,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     // Test different input sizes
     let sizes = [32, 64, 128, 256, 512, 1024, 4096];
-    
+
     for size in sizes {
         // Create a deterministic random number generator
         let mut rng = StdRng::seed_from_u64(42);
-        
+
         // Generate random data
         let mut data = vec![0u8; size];
         rng.fill(&mut data[..]);
-        
+
         group.bench_function(&format!("single_hash_{}", size), |b| {
             let data = data.clone();
             b.iter(|| keccak256(&data))
         });
-        
+
         // 10k hash test
         group.bench_function(&format!("10k_hash_{}", size), |b| {
             let data = data.clone();
@@ -36,7 +36,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             })
         });
     }
-    
+
     group.finish();
 }
 

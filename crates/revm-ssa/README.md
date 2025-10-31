@@ -33,47 +33,90 @@ revm-ssa is a core component of REVM (Rust Ethereum Virtual Machine) that provid
 ```rust
 pub struct SSALogger {
     // Current LSN - increments with each operation
-    pub current_lsn: usize,
-    // Initial LSN - set at frame creation
-    pub init_lsn: usize,
+    pub current_lsn: LsnType,
     // Log entries for all operations
     logs: Vec<SSALogEntry>,
-    // Shadow stack - tracks stack item definitions
-    pub stack: ShadowStack,
+    // Shadow stack pool - tracks stack item definitions for different frames
+    pub stack_pool: Vec<ShadowStack>,
     // Maps storage slots to their last write LSN
-    latest_writes: HashMap<StorageKey, usize>,
+    latest_writes: HashMap<StorageKey, LsnWithIndex>,
     // Maps storage slots to their first read LSN
-    first_reads: HashMap<StorageKey, usize>,
+    origin_reads: HashMap<StorageKey, Vec<LsnType>>,
     // Last LSN that modified memory
-    last_memory: usize,
+    last_memory: LsnWithIndex,
+    // Last LSN that modified return data buffer
+    last_return_data_buffer: LsnWithIndex,
+    // Last LSN that returned from interpreter
+    last_interpreter_return: LsnWithIndex,
+    // Track contract environment at different levels
+    pub contract_env: Vec<LsnWithIndex>,
+    // First frame's input
+    pub first_frame_input: Option<FrameInput>,
+    // Buffers for optimization
+    input_buf: Vec<SSAInput>,
+    output_buf: Vec<SSAOutput>,
+    // Gas tracking
+    gas_cost: Vec<(LsnWithIndex, u64)>,
+    gas_refund: Vec<(LsnWithIndex, i64)>,
 }
 ```
 
 ### Value Types
 
 ```rust
-pub enum SSAValue {
-    U256(U256),        // 256-bit unsigned integer
-    I32(i32),          // 32-bit signed integer
-    U64(u64),          // 64-bit unsigned integer
-    Bytes(Bytes),      // Byte array
-    Address(Address),  // Ethereum address
-    LOG(Log),         // Event log
+pub enum SSAInput {
+    Constant(U256),
+    ConstantI64(i64),
+    Stack(LsnWithIndex),
+    Memory(Vec<MemoryDep>),
+    Storage(StorageKey, LsnWithIndex),
+    Transient(LsnWithIndex),
+    ReturnDataBuffer(LsnWithIndex),
+    InterpreterResult(LsnWithIndex),
+    CallOutcome(LsnWithIndex),
+    CreateOutcome(LsnWithIndex),
+    MemorySizeChange(LsnWithIndex),
+    FrameInput(LsnWithIndex),
+    ContractEnv(LsnWithIndex),
+    GasCost(LsnWithIndex),
+    GasRefund(LsnWithIndex),
+}
+
+pub enum SSAOutput {
+    Constant(U256),
+    Stack(U256),
+    Memory(Bytes),
+    Storage {
+        key: Box<StorageKey>,
+        value: Box<StorageValue>,
+    },
+    Transient(U256),
+    Jump(isize),
+    ReturnDataBuffer(Bytes),
+    InterpreterResult(SSAInterpreterResult),
+    MemorySize(usize),
+    CreateOutcome(Box<SSACreateOutcome>),
+    FrameInput(Box<FrameInput>),
+    CallOutcome(Box<SSACallOutcome>),
+    Log(Box<Log>),
+    ContractEnv(Box<ContractEnv>),
+    Gas(u64),
+    GasRefund(i64),
 }
 ```
 
-### Dependency Types
+### Log Entry Structure
 
 ```rust
-pub enum OperandDep {
-    // Stack value dependency
-    Stack(Option<usize>),
-    // Storage value dependency
-    Storage(Option<usize>),
-    // Direct LSN dependency
-    LSN(usize),
-    // Memory size dependency
-    MemorySize(usize),
+pub struct SSALogEntry {
+    // The LSN of the log entry
+    pub lsn: LsnType,
+    // The opcode of the instruction
+    pub opcode: u8,
+    // The inputs of the instruction
+    pub inputs: Vec<SSAInput>,
+    // The outputs of the instruction
+    pub outputs: Vec<SSAOutput>,
 }
 ```
 
@@ -237,47 +280,68 @@ revm-ssa = "0.1.0"
 
 ## Usage Examples
 
-### Basic Operation Tracking
+### Basic Operation Logging
 
 ```rust
 use revm_ssa::SSALogger;
 
-// Create logger
+// Create new logger
 let mut logger = SSALogger::new();
 
-// Track basic operations
-logger.log_push_operation(PUSH1, &[1u8]);
-logger.log_push_operation(PUSH1, &[2u8]);
-logger.log_pop_top_operation(ADD, vec![...], result);
+// Log a binary operation (e.g., ADD)
+logger.log_binary_operation(
+    0x01, // ADD opcode
+    first_operand,
+    second_operand,
+    result
+);
 
-// Get logs
-let logs = logger.get_logs();
+// Log a storage operation
+logger.log_sstore(
+    0x55, // SSTORE opcode
+    address,
+    key,
+    value,
+    gas_cost,
+    gas_refund
+);
 ```
 
-### Storage Access Analysis
+### Frame Management
 
 ```rust
-// Track storage access
-logger.log_sstore_operation(address, key, value);
-logger.log_sload_operation(address, key);
+// Create new stack frame
+logger.generate_new_stack();
 
-// Get storage access information
-let latest_writes = logger.get_latest_writes();
-let first_reads = logger.get_first_reads();
+// Log contract call
+logger.log_call(
+    0xF1, // CALL opcode
+    gas_limit,
+    address,
+    value,
+    input_offset,
+    input_length,
+    output_offset,
+    output_length,
+    input_data,
+    memory_deps,
+    memory_length,
+    caller,
+    target
+);
+
+// Remove frame after completion
+logger.remove_last_stack();
 ```
 
-### Contract Analysis
+### Gas Tracking
 
 ```rust
-// Analyze contract creation
-logger.log_make_create_frame(caller, address);
-logger.log_create_opcode(CREATE);
-logger.log_memory_operation(...);
-logger.log_insert_create_outcome(result);
+// Log gas costs
+logger.log_gas(0x5A, available_gas);
 
-// Get creation trace
-let logs = logger.get_logs();
-let deps = logger.get_dependencies();
+// Track gas refunds
+logger.gas_refund.push((lsn, refund_amount));
 ```
 
 ## Detailed Documentation
@@ -341,87 +405,35 @@ context.evm.inner_context_mut().recover_ssa_logger_from_interpreter(&mut frame.i
 ## Performance Considerations
 
 ### Memory Management
-```rust
-impl SSALogger {
-    // Pre-allocate common buffer sizes
-    fn pre_allocate(&mut self) {
-        self.logs.reserve(1024);
-        self.stack.data.reserve(1024);
-    }
-    
-    // Reuse buffers when possible
-    fn clear(&mut self) {
-        self.logs.clear();  // Keeps capacity
-        self.stack.clear();
-    }
-}
-```
+- Pre-allocated buffers for inputs and outputs
+- Efficient memory copying with padding
+- Smart buffer reuse for common operations
 
-### Error Handling
+### Stack Operations
+- Optimized stack manipulation
+- Efficient frame management
+- Fast access to current stack frame
 
-```rust
-// Memory limit check
-if memory.would_exceed_limit(new_size) {
-    return Err(EvmError::OutOfGas);
-}
-
-// Stack overflow protection
-if stack.len() >= STACK_LIMIT {
-    return Err(EvmError::StackOverflow);
-}
-```
+### Storage Access
+- Cached storage access patterns
+- Efficient tracking of dependencies
+- Optimized storage slot management
 
 ## Testing
 
-### Unit Tests
-
-```rust
-#[test]
-fn test_logger_basic() {
-    let mut logger = SSALogger::new();
-    logger.log_push_operation(PUSH1, &[1u8]);
-    assert_eq!(logger.get_logs().len(), 1);
-}
-```
-
-### Integration Tests
-
-```rust
-#[test]
-fn test_contract_execution() {
-    let mut logger = SSALogger::new();
-    // Setup contract environment
-    execute_contract(&mut logger);
-    // Verify execution trace
-    verify_execution(&logger);
-}
-```
-
-### Property Tests
-
-```rust
-#[test]
-fn test_logger_properties() {
-    // Test LSN monotonicity
-    assert!(logger.current_lsn > logger.init_lsn);
-    
-    // Test stack consistency
-    assert_eq!(logger.stack.len(), expected_size);
-    
-    // Test memory tracking
-    assert!(logger.last_memory <= logger.current_lsn);
-}
-```
+The crate includes comprehensive tests covering:
+- Basic operations
+- Complex contract interactions
+- Gas calculations
+- Memory management
+- Storage operations
+- Frame handling
+- Error conditions
 
 ## Contributing
 
-Contributions are welcome! Before submitting a Pull Request, please:
-
-1. Update tests
-2. Update documentation
-3. Follow the code style guide
-4. Add necessary comments
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+Contributions are welcome! Please ensure:
+1. Code follows Rust best practices
+2. All tests pass
+3. Documentation is updated
+4. Performance considerations are maintained

@@ -36,6 +36,8 @@ pub struct Handler<'a, H: Host + 'a, EXT, DB: Database> {
     pub post_execution: PostExecutionHandler<'a, EXT, DB>,
     /// Execution loop that handles frames.
     pub execution: ExecutionHandler<'a, EXT, DB>,
+    /// Whether to enable beneficiary.
+    pub enable_beneficiary: bool,
 }
 
 impl<'a, EXT, DB: Database> EvmHandler<'a, EXT, DB> {
@@ -67,6 +69,7 @@ impl<'a, EXT, DB: Database> EvmHandler<'a, EXT, DB> {
             pre_execution: PreExecutionHandler::new::<SPEC>(),
             post_execution: PostExecutionHandler::new::<SPEC>(),
             execution: ExecutionHandler::new::<SPEC>(),
+            enable_beneficiary: true,
         }
     }
 

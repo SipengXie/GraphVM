@@ -1,215 +1,167 @@
 use super::i256::i256_cmp;
 use crate::{
-    gas, opcode::*, primitives::{Spec, U256}, Host, Interpreter
+    gas,
+    opcode::*,
+    primitives::{Spec, U256},
+    Host, Interpreter,
 };
 use core::cmp::Ordering;
 
 pub fn lt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = U256::from(op1 < *op2);
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            LT,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(LT, orig1, orig2, *op2);
     }
 }
 
 pub fn gt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = U256::from(op1 > *op2);
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            GT,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(GT, orig1, orig2, *op2);
     }
 }
 
 pub fn slt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = U256::from(i256_cmp(&op1, op2) == Ordering::Less);
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            SLT,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(SLT, orig1, orig2, *op2);
     }
 }
 
 pub fn sgt<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = U256::from(i256_cmp(&op1, op2) == Ordering::Greater);
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            SGT,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(SGT, orig1, orig2, *op2);
     }
 }
 
 pub fn eq<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = U256::from(op1 == *op2);
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            EQ,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(EQ, orig1, orig2, *op2);
     }
 }
 
 pub fn iszero<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1);
-    
+
     let orig = *op1;
-    
+
     *op1 = U256::from(op1.is_zero());
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_monotonic_operation(
-            ISZERO,
-            orig,
-            *op1
-        );
+        logger.log_monotonic_operation(ISZERO, orig, *op1);
     }
 }
 
 pub fn bitand<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = op1 & *op2;
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            AND,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(AND, orig1, orig2, *op2);
     }
 }
 
 pub fn bitor<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = op1 | *op2;
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            OR,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(OR, orig1, orig2, *op2);
     }
 }
 
 pub fn bitxor<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     *op2 = op1 ^ *op2;
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            XOR,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(XOR, orig1, orig2, *op2);
     }
 }
 
 pub fn not<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1);
-    
+
     let orig = *op1;
-    
+
     *op1 = !*op1;
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_monotonic_operation(
-            NOT,
-            orig,
-            *op1
-        );
+        logger.log_monotonic_operation(NOT, orig, *op1);
     }
 }
 
 pub fn byte<H: Host + ?Sized>(interpreter: &mut Interpreter, _host: &mut H) {
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     let o1 = as_usize_saturated!(op1);
     *op2 = if o1 < 32 {
+        // `31 - o1` because `byte` returns LE, while we want BE
         U256::from(op2.byte(31 - o1))
     } else {
         U256::ZERO
     };
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            BYTE,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(BYTE, orig1, orig2, *op2);
     }
 }
 
+/// EIP-145: Bitwise shifting instructions in EVM
 pub fn shl<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
 
     let shift = as_usize_saturated!(op1);
@@ -218,48 +170,40 @@ pub fn shl<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
     } else {
         U256::ZERO
     };
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            SHL,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(SHL, orig1, orig2, *op2);
     }
 }
 
+/// EIP-145: Bitwise shifting instructions in EVM
 pub fn shr<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     let shift = as_usize_saturated!(op1);
     *op2 = if shift < 256 {
         *op2 >> shift
     } else {
         U256::ZERO
     };
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            SHR,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(SHR, orig1, orig2, *op2);
     }
 }
 
+/// EIP-145: Bitwise shifting instructions in EVM
 pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
     check!(interpreter, CONSTANTINOPLE);
     gas!(interpreter, gas::VERYLOW);
     pop_top!(interpreter, op1, op2);
-    
+
     let (orig1, orig2) = (op1, *op2);
-    
+
     let shift = as_usize_saturated!(op1);
     *op2 = if shift < 256 {
         op2.arithmetic_shr(shift)
@@ -268,17 +212,11 @@ pub fn sar<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &
     } else {
         U256::ZERO
     };
-    
+
     if let Some(logger) = interpreter.ssa_logger.as_mut() {
-        logger.log_binary_operation(
-            SAR,
-            orig1,
-            orig2,
-            *op2
-        );
+        logger.log_binary_operation(SAR, orig1, orig2, *op2);
     }
 }
-
 
 #[cfg(test)]
 mod tests {
