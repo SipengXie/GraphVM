@@ -1,13 +1,14 @@
 use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, Criterion,
 };
+use revm::db::{CacheDB, EmptyDB};
 use revm::Evm;
 use revm_primitives::{
     hex, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256, B256, keccak256,
 };
-use revm::db::{CacheDB, EmptyDB};
-use revm_ssa::{logger::LsnType, SSALogger, types::SSALogEntry};
-use revm_ssa_graph::{ExecutionContext, SSAExecutor, SsaGraph};
+use revm_ssa::{logger::LsnType, types::SSALogEntry};
+use revm_ssa_graph::instruction_table::InstructionTable;
+use revm_ssa_graph::{ExecutionContext, SsaGraph};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -220,7 +221,7 @@ fn bench_uniswap_json(c: &mut Criterion) {
             // Use borrow_mut() to get mutable reference without cloning the entire database
             let mut db_ref = setup.cache_db.borrow_mut();
             let mut evm = Evm::builder()
-                .with_spec_id(SpecId::CANCUN)
+                .with_spec_id(SpecId::LATEST)
                 .with_ref_db(&mut *db_ref)
                 .with_env(Box::new(setup.env.clone()))
                 .build();
@@ -234,10 +235,10 @@ fn bench_uniswap_json(c: &mut Criterion) {
             // Use borrow_mut() to get mutable reference without cloning the entire database
             let mut db_ref = setup.cache_db.borrow_mut();
             let mut evm = Evm::builder()
-                .with_spec_id(SpecId::CANCUN)
+                .with_spec_id(SpecId::LATEST)
                 .with_ref_db(&mut *db_ref)
                 .with_env(Box::new(setup.env.clone()))
-                .with_ssa_logger(SSALogger::new())
+                .with_ssa_logger()
                 .build_with_ssa_logger();
             evm.transact_preverified()
         })
@@ -248,18 +249,17 @@ fn bench_uniswap_json(c: &mut Criterion) {
     // For this one-time setup, we clone the db (only once, not per iteration)
     let mut db_for_graph = setup.cache_db.borrow().clone();
     let mut evm = Evm::builder()
-        .with_spec_id(SpecId::CANCUN)
+        .with_spec_id(SpecId::LATEST)
         .with_ref_db(&mut db_for_graph)
         .with_env(Box::new(setup.env.clone()))
-        .with_ssa_logger(SSALogger::new())
+        .with_ssa_logger()
         .build_with_ssa_logger();
     let _ = evm.transact_preverified();
 
     // Get logs and build graph
     let mut logger = evm.take_ssa_logger().unwrap();
     let logs = logger.take_logs();
-    let first_call = logger.take_first_call_input();
-    let first_create = logger.take_first_create_input();
+    let first_frame_input = logger.take_first_frame_input();
 
     // Store node count before consuming logs
     let node_count = logs.len();
@@ -296,12 +296,13 @@ fn bench_uniswap_json(c: &mut Criterion) {
     // Note: We need to clone here for the execution context as it will be used across iterations
     let env_clone = setup.env.clone();
     let db_clone = setup.cache_db.borrow().clone();
-    let context = Arc::new(ExecutionContext::<'_, CacheDB<EmptyDB>, LatestSpec>::new(
+    let mut context = ExecutionContext::<'_, CacheDB<EmptyDB>>::new::<LatestSpec>(
         &env_clone,
         db_clone,
-        first_call,
-        first_create,
-    ));
+        first_frame_input,
+    );
+    let table: InstructionTable<CacheDB<EmptyDB>> =
+        InstructionTable::create_instruction_table::<LatestSpec>();
 
     // Get topological sorted nodes
     let nodes_to_execute = graph.topological_sort().unwrap();
@@ -314,8 +315,8 @@ fn bench_uniswap_json(c: &mut Criterion) {
     group.bench_function("graph", |b| {
         b.iter(|| {
             for node_index in nodes_to_execute.clone() {
-                let node = mut_graph.get_node_by_index_mut(node_index);
-                SSAExecutor::execute_node(node, &arc_graph, &context).unwrap();
+                let node = mut_graph.get_node_mut(node_index).unwrap();
+                table.instructions[node.opcode as usize](&mut context, node, &arc_graph).unwrap();
             }
         });
     });
