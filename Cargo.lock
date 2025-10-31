@@ -3737,6 +3737,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "crossbeam",
+ "k256",
  "metrics-exporter-prometheus",
  "parking_lot",
  "rand 0.9.0",
