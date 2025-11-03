@@ -63,7 +63,7 @@ ethers-providers = { version = "2.0", optional = true }
 ethers-core = { version = "2.0", optional = true }
 
 # alloydb
-alloy-provider = { version = "0.7", optional = true, default-features = false }
+alloy-provider = { version = "0.12", optional = true, default-features = false }
 alloy-eips = { version = "0.7", optional = true, default-features = false }
 alloy-transport = { version = "0.7", optional = true, default-features = false }
 
@@ -83,7 +83,7 @@ criterion = "0.5"
 indicatif = "0.17"
 reqwest = { version = "0.12" }
 rstest = "0.22.0"
-alloy-provider = "0.7"
+alloy-provider = "0.12"
 
 
 [features]
