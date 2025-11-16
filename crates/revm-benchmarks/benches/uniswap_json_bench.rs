@@ -14,6 +14,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
+use std::sync::atomic::{AtomicU32, Ordering};
+use crossbeam::queue::SegQueue;
+use rayon::prelude::*;
 
 // JSON data structures for deserialization
 #[derive(Debug, Deserialize, Serialize)]
@@ -214,20 +217,6 @@ fn bench_uniswap_json(c: &mut Criterion) {
 
     let mut group = mk_group(c, "uniswap_json_first_tx");
 
-    // 1. Native execution benchmark
-    group.bench_function("native", |b| {
-        b.iter(|| {
-            // Use borrow_mut() to get mutable reference without cloning the entire database
-            let mut db_ref = setup.cache_db.borrow_mut();
-            let mut evm = Evm::builder()
-                .with_spec_id(SpecId::CANCUN)
-                .with_ref_db(&mut *db_ref)
-                .with_env(Box::new(setup.env.clone()))
-                .build();
-            evm.transact_preverified()
-        })
-    });
-
     // 2. SSA-logger execution benchmark
     group.bench_function("ssa-logger", |b| {
         b.iter(|| {
@@ -306,17 +295,105 @@ fn bench_uniswap_json(c: &mut Criterion) {
     // Get topological sorted nodes
     let nodes_to_execute = graph.topological_sort().unwrap();
 
-    // Unsafe mutable reference to graph (for benchmark)
-    let arc_graph = Arc::new(graph);
+    // Clone graph for serial benchmark (so parallel can use the original)
+    let arc_graph = Arc::new(graph.clone());
     let mut_graph = unsafe { &mut *(Arc::as_ptr(&arc_graph) as *mut SsaGraph) };
 
-    // 4. GraphVM execution benchmark
+    // 4. GraphVM execution benchmark (uses cloned graph)
     group.bench_function("graph", |b| {
         b.iter(|| {
             for node_index in nodes_to_execute.clone() {
                 let node = mut_graph.get_node_by_index_mut(node_index);
                 SSAExecutor::execute_node(node, &arc_graph, &context).unwrap();
             }
+        });
+    });
+
+    // 5. Parallel GraphVM execution benchmark (8 threads, uses original graph)
+    let arc_parallel_graph = Arc::new(graph);
+    group.bench_function("graph-parallel-8t", |b| {
+        // Preprocessing: Build successors list for each node
+        let mut successors: Vec<Vec<u32>> = vec![Vec::new(); node_count + 1];
+        for lsn in 1..=node_count {
+            if let Ok(succs) = arc_parallel_graph.get_successors(lsn as u32) {
+                successors[lsn] = succs.to_vec();
+            }
+        }
+
+        // Initialize predecessor counters (atomic)
+        let pred_counters = (0..=node_count)
+            .map(|lsn| {
+                if lsn == 0 {
+                    AtomicU32::new(0)
+                } else {
+                    match arc_parallel_graph.get_predecessors(lsn as u32) {
+                        Ok(preds) => AtomicU32::new(preds.len() as u32),
+                        Err(_) => AtomicU32::new(0)
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // Create thread pool with 8 workers
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .unwrap();
+
+        let successors = Arc::new(successors);
+
+        b.iter(|| {
+            // Reset predecessor counters for each iteration
+            // Use Release to ensure previous iteration's modifications are visible
+            for (i, counter) in pred_counters.iter().enumerate() {
+                if i > 0 {
+                    let count = match arc_parallel_graph.get_predecessors(i as u32) {
+                        Ok(preds) => preds.len() as u32,
+                        Err(_) => 0
+                    };
+                    counter.store(count, Ordering::Release);  // Changed from Relaxed
+                }
+            }
+
+            // Memory fence to ensure all stores are visible
+            std::sync::atomic::fence(Ordering::SeqCst);
+
+            // Initialize task queue with nodes that have no predecessors
+            // Use Acquire to see the Reset stores
+            let task_queue = SegQueue::new();
+            for node_index in nodes_to_execute.iter() {
+                let node = arc_parallel_graph.get_node_by_index(*node_index).unwrap();
+                let lsn = node.lsn;
+                if pred_counters[lsn as usize].load(Ordering::Acquire) == 0 {  // Changed from Relaxed
+                    task_queue.push(lsn);
+                }
+            }
+
+            // Parallel execution using thread pool
+            thread_pool.install(|| {
+                (0..8).into_par_iter().for_each(|_| {
+                    // Each thread continuously pulls tasks from the queue
+                    while let Some(lsn) = task_queue.pop() {
+                        // Get mutable reference to graph (unsafe, but safe in benchmark context)
+                        let mut_graph_local = unsafe {
+                            &mut *(Arc::as_ptr(&arc_parallel_graph) as *mut SsaGraph)
+                        };
+                        let node = mut_graph_local.get_node_mut(lsn).unwrap();
+
+                        // Execute the node
+                        let _ = SSAExecutor::execute_node(node, &arc_parallel_graph, &context);
+
+                        // Update successor predecessor counters
+                        for &succ_lsn in &successors[lsn as usize] {
+                            // Atomically decrement; if this was the last predecessor, enqueue successor
+                            if pred_counters[succ_lsn as usize]
+                                .fetch_sub(1, Ordering::AcqRel) == 1 {
+                                task_queue.push(succ_lsn);
+                            }
+                        }
+                    }
+                });
+            });
         });
     });
 

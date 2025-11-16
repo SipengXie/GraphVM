@@ -32,4 +32,8 @@ harness = false
 
 [[bench]]
 name = "uniswap_json_bench"
+harness = false
+
+[[bench]]
+name = "uniswap_parallelism_analysis"
 harness = false 

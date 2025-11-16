@@ -6,6 +6,7 @@ use crate::{Result, ExecutionError};
 use revm_ssa::{SSALogEntry, SSAInput, SSAOutput};
 
 /// Dependency graph
+#[derive(Clone)]
 pub struct SsaGraph {
     /// Graph structure
     graph: DiGraph<SSALogEntry, ()>,
@@ -76,9 +77,7 @@ impl SsaGraph {
             SSAInput::Storage (_,source) => lsn_vec.push(source.0),
             SSAInput::ReturnDataBuffer (source) => lsn_vec.push(source.0),
             SSAInput::ContractEnv (entry_lsn) => {
-                if entry_lsn.0 != 2 {
-                    lsn_vec.push(entry_lsn.0) // we should consider the first contract_env(lsn:2) as a constant
-                }
+                    lsn_vec.push(entry_lsn.0)
             },
             SSAInput::MemorySizeChange (last_memory) => lsn_vec.push(last_memory.0),
             SSAInput::CreateInput (source) => lsn_vec.push(source.0),
