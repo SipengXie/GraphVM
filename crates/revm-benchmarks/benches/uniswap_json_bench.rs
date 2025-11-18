@@ -205,7 +205,6 @@ impl BenchSetup {
 
 fn mk_group<'a>(c: &'a mut Criterion, name: &str) -> BenchmarkGroup<'a, WallTime> {
     let mut g = c.benchmark_group(name);
-    g.sample_size(20);
     g.warm_up_time(Duration::from_secs(2));
     g.measurement_time(Duration::from_secs(5));
     g
