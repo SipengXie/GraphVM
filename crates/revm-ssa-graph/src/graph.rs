@@ -384,4 +384,36 @@ impl SsaGraph {
         }
         Ok(&self.successors[lsn as usize])
     }
+
+    // Getter methods for memory calculation
+
+    /// Get a reference to the underlying graph structure
+    #[inline(always)]
+    pub(crate) fn graph(&self) -> &DiGraph<SSALogEntry, ()> {
+        &self.graph
+    }
+
+    /// Get a reference to the LSN to node index mapping
+    #[inline(always)]
+    pub(crate) fn lsn_to_node(&self) -> &Vec<NodeIndex> {
+        &self.lsn_to_node
+    }
+
+    /// Get a reference to the storage write LSNs
+    #[inline(always)]
+    pub(crate) fn storage_write(&self) -> &Vec<LsnType> {
+        &self.storage_write
+    }
+
+    /// Get a reference to all successors mappings
+    #[inline(always)]
+    pub(crate) fn successors(&self) -> &Vec<Vec<LsnType>> {
+        &self.successors
+    }
+
+    /// Get a reference to all predecessors mappings
+    #[inline(always)]
+    pub(crate) fn predecessors(&self) -> &Vec<Vec<LsnType>> {
+        &self.predecessors
+    }
 }

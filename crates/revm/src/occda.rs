@@ -65,6 +65,76 @@ pub struct Occda {
     first_create_input_store: Vec<Option<SSACreateInput>>,
 }
 
+/// Converts SSA execution outputs to EVM state format
+///
+/// This function processes SSA storage outputs and builds a HashMap of account states.
+/// It handles three types of storage updates:
+/// - AccountInfo: Updates account balance, nonce, and code
+/// - AccountStatus: Updates account status flags
+/// - Storage Slots: Updates individual storage slots
+///
+/// # Arguments
+/// * `db` - Database reference for loading initial account states
+/// * `ssa_state` - SSA execution results containing storage updates
+///
+/// # Returns
+/// * Result containing updated account states or error
+pub fn convert_ssa_to_state<DB>(
+    db: &DB,
+    ssa_state: &[SSAOutput],
+) -> Result<HashMap<Address, Account>, EVMError<DB::Error>>
+where
+    DB: DatabaseRef
+{
+    let mut result = HashMap::default();
+
+    for output in ssa_state {
+        if let SSAOutput::Storage { key, value } = output {
+            match **key {
+                StorageKey::AccountInfo(address) | StorageKey::AccountStatus(address) => {
+                    let account = result.entry(address).or_insert_with(|| {
+                        db.basic_ref(address)
+                            .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
+                            .unwrap_or_else(|_| Account::new_not_existing())
+                    });
+
+                    account.status |= AccountStatus::Touched;
+
+
+                    if let Some(info) = value.as_account_info() {
+                        account.info = info.clone();
+                    }
+
+                    if let Some(status) = value.as_account_status() {
+                        account.status |= *status;
+                    }
+
+                },
+                StorageKey::Slot(address, index) => {
+                    let account = result.entry(address).or_insert_with(|| {
+                        db.basic_ref(address)
+                            .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
+                            .unwrap_or_else(|_| Account::new_not_existing())
+                    });
+
+                    account.status |= AccountStatus::Touched;
+
+                    if let StorageValue::Slot(new_value) = **value {
+                        let slot = account.storage.entry(index).or_insert_with(|| {
+                            let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
+                            EvmStorageSlot::new(value)
+                        });
+
+                        slot.present_value = new_value;
+                    }
+                },
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 impl Occda {
     /// Creates a new OCCDA instance with specified number of threads
     /// 
@@ -979,53 +1049,8 @@ impl Occda {
     where
         DB: DatabaseRef
     {
-        let mut result = HashMap::default();
-
-        for output in ssa_state {
-            if let SSAOutput::Storage { key, value } = output {
-                match **key {
-                    StorageKey::AccountInfo(address) | StorageKey::AccountStatus(address) => {
-                        let account = result.entry(address).or_insert_with(|| {
-                            db.basic_ref(address)
-                                .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
-                                .unwrap_or_else(|_| Account::new_not_existing())
-                        });
-                        
-                        account.status |= AccountStatus::Touched;
-
-                        
-                        if let Some(info) = value.as_account_info() {
-                            account.info = info.clone();
-                        }
-                        
-                        if let Some(status) = value.as_account_status() {
-                            account.status |= *status;
-                        }
-                        
-                    },
-                    StorageKey::Slot(address, index) => {
-                        let account = result.entry(address).or_insert_with(|| {
-                            db.basic_ref(address)
-                                .map(|info| info.map_or_else(Account::new_not_existing, Into::into))
-                                .unwrap_or_else(|_| Account::new_not_existing())
-                        });
-                        
-                        account.status |= AccountStatus::Touched;
-                        
-                        if let StorageValue::Slot(new_value) = **value {
-                            let slot = account.storage.entry(index).or_insert_with(|| {
-                                let value = db.storage_ref(address, index).unwrap_or(U256::ZERO);
-                                EvmStorageSlot::new(value)
-                            });
-                            
-                            slot.present_value = new_value;
-                        }
-                    },
-                }
-            }
-        }
-        
-        Ok(result)
+        // Delegate to the standalone function
+        convert_ssa_to_state(db, ssa_state)
     }
 
     /// Returns an array of first read LSNs from the SSA logger

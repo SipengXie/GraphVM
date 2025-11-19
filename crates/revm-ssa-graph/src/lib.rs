@@ -42,6 +42,7 @@ pub mod context;
 pub mod executor;
 pub mod graph;
 pub mod instructions;
+pub mod memory;
 pub mod tracer;
 pub use context::*;
 pub use executor::*;

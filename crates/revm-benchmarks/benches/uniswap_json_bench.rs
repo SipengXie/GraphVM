@@ -2,12 +2,14 @@ use criterion::{
     criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup, Criterion,
 };
 use revm::Evm;
+use revm::occda::convert_ssa_to_state;
 use revm_primitives::{
-    hex, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256, B256, keccak256,
+    hex, Account, AccountInfo, Address, Bytes, Env, LatestSpec, SpecId, TxKind, U256, B256, keccak256,
 };
 use revm::db::{CacheDB, EmptyDB};
-use revm_ssa::{logger::LsnType, SSALogger, types::SSALogEntry};
-use revm_ssa_graph::{ExecutionContext, SSAExecutor, SsaGraph};
+use std::hint::black_box;
+use revm_ssa::{logger::LsnType, SSALogger};
+use revm_ssa_graph::{memory::calculate_ssa_graph_memory, ExecutionContext, SSAExecutor, SsaGraph};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -264,20 +266,17 @@ fn bench_uniswap_json(c: &mut Criterion) {
         graph.add_edges(lsn).unwrap();
     }
 
-    // Calculate graph memory size (approximate)
-    let base_size = std::mem::size_of_val(&graph);
-    let node_size_estimate = node_count * std::mem::size_of::<SSALogEntry>();
-    let graph_memory_size = base_size + node_size_estimate;
+    // Calculate graph memory size (accurate deep size calculation)
+    let graph_memory_size = calculate_ssa_graph_memory(&graph);
 
     println!("\n========================================");
     println!("Graph Memory Usage:");
     println!("  - Node count: {}", node_count);
-    println!("  - Base graph size: {} bytes", base_size);
-    println!("  - Estimated node data: {} bytes", node_size_estimate);
-    println!("  - Total (approx): {} bytes ({:.2} KB, {:.2} MB)",
+    println!("  - Total heap memory: {} bytes ({:.2} KB, {:.2} MB)",
              graph_memory_size,
              graph_memory_size as f64 / 1024.0,
              graph_memory_size as f64 / (1024.0 * 1024.0));
+    println!("  - Avg per node: {:.2} bytes", graph_memory_size as f64 / node_count as f64);
     println!("========================================\n");
 
     // Create execution context
@@ -301,10 +300,21 @@ fn bench_uniswap_json(c: &mut Criterion) {
     // 4. GraphVM execution benchmark (uses cloned graph)
     group.bench_function("graph", |b| {
         b.iter(|| {
+            // Execute all nodes
             for node_index in nodes_to_execute.clone() {
                 let node = mut_graph.get_node_by_index_mut(node_index);
                 SSAExecutor::execute_node(node, &arc_graph, &context).unwrap();
             }
+
+            // Collect SSA outputs
+            let ssa_outputs = arc_graph.get_storage_write_outputs().unwrap();
+
+            // Convert to state
+            let db_ref = setup.cache_db.borrow();
+            let state: HashMap<Address, Account> = convert_ssa_to_state(&*db_ref, &ssa_outputs).unwrap();
+
+            // Prevent compiler optimization
+            black_box(state);
         });
     });
 
